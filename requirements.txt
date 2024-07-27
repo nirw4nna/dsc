@@ -1,0 +1,7 @@
+# Required by the dsc python library
+numpy
+
+# Only used for testing and benchmarking
+matplotlib
+PyQt5
+pytest
