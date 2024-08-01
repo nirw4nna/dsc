@@ -2,9 +2,9 @@
 #include "dsc_ops.h"
 #include "dsc_fft.h"
 #include <cstring>
-#include <pthread.h>
-#include <atomic>
-#include <sys/sysinfo.h> // get_nprocs()
+//#include <pthread.h>
+//#include <atomic>
+//#include <sys/sysinfo.h> // get_nprocs()
 
 // How many independent FFT plans we support. This is completely arbitrary
 #if !defined(DSC_FFT_PLANS)
@@ -40,8 +40,8 @@
             DSC_ASSERT(memcmp(out->shape, shape, DSC_MAX_DIMS * sizeof(shape[0])) == 0);    \
         }                                                                                   \
 \
-        xa = dsc_cast(ctx, out_dtype, xa);  \
-        xb = dsc_cast(ctx, out_dtype, xb);  \
+        xa = dsc_cast(ctx, xa, out_dtype);  \
+        xb = dsc_cast(ctx, xb, out_dtype);  \
     } while (0)                             \
 
 #define validate_unary_params() \
@@ -106,9 +106,65 @@ struct dsc_ctx {
     dsc_buffer *buffer;
 //    dsc_fft_plan *fft_plan;
 //    dsc_tensor *fft_work;
-    // Todo: not very good but good enough for now
 //    dsc_worker *fft_workers;
 //    int n_workers;
+};
+
+struct dsc_iterator {
+    dsc_iterator(const dsc_tensor *x, int axis, int axis_n) noexcept :
+            shape_(x->shape), stride_(x->stride),
+             axis_(axis), axis_n_(axis_n < x->shape[axis] ? axis_n : x->shape[axis]){
+    }
+
+    DSC_INLINE void next() noexcept {
+        ++idx_[axis_];
+        if (idx_[axis_] >= axis_n_) {
+            idx_[axis_] = 0;
+
+            bool still_left = false;
+            for (int i = DSC_MAX_DIMS - 1; i >= 0; --i) {
+                if (i == axis_)
+                    continue;
+
+                if (++idx_[i] < shape_[i]) {
+                    still_left = true;
+                    break;
+                }
+
+                // Rollover this dimension
+                idx_[i] = 0;
+                // If this is the first dimension, and it rolls over we are done
+                end_ = i == 0;
+            }
+            if (axis_ == 0 && !still_left)
+                end_ = true;
+        }
+    }
+
+    DSC_INLINE int idx() const noexcept {
+        return compute_idx<DSC_MAX_DIMS>();
+    }
+
+    DSC_INLINE bool has_next() const noexcept {
+        return !end_;
+    }
+
+private:
+    template<int N, int Cur = 0>
+    constexpr int compute_idx() const noexcept {
+        if constexpr (Cur == N) {
+            return 0;
+        } else {
+            return idx_[Cur] * stride_[Cur] + compute_idx<N, Cur + 1>();
+        }
+    }
+
+    int idx_[DSC_MAX_DIMS] = {0};
+    const int *shape_;
+    const int *stride_;
+    const int axis_;
+    const int axis_n_;
+    bool end_ = false;
 };
 
 // ================================================== Private Functions ================================================== //
@@ -155,34 +211,7 @@ static void copy_op(const dsc_tensor *DSC_RESTRICT x,
 
     // Todo: I can probably do better but (if it works) it's fine for now
     for (int i = 0; i < out->ne; ++i) {
-        if constexpr (dsc_is_complex<To>()) {
-            if constexpr (dsc_is_real<Tx>()) {
-                if constexpr (dsc_is_type<To, c32>()) {
-                    out_data[i] = dsc_complex(To, (f32) x_data[i], 0);
-                }
-                if constexpr (dsc_is_type<To, c64>()) {
-                    out_data[i] = dsc_complex(To, (f64) x_data[i], 0);
-                }
-            } else {
-                if constexpr (dsc_is_type<To, c32>()) {
-                    out_data[i] = dsc_complex(To, (f32) x_data[i].real, (f32) x_data[i].imag);
-                }
-                if constexpr (dsc_is_type<To, c64>()) {
-                    out_data[i] = dsc_complex(To, (f64) x_data[i].real, (f64) x_data[i].imag);
-                }
-            }
-        } else {
-            if constexpr (dsc_is_real<Tx>()) {
-                out_data[i] = (To) x_data[i];
-            } else {
-                if constexpr (dsc_is_type<To, f32>()) {
-                    out_data[i] = (f32) x_data[i].real;
-                }
-                if constexpr (dsc_is_type<To, f64>()) {
-                    out_data[i] = (f64) x_data[i].real;
-                }
-            }
-        }
+        out_data[i] = cast_op().template operator()<Tx, To>(x_data[i]);
     }
 }
 
@@ -460,75 +489,6 @@ static DSC_INLINE T *dsc_obj_alloc(dsc_buffer *buff, const usize nb) noexcept {
     return (T *) ((byte *) buff + sizeof(dsc_buffer) + buff->last->offset);
 }
 
-
-static DSC_NOINLINE void dsc_fft_r2(c64 *DSC_RESTRICT x,
-                                    c64 *DSC_RESTRICT work,
-                                    const f64 *DSC_RESTRICT twiddles,
-                                    const int n,
-                                    const f64 sign) noexcept {
-    // Base case
-    if (n <= 1) return;
-
-    const int n2 = n >> 1;
-
-    // Divide
-    for (int i = 0; i < n2; i++) {
-        work[i] = x[2 * i];
-        work[i + n2] = x[2 * i + 1];
-    }
-
-    // FFT of even indexes
-    dsc_fft_r2(work, x, twiddles, n2, sign);
-    // FFT of odd indexes
-    dsc_fft_r2(work + n2, x, twiddles, n2, sign);
-
-    const int t_base = (n2 - 1) << 1;
-
-    // Conquer
-    for (int k = 0; k < n2; ++k) {
-        c64 tmp{};
-        // Twiddle[k] = [Re, Imag] = [cos(theta), sin(theta)]
-        // but cos(theta) = cos(-theta) and sin(theta) = -sin(theta)
-        const f64 twiddle_r = twiddles[t_base + (2 * k)];
-        const f64 twiddle_i = sign * twiddles[t_base + (2 * k) + 1];
-        // t = w * x_odd[k]
-        // x[k] = x_even[k] + t
-        // x[k + n/2] = x_even[k] - t
-
-        const c64 x_odd_k = work[k + n2];
-        const c64 x_even_k = work[k];
-
-        tmp.real = twiddle_r * x_odd_k.real - twiddle_i * x_odd_k.imag;
-        tmp.imag = twiddle_r * x_odd_k.imag + twiddle_i * x_odd_k.real;
-
-        x[k].real = x_even_k.real + tmp.real;
-        x[k].imag = x_even_k.imag + tmp.imag;
-        x[k + n2].real = x_even_k.real - tmp.real;
-        x[k + n2].imag = x_even_k.imag - tmp.imag;
-    }
-}
-
-static DSC_INLINE void dsc_internal_fft(c64 *DSC_RESTRICT x,
-                                        c64 *DSC_RESTRICT work,
-                                        const f64 *DSC_RESTRICT twiddles,
-                                        const int n) noexcept {
-    dsc_fft_r2(x, work, twiddles, n, 1);
-}
-
-static DSC_INLINE void dsc_internal_ifft(c64 *DSC_RESTRICT x,
-                                         c64 *DSC_RESTRICT work,
-                                         const f64 *DSC_RESTRICT twiddles,
-                                         const int n) noexcept {
-    dsc_fft_r2(x, work, twiddles, n, -1);
-
-    // Scale by 1/N
-    const f64 scale = 1. / n;
-    for (int i = 0; i < n; ++i) {
-        x[i].real *= scale;
-        x[i].imag *= scale;
-    }
-}
-
 //static DSC_NOINLINE void *fft_worker_thread(void *arg) noexcept {
 //    dsc_worker *self = (dsc_worker *) arg;
 //
@@ -613,13 +573,27 @@ dsc_ctx *dsc_ctx_init(const usize nb) noexcept {
 
 static dsc_fft_plan *dsc_get_plan(dsc_ctx *ctx, const int n,
                                   const dsc_dtype dtype) noexcept {
+    dsc_dtype twd_dtype;
+    switch (dtype) {
+        case C32:
+        case F32:
+            twd_dtype = F32;
+            break;
+        case C64:
+        case F64:
+            twd_dtype = F64;
+            break;
+        default:
+            DSC_LOG_ERR("unknown dtype=%d", dtype);
+    }
+
     const dsc_buffer *buffer = ctx->buffer;
     dsc_fft_plan *plan = nullptr;
     for (int i = 0; i < buffer->n_plans; ++i) {
         dsc_fft_plan *cached_plan = buffer->plans[i];
         if ((cached_plan != nullptr) &&
             (cached_plan->n == n) &&
-            (cached_plan->dtype == dtype)) {
+            (cached_plan->dtype == twd_dtype)) {
             plan = cached_plan;
             break;
         }
@@ -629,27 +603,26 @@ static dsc_fft_plan *dsc_get_plan(dsc_ctx *ctx, const int n,
 }
 
 dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, const int n,
-                  const dsc_dtype dtype) noexcept {
+                           const dsc_dtype dtype) noexcept {
     const int fft_n = dsc_fft_best_n(n);
-
-    DSC_LOG_DEBUG("N=%d (%d) dtype=%s", fft_n, n, DSC_DTYPE_NAMES[dtype]);
 
     dsc_fft_plan *plan = dsc_get_plan(ctx, fft_n, dtype);
 
     if (plan == nullptr) {
         dsc_buffer *buffer = ctx->buffer;
         if (buffer->n_plans <= DSC_FFT_PLANS) {
-            const usize storage = dsc_fft_storage(fft_n);
+            const usize storage = sizeof(dsc_fft_plan) + dsc_fft_storage(fft_n, dtype);
 
             DSC_LOG_DEBUG("allocating new FFT plan with N=%d dtype=%s",
                           fft_n, DSC_DTYPE_NAMES[dtype]);
 
             plan = dsc_obj_alloc<dsc_fft_plan>(buffer, storage);
+            plan->twiddles = (plan + 1);
             dsc_init_plan(plan, fft_n, dtype);
 
             buffer->plans[buffer->n_plans++] = plan;
         } else {
-            DSC_LOG_FATAL("too many plans in context!");
+            DSC_LOG_FATAL("too many plans in context");
         }
     } else {
         DSC_LOG_DEBUG("found cached FFT plan with N=%d dtype=%s",
@@ -811,7 +784,6 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
         new_tensor->stride[i] = new_tensor->stride[i + 1] * new_tensor->shape[i + 1];
     }
 
-
     new_tensor->data = (new_tensor + 1);
 
     DSC_LOG_DEBUG("n_dim=%d shape=[%d, %d, %d, %d] stride=[%d, %d, %d, %d] dtype=%s",
@@ -895,8 +867,8 @@ dsc_tensor *dsc_interp1d_f64(dsc_ctx *ctx, const dsc_tensor *x,
     return dsc_interp1d(ctx, x, y, xp, left, right);
 }
 
-dsc_tensor *dsc_cast(dsc_ctx *ctx, const dsc_dtype new_dtype,
-                     dsc_tensor *DSC_RESTRICT x) noexcept {
+dsc_tensor *dsc_cast(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
+                     const dsc_dtype new_dtype) noexcept {
     if (x->dtype == new_dtype)
         return x;
 
@@ -992,10 +964,122 @@ dsc_tensor *dsc_sin(dsc_ctx *ctx,
     return out;
 }
 
+template<typename Tin, typename Tout, bool forward>
+static DSC_INLINE void exec_fft(dsc_ctx *ctx,
+                                const dsc_tensor *DSC_RESTRICT x,
+                                dsc_tensor *DSC_RESTRICT out,
+                                const int axis, const int x_n,
+                                const int fft_n) noexcept {
+    const dsc_dtype out_dtype = dsc_type_mapping<Tout>::value;
+    dsc_fft_plan *plan = dsc_plan_fft(ctx, fft_n, out_dtype);
+
+    // Todo: allocate work on a temporary context?
+    dsc_tensor *buff = dsc_tensor_1d(ctx, out_dtype, fft_n);
+    dsc_tensor *fft_work = dsc_tensor_1d(ctx, out_dtype, fft_n);
+
+    DSC_TENSOR_DATA(Tin, x);
+    DSC_TENSOR_DATA(Tout, buff);
+    DSC_TENSOR_DATA(Tout, out);
+    DSC_TENSOR_DATA(Tout, fft_work);
+
+    dsc_iterator x_it(x, axis, fft_n);
+    dsc_iterator out_it(out, axis, fft_n);
+
+    while (x_it.has_next()) {
+        for (int i = 0; i < fft_n; ++i) {
+            if (i < x_n) {
+                int idx = x_it.idx();
+                if constexpr (dsc_is_type<Tin, Tout>()) {
+                    buff_data[i] = x_data[idx];
+                } else {
+                    buff_data[i] = cast_op().template operator()<Tin, Tout>(x_data[idx]);
+                }
+
+                x_it.next();
+            } else {
+                buff_data[i] = dsc_zero<Tout>();
+            }
+        }
+
+        dsc_cfft<Tout, forward>(plan, buff_data, fft_work_data);
+
+        for (int i = 0; i < fft_n; ++i) {
+            const int idx = out_it.idx();
+            out_data[idx] = buff_data[i];
+
+            out_it.next();
+        }
+    }
+}
+
+template<bool forward>
+static DSC_INLINE dsc_tensor *dsc_internal_fft(dsc_ctx *ctx,
+                                               const dsc_tensor *DSC_RESTRICT x,
+                                               dsc_tensor *DSC_RESTRICT out,
+                                               int n,
+                                               const int axis) noexcept {
+    DSC_ASSERT(x != nullptr);
+
+    const int axis_idx = dsc_tensor_dim(x, axis);
+    DSC_ASSERT(axis_idx < DSC_MAX_DIMS);
+
+    const int x_n = x->shape[axis_idx];
+    const int axis_n = dsc_fft_best_n(x_n);
+    if (n > 0) {
+        n = dsc_fft_best_n(n);
+    } else {
+        n = axis_n;
+    }
+
+    int out_shape[DSC_MAX_DIMS];
+    for (int i = 0; i < DSC_MAX_DIMS; ++i)
+        out_shape[i] = i != axis_idx ? x->shape[i] : n;
+
+    dsc_dtype out_dtype = x->dtype;
+    if (x->dtype == F32) {
+        out_dtype = C32;
+    } else if (x->dtype == F64) {
+        out_dtype = C64;
+    }
+
+    if (out == nullptr) {
+        out = dsc_new_tensor(ctx, x->n_dim, &out_shape[DSC_MAX_DIMS - x->n_dim], out_dtype);
+    } else {
+        DSC_ASSERT(out->dtype == out_dtype);
+        DSC_ASSERT(out->n_dim == x->n_dim);
+        DSC_ASSERT(memcmp(out_shape, out->shape, DSC_MAX_DIMS * sizeof(out->shape[0])) == 0);
+    }
+
+    DSC_LOG_DEBUG("performing %s FFT of length %d on x=[%d %d %d %d] over axis %d with size %d",
+                  forward ? "FWD" : "BWD", n,
+                  x->shape[0], x->shape[1], x->shape[2], x->shape[3],
+                  axis_idx, x->shape[axis_idx]);
+
+    switch (x->dtype) {
+        case F32:
+            exec_fft<f32, c32, forward>(ctx, x, out, axis_idx, x_n, n);
+            break;
+        case F64:
+            exec_fft<f64, c64, forward>(ctx, x, out, axis_idx, x_n, n);
+            break;
+        case C32:
+            exec_fft<c32, c32, forward>(ctx, x, out, axis_idx, x_n, n);
+            break;
+        case C64:
+            exec_fft<c64, c64, forward>(ctx, x, out, axis_idx, x_n, n);
+            break;
+        default:
+            DSC_LOG_ERR("unknown dtype %d", x->dtype);
+            break;
+    }
+
+    return out;
+}
+
 dsc_tensor *dsc_fft(dsc_ctx *ctx,
                     const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out,
-                    int n,
+                    const int n,
                     const int axis) noexcept {
     // Find N
 
@@ -1010,89 +1094,7 @@ dsc_tensor *dsc_fft(dsc_ctx *ctx,
     // --> Parallel STOP <--
 
     // Done!
-
-    // Todo: if x is not complex we have to cast it to complex before performing the FFT
-    DSC_ASSERT(x != nullptr);
-
-    const int axis_idx = dsc_tensor_dim(x, axis);
-    DSC_ASSERT(axis_idx < DSC_MAX_DIMS);
-
-    const int x_n = x->shape[axis_idx];
-    const int axis_n = dsc_fft_best_n(x_n);
-    if (n > 0) {
-        n = dsc_fft_best_n(n);
-        n = DSC_MAX(n, axis_n);
-    } else {
-        n = axis_n;
-    }
-
-    DSC_LOG_DEBUG("performing FFT of length %d over axis %d with size %d",
-                  n, axis_idx, x->shape[axis_idx]);
-
-    dsc_fft_plan *plan = dsc_plan_fft(ctx, n, x->dtype);
-
-    dsc_tensor *buf = dsc_tensor_1d(ctx, x->dtype, n);
-
-    void *DSC_RESTRICT x_data = ((byte *) x->data) + (x->stride[axis_idx] * DSC_DTYPE_SIZE[x->dtype]);
-    if (x_n > n) {
-        // Crop
-        memcpy(buf->data, x_data, n * DSC_DTYPE_SIZE[x->dtype]);
-    } else {
-        // Pad
-        const usize nb = x_n * DSC_DTYPE_SIZE[x->dtype];
-        memcpy(buf->data, x_data, nb);
-        memset(((byte *)buf->data) + nb, 0, (n - x_n) * DSC_DTYPE_SIZE[x->dtype]);
-    }
-
-
-
-//    // Todo: handle axis!
-//    DSC_UNUSED(axis);
-//
-//    DSC_ASSERT(ctx->fft_plan != nullptr);
-//    DSC_ASSERT(x->dtype == C64);
-//    DSC_ASSERT(x->n_dim == 2);
-//
-//    std::atomic_int progress{1};
-//
-//    // Todo: implement getter
-//    const int n = x->shape[3];
-//    const int m = x->shape[2];
-//    const int m_work = m / ctx->n_workers;
-//    const int leftover_m = m - m_work * (ctx->n_workers - 1);
-//
-//    c64 *x_data = (c64 *) x->data;
-//
-//    for (int i = 1; i < ctx->n_workers; ++i) {
-//        dsc_worker *worker = &ctx->fft_workers[i - 1];
-//        pthread_mutex_lock(&worker->mtx);
-//
-//        dsc_task *t = &worker->task;
-//        t->x = &x_data[(i - 1) * m_work * n];
-//        t->n_times = m_work;
-//        t->progress_counter = &progress;
-//        t->op = FFT;
-//        worker->has_work = true;
-//
-//        pthread_cond_signal(&worker->cond);
-//        pthread_mutex_unlock(&worker->mtx);
-//    }
-//
-//    // Do the leftover work on the main thread
-//    for (int i = 0; i < leftover_m; ++i) {
-//        dsc_internal_fft(
-//                &x_data[((ctx->n_workers - 1) * m_work + i) * n],
-//                (c64 *) ctx->fft_work->data,
-//                (f64 *) ctx->fft_plan->twiddles,
-//                n
-//        );
-//    }
-//
-//    // Wait for the other threads
-//    while (progress.load() != ctx->n_workers)
-//        ;
-//
-//    return x;
+    return dsc_internal_fft<true>(ctx, x, out, n, axis);
 }
 
 dsc_tensor *dsc_ifft(dsc_ctx *ctx,
@@ -1100,51 +1102,5 @@ dsc_tensor *dsc_ifft(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT out,
                      const int n,
                      const int axis) noexcept {
-//    // Todo: handle axis!
-//    DSC_UNUSED(axis);
-//
-//    DSC_ASSERT(ctx->fft_plan != nullptr);
-//    DSC_ASSERT(x->dtype == C64);
-//    DSC_ASSERT(x->n_dim == 2);
-//
-//    std::atomic_int progress{1};
-//
-//    // Todo: implement getter
-//    const int n = x->shape[3];
-//    const int m = x->shape[2];
-//    const int m_work = m / ctx->n_workers;
-//    const int leftover_m = m - m_work * (ctx->n_workers - 1);
-//
-//    c64 *x_data = (c64 *) x->data;
-//
-//    for (int i = 1; i < ctx->n_workers; ++i) {
-//        dsc_worker *worker = &ctx->fft_workers[i - 1];
-//        pthread_mutex_lock(&worker->mtx);
-//
-//        dsc_task *t = &worker->task;
-//        t->x = &x_data[(i - 1) * m_work * n];
-//        t->n_times = m_work;
-//        t->progress_counter = &progress;
-//        t->op = IFFT;
-//        worker->has_work = true;
-//
-//        pthread_cond_signal(&worker->cond);
-//        pthread_mutex_unlock(&worker->mtx);
-//    }
-//
-//    // Do the leftover work on the main thread
-//    for (int i = 0; i < leftover_m; ++i) {
-//        dsc_internal_ifft(
-//                &x_data[((ctx->n_workers - 1) * m_work + i) * n],
-//                (c64 *) ctx->fft_work->data,
-//                (f64 *) ctx->fft_plan->twiddles,
-//                n
-//        );
-//    }
-//
-//    // Wait for the other threads
-//    while (progress.load() != ctx->n_workers)
-//        ;
-//
-//    return x;
+    return dsc_internal_fft<false>(ctx, x, out, n, axis);
 }

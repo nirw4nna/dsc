@@ -4,6 +4,40 @@
 #include "dsc.h"
 
 
+struct cast_op {
+    template<typename Tin, typename Tout>
+    DSC_INLINE Tout operator()(const Tin in) noexcept {
+        if constexpr (dsc_is_complex<Tout>()) {
+            if constexpr (dsc_is_real<Tin>()) {
+                if constexpr (dsc_is_type<Tout, c32>()) {
+                    return dsc_complex(Tout, (f32) in, 0);
+                }
+                if constexpr (dsc_is_type<Tout, c64>()) {
+                    return dsc_complex(Tout, (f64) in, 0);
+                }
+            } else {
+                if constexpr (dsc_is_type<Tout, c32>()) {
+                    return dsc_complex(Tout, (f32) in.real, (f32) in.imag);
+                }
+                if constexpr (dsc_is_type<Tout, c64>()) {
+                    return dsc_complex(Tout, (f64) in.real, (f64) in.imag);
+                }
+            }
+        } else {
+            if constexpr (dsc_is_real<Tin>()) {
+                return (Tout) in;
+            } else {
+                if constexpr (dsc_is_type<Tout, f32>()) {
+                    return (f32) in.real;
+                }
+                if constexpr (dsc_is_type<Tout, f64>()) {
+                    return (f64) in.real;
+                }
+            }
+        }
+    }
+};
+
 struct add_op {
     template<typename T>
     DSC_INLINE T operator()(const T xa, const T xb) const noexcept {

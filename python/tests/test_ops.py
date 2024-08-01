@@ -1,7 +1,7 @@
 import python.dsc as dsc
-import pytest
 import numpy as np
-import time
+import random
+import pytest
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -17,21 +17,32 @@ def teardown_function():
 def all_close(actual, target, eps=1e-5):
     diffs = ~np.isclose(actual, target, atol=eps, rtol=eps, equal_nan=True)
     close = len(actual[diffs]) == 0
-    if not close:
-        print(f'Wrong indexes: {np.where(diffs == True)}')
     return close
 
 
-def test_vec_vec():
-    ops_to_test = {
+def test_fft():
+    n_ = random.randint(3, 10)
+    n = 2 ** n_
 
-    }
+    for axis in range(4):
+        shape = [8] * 4
+        shape[axis] = n
+        for n_change in range(-1, 2):
+            # n_change=-1 -> cropping
+            # n_change=0  -> copy
+            # n_change=+1 -> padding
+            fft_n = 2 ** (n_ + n_change)
+            x = np.random.randn(*tuple(shape)).astype(np.float64)
+            x_dsc = dsc.from_numpy(x)
 
+            x_np_fft = np.fft.fft(x, n=fft_n, axis=axis)
+            x_dsc_fft = dsc.fft(x_dsc, n=fft_n, axis=axis)
 
-def test_mul():
-    a = np.ones(1, np.float64)
-    a_dsc = dsc.from_numpy(a, 'A')
-    b = a * 0.5
-    b_dsc = a_dsc * 0.5
-    assert all_close(b, b_dsc.numpy())
+            assert all_close(x_dsc_fft.numpy(), x_np_fft)
 
+            x_np_ifft = np.fft.ifft(x_np_fft, axis=axis)
+            x_dsc_ifft = dsc.ifft(x_dsc_fft, axis=axis)
+
+            assert all_close(x_dsc_ifft.numpy(), x_np_ifft)
+
+            dsc.clear()

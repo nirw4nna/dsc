@@ -20,7 +20,6 @@ from ctypes import (
 )
 
 _DSC_MAX_DIMS = 4
-_DSC_MAX_LABEL = 64
 
 _DscCtx = c_void_p
 
@@ -36,7 +35,6 @@ class _DscTensor(Structure):
     _fields_ = [
         ('shape', c_int * _DSC_MAX_DIMS),
         ('stride', c_int * _DSC_MAX_DIMS),
-        ('label', c_char * _DSC_MAX_LABEL),
         ('data', c_void_p),
         ('ne', c_int),
         ('n_dim', c_int),
@@ -64,13 +62,15 @@ _lib.dsc_ctx_init.argtypes = [c_size_t]
 _lib.dsc_ctx_init.restype = _DscCtx
 
 
-# extern void dsc_init_fft(dsc_ctx *ctx, int n, int n_workers, dsc_dtype twiddles_dtype) noexcept;
-def _dsc_init_fft(ctx: _DscCtx, n: int, n_workers: int, dtype: c_uint8):
-    return _lib.dsc_init_fft(ctx, n, n_workers, dtype)
+# extern dsc_fft_plan dsc_plan_fft(dsc_ctx *ctx,
+#                                  const int n,
+#                                  const dsc_dtype dtype) noexcept;
+def _dsc_plan_fft(ctx: _DscCtx, n: int, dtype: c_uint8):
+    return _lib.dsc_plan_fft(ctx, n, dtype)
 
 
-_lib.dsc_init_fft.argtypes = [_DscCtx, c_int, c_int, c_uint8]
-_lib.dsc_init_fft.restype = None
+_lib.dsc_plan_fft.argtypes = [_DscCtx, c_int, c_uint8]
+_lib.dsc_plan_fft.restype = c_void_p
 
 
 # extern void dsc_ctx_free(dsc_ctx *ctx) noexcept;
@@ -92,59 +92,56 @@ _lib.dsc_ctx_clear.restype = None
 
 
 # extern dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx,
-#                                        const char *label,
-#                                        dsc_dtype dtype,
-#                                        int dim1) noexcept;
-def _dsc_tensor_1d(ctx: _DscCtx, label: c_char_p, dtype: c_uint8, dim1: c_int):
-    return _lib.dsc_tensor_1d(ctx, label, dtype, dim1)
+#                                  dsc_dtype dtype,
+#                                  int dim1) noexcept;
+def _dsc_tensor_1d(ctx: _DscCtx, dtype: c_uint8, dim1: c_int):
+    return _lib.dsc_tensor_1d(ctx, dtype, dim1)
 
 
-_lib.dsc_tensor_1d.argtypes = [_DscCtx, c_char_p, c_uint8, c_int]
+_lib.dsc_tensor_1d.argtypes = [_DscCtx, c_uint8, c_int]
 _lib.dsc_tensor_1d.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_tensor_2d(dsc_ctx *ctx,
-#                                        const char *label,
-#                                        dsc_dtype dtype,
-#                                        int dim1, int dim2) noexcept;
-def _dsc_tensor_2d(ctx: _DscCtx, label: c_char_p, dtype: c_uint8, dim1: c_int, dim2: c_int):
-    return _lib.dsc_tensor_2d(ctx, label, dtype, dim1, dim2)
+#                                  dsc_dtype dtype,
+#                                  int dim1, int dim2) noexcept;
+def _dsc_tensor_2d(ctx: _DscCtx, dtype: c_uint8, dim1: c_int, dim2: c_int):
+    return _lib.dsc_tensor_2d(ctx, dtype, dim1, dim2)
 
 
-_lib.dsc_tensor_2d.argtypes = [_DscCtx, c_char_p, c_uint8, c_int, c_int]
+_lib.dsc_tensor_2d.argtypes = [_DscCtx, c_uint8, c_int, c_int]
 _lib.dsc_tensor_2d.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_tensor_3d(dsc_ctx *ctx,
-#                                        const char *label,
-#                                        dsc_dtype dtype,
-#                                        int dim1, int dim2,
-#                                        int dim3) noexcept;
-def _dsc_tensor_3d(ctx: _DscCtx, label: c_char_p, dtype: c_uint8, dim1: c_int, dim2: c_int, dim3: c_int):
-    return _lib.dsc_tensor_3d(ctx, label, dtype, dim1, dim2, dim3)
+#                                  dsc_dtype dtype,
+#                                  int dim1, int dim2,
+#                                  int dim3) noexcept;
+def _dsc_tensor_3d(ctx: _DscCtx, dtype: c_uint8, dim1: c_int, dim2: c_int, dim3: c_int):
+    return _lib.dsc_tensor_3d(ctx, dtype, dim1, dim2, dim3)
 
 
-_lib.dsc_tensor_3d.argtypes = [_DscCtx, c_char_p, c_uint8, c_int, c_int, c_int]
+_lib.dsc_tensor_3d.argtypes = [_DscCtx, c_uint8, c_int, c_int, c_int]
 _lib.dsc_tensor_3d.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_tensor_4d(dsc_ctx *ctx,
-#                                        const char *label,
-#                                        dsc_dtype dtype,
-#                                        int dim1, int dim2,
-#                                        int dim3, int dim4) noexcept;
-def _dsc_tensor_4d(ctx: _DscCtx, label: c_char_p, dtype: c_uint8, dim1: c_int, dim2: c_int,
+#                                  dsc_dtype dtype,
+#                                  int dim1, int dim2,
+#                                  int dim3, int dim4) noexcept;
+def _dsc_tensor_4d(ctx: _DscCtx, dtype: c_uint8,
+                   dim1: c_int, dim2: c_int,
                    dim3: c_int, dim4: c_int):
-    return _lib.dsc_tensor_4d(ctx, label, dtype, dim1, dim2, dim3, dim4)
+    return _lib.dsc_tensor_4d(ctx, dtype, dim1, dim2, dim3, dim4)
 
 
-_lib.dsc_tensor_4d.argtypes = [_DscCtx, c_char_p, c_uint8, c_int, c_int, c_int, c_int]
+_lib.dsc_tensor_4d.argtypes = [_DscCtx, c_uint8, c_int, c_int, c_int, c_int]
 _lib.dsc_tensor_4d.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_arange(dsc_ctx *ctx,
-#                                     int n,
-#                                     dsc_dtype dtype = DSC_DEFAULT_TYPE) noexcept;
+#                               int n,
+#                               dsc_dtype dtype = DSC_DEFAULT_TYPE) noexcept;
 def _dsc_arange(ctx: _DscCtx, n: int, dtype: c_uint8) -> _DscTensor_p:
     return _lib.dsc_arange(ctx, n, dtype)
 
@@ -241,43 +238,59 @@ _lib.dsc_mulc_c64.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
-#                                   dsc_dtype new_dtype,
-#                                   dsc_tensor *__restrict x) noexcept;
-def _dsc_cast(ctx: _DscCtx, dtype: c_uint8, x: _DscTensor_p) -> _DscTensor_p:
-    return _lib.dsc_cast(ctx, dtype, x)
+#                             dsc_tensor *__restrict x,
+#                             dsc_dtype new_dtype) noexcept;
+def _dsc_cast(ctx: _DscCtx, x: _DscTensor_p, dtype: c_uint8) -> _DscTensor_p:
+    return _lib.dsc_cast(ctx, x, dtype)
 
 
-_lib.dsc_cast.argtypes = [_DscCtx, c_uint8, _DscTensor_p]
+_lib.dsc_cast.argtypes = [_DscCtx, _DscTensor_p, c_uint8]
 _lib.dsc_cast.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_cos(dsc_ctx *,
-#                                  dsc_tensor *__restrict x) noexcept;
-def _dsc_cos(ctx: _DscCtx, x: _DscTensor_p) -> _DscTensor_p:
-    return _lib.dsc_cos(ctx, x)
+#                            const dsc_tensor *__restrict x,
+#                            dsc_tensor *__restrict out) noexcept;
+def _dsc_cos(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_cos(ctx, x, out)
 
 
-_lib.dsc_cos.argtypes = [_DscCtx, _DscTensor_p]
+_lib.dsc_cos.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
 _lib.dsc_cos.restype = _DscTensor_p
 
 
+# extern dsc_tensor *dsc_sin(dsc_ctx *,
+#                            const dsc_tensor *__restrict x,
+#                            dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_sin(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_sin(ctx, x, out)
+
+
+_lib.dsc_sin.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_sin.restype = _DscTensor_p
+
+
 # extern dsc_tensor *dsc_fft(dsc_ctx *ctx,
-#                                  dsc_tensor *DSC_RESTRICT x,
-#                                  int axis = -1) noexcept;
-def _dsc_fft(ctx: _DscCtx, x: _DscTensor_p, axis: c_int) -> _DscTensor_p:
-    return _lib.dsc_fft(ctx, x, axis)
+#                            const dsc_tensor *DSC_RESTRICT x,
+#                            dsc_tensor *DSC_RESTRICT out,
+#                            int n = -1,
+#                            int axis = -1) noexcept;
+def _dsc_fft(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None, n: c_int = -1, axis: c_int = -1) -> _DscTensor_p:
+    return _lib.dsc_fft(ctx, x, out, n, axis)
 
 
-_lib.dsc_fft.argtypes = [_DscCtx, _DscTensor_p, c_int]
+_lib.dsc_fft.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_int]
 _lib.dsc_fft.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_ifft(dsc_ctx *ctx,
-#                                   dsc_tensor *DSC_RESTRICT x,
-#                                   int axis = -1) noexcept;
-def _dsc_ifft(ctx: _DscCtx, x: _DscTensor_p, axis: c_int) -> _DscTensor_p:
-    return _lib.dsc_ifft(ctx, x, axis)
+#                             const dsc_tensor *DSC_RESTRICT x,
+#                             dsc_tensor *DSC_RESTRICT out,
+#                             int n = -1,
+#                             int axis = -1) noexcept;
+def _dsc_ifft(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None, n: c_int = -1, axis: c_int = -1) -> _DscTensor_p:
+    return _lib.dsc_ifft(ctx, x, out, n, axis)
 
 
-_lib.dsc_ifft.argtypes = [_DscCtx, _DscTensor_p, c_int]
+_lib.dsc_ifft.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_int]
 _lib.dsc_ifft.restype = _DscTensor_p

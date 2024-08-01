@@ -1,7 +1,6 @@
 from ._bindings import (
-    _DscTensor_p, _DSC_MAX_DIMS, _dsc_mul, _dsc_cast, _dsc_mulc_c32, _dsc_mulc_c64, _dsc_mulc_f32, _dsc_mulc_f64,
-    _dsc_fft, _dsc_ifft, _dsc_arange, _dsc_cos, _dsc_tensor_1d, _dsc_tensor_2d, _dsc_tensor_3d, _dsc_tensor_4d,
-    _dsc_init_fft
+    _DscTensor_p, _DSC_MAX_DIMS, _dsc_mul, _dsc_cast, _dsc_plan_fft, _dsc_fft, _dsc_ifft, _dsc_arange,
+    _dsc_cos, _dsc_sin, _dsc_tensor_1d, _dsc_tensor_2d, _dsc_tensor_3d, _dsc_tensor_4d,
 )
 from .dtype import *
 from .context import _get_ctx
@@ -11,6 +10,10 @@ from ctypes import (
     c_int
 )
 import sys
+
+
+def _c_ptr(x: 'Tensor') -> _DscTensor_p:
+    return x._c_ptr if x else None
 
 
 class Tensor:
@@ -83,10 +86,10 @@ class Tensor:
         return np_array.reshape(self.shape)
 
     def cast(self, dtype: Dtype) -> 'Tensor':
-        return Tensor(_dsc_cast(_get_ctx(), c_uint8(dtype.value), self._c_ptr))
+        return Tensor(_dsc_cast(_get_ctx(), self._c_ptr, c_uint8(dtype.value)))
 
 
-def from_numpy(x: np.ndarray, label: str = '') -> Tensor:
+def from_numpy(x: np.ndarray) -> Tensor:
     if x.dtype not in NP_TO_DTYPE:
         raise RuntimeError(f'NumPy dtype {x.dtype} is not supported')
 
@@ -98,21 +101,20 @@ def from_numpy(x: np.ndarray, label: str = '') -> Tensor:
         raise RuntimeError(f'can\'t create a Tensor with {n_dims} dimensions')
 
     if n_dims == 1:
-        res = Tensor(_dsc_tensor_1d(_get_ctx(), bytes(label, 'ascii'), dtype,
-                                    c_int(dims[0])))
+        res = Tensor(_dsc_tensor_1d(_get_ctx(), dtype, c_int(dims[0])))
     elif n_dims == 2:
-        res = Tensor(_dsc_tensor_2d(_get_ctx(), bytes(label, 'ascii'), dtype,
+        res = Tensor(_dsc_tensor_2d(_get_ctx(), dtype,
                                     c_int(dims[0]), c_int(dims[1])))
     elif n_dims == 3:
-        res = Tensor(_dsc_tensor_3d(_get_ctx(), bytes(label, 'ascii'), dtype,
+        res = Tensor(_dsc_tensor_3d(_get_ctx(), dtype,
                                     c_int(dims[0]), c_int(dims[1]),
                                     c_int(dims[2])))
     else:
-        res = Tensor(_dsc_tensor_4d(_get_ctx(), bytes(label, 'ascii'), dtype,
+        res = Tensor(_dsc_tensor_4d(_get_ctx(), dtype,
                                     c_int(dims[0]), c_int(dims[1]),
                                     c_int(dims[2]), c_int(dims[3])))
 
-    ctypes.memmove(res._c_ptr.contents.data, x.ctypes.data, x.nbytes)
+    ctypes.memmove(_c_ptr(res).contents.data, x.ctypes.data, x.nbytes)
     return res
 
 
@@ -132,21 +134,30 @@ def from_numpy(x: np.ndarray, label: str = '') -> Tensor:
 #        raise RuntimeError(f'Unknown dtype {dtype}')
 
 
-def cos(x: Tensor) -> Tensor:
-    return Tensor(_dsc_cos(_get_ctx(), x._c_ptr))
+def cos(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_cos(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+
+
+def sin(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_sin(_get_ctx(), _c_ptr(x), _c_ptr(out)))
 
 
 def arange(n: int, dtype: Dtype = Dtype.F32) -> Tensor:
     return Tensor(_dsc_arange(_get_ctx(), n, c_uint8(dtype.value)))
 
 
-def plan_fft(n: int, n_workers: int = 1, twiddles: Dtype = Dtype.F64):
-    _dsc_init_fft(_get_ctx(), n, n_workers, c_uint8(twiddles.value))
+def plan_fft(n: int, dtype: Dtype = Dtype.F64):
+    """
+    Create the plan for a one-dimensional FFT/IFFT of size N using dtype for the twiddle factors.
+    If this function is not executed before calling either `dsc.fft` or `dsc.ifft` then it will be
+    called automatically before doing the first transform causing a slowdown.
+    """
+    return _dsc_plan_fft(_get_ctx(), n, c_uint8(dtype.value))
 
 
-def fft(x: Tensor, axis: int = -1) -> Tensor:
-    return Tensor(_dsc_fft(_get_ctx(), x._c_ptr, c_int(axis)))
+def fft(x: Tensor, out: Tensor = None, n: int = -1, axis: int = -1) -> Tensor:
+    return Tensor(_dsc_fft(_get_ctx(), _c_ptr(x), _c_ptr(out), n=c_int(n), axis=c_int(axis)))
 
 
-def ifft(x: Tensor, axis: int = -1) -> Tensor:
-    return Tensor(_dsc_ifft(_get_ctx(), x._c_ptr, c_int(axis)))
+def ifft(x: Tensor, out: Tensor = None, n: int = -1, axis: int = -1) -> Tensor:
+    return Tensor(_dsc_ifft(_get_ctx(), _c_ptr(x), _c_ptr(out), n=c_int(n), axis=c_int(axis)))

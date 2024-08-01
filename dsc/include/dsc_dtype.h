@@ -1,6 +1,6 @@
 #pragma once
 
-#include <complex>
+#include <cmath>
 #include <cstdint>
 #include <cstddef>
 #include <type_traits>
@@ -70,32 +70,6 @@ constexpr static dsc_dtype DSC_DTYPE_CONVERSION_TABLE[DSC_DTYPES][DSC_DTYPES] = 
         {dsc_dtype::C64, dsc_dtype::C64, dsc_dtype::C64, dsc_dtype::C64},
 };
 
-template<typename Ta, typename Tb>
-static consteval bool dsc_is_type() noexcept {
-    return std::is_same_v<Ta, Tb>;
-}
-
-template<typename T>
-static consteval bool dsc_is_complex() noexcept {
-    return dsc_is_type<T, c32>() || dsc_is_type<T, c64>();
-}
-
-template<typename T>
-static consteval bool dsc_is_real() noexcept {
-    return dsc_is_type<T, f32>() || dsc_is_type<T, f64>();
-}
-
-//template<typename T>
-//static consteval dsc_dtype dsc_complex_base_type() noexcept {
-//    static_assert(dsc_is_complex<T>());
-//
-//    if constexpr (dsc_is_type<T, c32>()) {
-//        return dsc_dtype::F32;
-//    } else {
-//        return dsc_dtype::F64;
-//    }
-//}
-
 // Conversion utility
 template<typename T>
 struct dsc_type_mapping;
@@ -119,3 +93,70 @@ template<>
 struct dsc_type_mapping<c64> {
     static constexpr dsc_dtype value = dsc_dtype::C64;
 };
+
+namespace {
+    template<typename T>
+    struct dsc_real_;
+
+    template<>
+    struct dsc_real_<c32> {
+        using type = f32;
+    };
+
+    template<>
+    struct dsc_real_<c64> {
+        using type = f64;
+    };
+
+    template<>
+    struct dsc_real_<f32> {
+        using type = f32;
+    };
+
+    template<>
+    struct dsc_real_<f64> {
+        using type = f64;
+    };
+}
+
+template <typename T>
+using dsc_real = typename dsc_real_<T>::type;
+
+template<typename Ta, typename Tb>
+static consteval bool dsc_is_type() noexcept {
+    return std::is_same_v<Ta, Tb>;
+}
+
+template<typename T>
+static consteval bool dsc_is_complex() noexcept {
+    return dsc_is_type<T, c32>() || dsc_is_type<T, c64>();
+}
+
+template<typename T>
+static consteval bool dsc_is_real() noexcept {
+    return dsc_is_type<T, f32>() || dsc_is_type<T, f64>();
+}
+
+template<typename T>
+static consteval T dsc_pi() noexcept {
+    if constexpr (dsc_is_type<T, f32>()) {
+        return M_PIf;
+    } else {
+        return M_PI;
+    }
+}
+
+template<typename T>
+static consteval T dsc_zero() noexcept {
+    if constexpr (dsc_is_type<T, f32>()) {
+        return 0.f;
+    } else if constexpr (dsc_is_type<T, f64>()) {
+        return 0;
+    } else if constexpr (dsc_is_type<T, c32>()) {
+        return dsc_complex(c32, 0.f, 0.f);
+    } else if constexpr (dsc_is_type<T, c64>()) {
+        return dsc_complex(c64, 0., 0.);
+    } else {
+        static_assert("T is not supported!");
+    }
+}

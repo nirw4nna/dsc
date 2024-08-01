@@ -213,8 +213,8 @@ extern dsc_tensor *dsc_interp1d_f64(dsc_ctx *ctx,
                                     f64 right = DSC_INF64) noexcept;
 
 extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
-                            dsc_dtype new_dtype,
-                            dsc_tensor *DSC_RESTRICT x) noexcept;
+                            dsc_tensor *DSC_RESTRICT x,
+                            dsc_dtype new_dtype) noexcept;
 
 extern dsc_tensor *dsc_add(dsc_ctx *ctx,
                            dsc_tensor *DSC_RESTRICT xa,
