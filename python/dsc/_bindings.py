@@ -150,59 +150,180 @@ _lib.dsc_arange.argtypes = [_DscCtx, c_int, c_uint8]
 _lib.dsc_arange.restype = _DscTensor_p
 
 
+# extern dsc_tensor *dsc_add(dsc_ctx *ctx,
+#                            dsc_tensor *__restrict xa,
+#                            dsc_tensor *__restrict xb,
+#                            dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_add(ctx: _DscCtx, xa: _DscTensor_p, xb: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_add(ctx, xa, xb, out)
+
+
+_lib.dsc_add.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, _DscTensor_p]
+_lib.dsc_add.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_sub(dsc_ctx *ctx,
+#                            dsc_tensor *__restrict xa,
+#                            dsc_tensor *__restrict xb,
+#                            dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_sub(ctx: _DscCtx, xa: _DscTensor_p, xb: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_sub(ctx, xa, xb, out)
+
+
+_lib.dsc_sub.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, _DscTensor_p]
+_lib.dsc_sub.restype = _DscTensor_p
+
+
 # extern dsc_tensor *dsc_mul(dsc_ctx *ctx,
-#                                  dsc_tensor *__restrict xa,
-#                                  dsc_tensor *__restrict xb) noexcept;
-def _dsc_mul(ctx: _DscCtx, xa: _DscTensor_p, xb: _DscTensor_p) -> _DscTensor_p:
-    return _lib.dsc_mul(ctx, xa, xb)
+#                            dsc_tensor *__restrict xa,
+#                            dsc_tensor *__restrict xb,
+#                            dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_mul(ctx: _DscCtx, xa: _DscTensor_p, xb: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_mul(ctx, xa, xb, out)
 
 
-_lib.dsc_mul.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_mul.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, _DscTensor_p]
 _lib.dsc_mul.restype = _DscTensor_p
 
 
-# TODO: codegen for this kind of function? --> something like this!
-# # Define a helper function to generate bindings
-# def bind_function(name, argtype):
-#     func = getattr(lib, f"{name}_func")
-#     func.argtypes = [argtype]
-#     func.restype = None
-#     return func
-#
-# # Generate bindings
-# int_func = bind_function('int', ctypes.c_int)
-# float_func = bind_function('float', ctypes.c_float)
-# double_func = bind_function('double', ctypes.c_double)
-def _dsc_mulc_f32(ctx: _DscCtx, x: _DscTensor_p, val: float) -> _DscTensor_p:
-    return _lib.dsc_mulc_f32(ctx, x, c_float(val))
+# extern dsc_tensor *dsc_div(dsc_ctx *ctx,
+#                            dsc_tensor *__restrict xa,
+#                            dsc_tensor *__restrict xb,
+#                            dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_div(ctx: _DscCtx, xa: _DscTensor_p, xb: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_div(ctx, xa, xb, out)
 
 
-_lib.dsc_mulc_f32.argtypes = [_DscCtx, _DscTensor_p, c_float]
+_lib.dsc_div.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, _DscTensor_p]
+_lib.dsc_div.restype = _DscTensor_p
+
+
+def _dsc_addc_f32(ctx: _DscCtx, x: _DscTensor_p, val: float, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_addc_f32(ctx, x, c_float(val), out)
+
+
+_lib.dsc_addc_f32.argtypes = [_DscCtx, _DscTensor_p, c_float, _DscTensor_p]
+_lib.dsc_addc_f32.restype = _DscTensor_p
+
+
+def _dsc_addc_f64(ctx: _DscCtx, x: _DscTensor_p, val: float, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_addc_f64(ctx, x, c_double(val), out)
+
+
+_lib.dsc_addc_f64.argtypes = [_DscCtx, _DscTensor_p, c_double, _DscTensor_p]
+_lib.dsc_addc_f64.restype = _DscTensor_p
+
+
+def _dsc_addc_c32(ctx: _DscCtx, x: _DscTensor_p, val: complex, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_addc_c32(ctx, x, _C32(c_float(val.real), c_float(val.imag)), out)
+
+
+_lib.dsc_addc_c32.argtypes = [_DscCtx, _DscTensor_p, _C32, _DscTensor_p]
+_lib.dsc_addc_c32.restype = _DscTensor_p
+
+
+def _dsc_addc_c64(ctx: _DscCtx, x: _DscTensor_p, val: complex, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_addc_c64(ctx, x, _C64(c_double(val.real), c_double(val.imag)), out)
+
+
+_lib.dsc_addc_c64.argtypes = [_DscCtx, _DscTensor_p, _C64, _DscTensor_p]
+_lib.dsc_addc_c64.restype = _DscTensor_p
+
+
+def _dsc_subc_f32(ctx: _DscCtx, x: _DscTensor_p, val: float, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_subc_f32(ctx, x, c_float(val), out)
+
+
+_lib.dsc_subc_f32.argtypes = [_DscCtx, _DscTensor_p, c_float, _DscTensor_p]
+_lib.dsc_subc_f32.restype = _DscTensor_p
+
+
+def _dsc_subc_f64(ctx: _DscCtx, x: _DscTensor_p, val: float, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_subc_f64(ctx, x, c_double(val), out)
+
+
+_lib.dsc_subc_f64.argtypes = [_DscCtx, _DscTensor_p, c_double, _DscTensor_p]
+_lib.dsc_subc_f64.restype = _DscTensor_p
+
+
+def _dsc_subc_c32(ctx: _DscCtx, x: _DscTensor_p, val: complex, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_subc_c32(ctx, x, _C32(c_float(val.real), c_float(val.imag)), out)
+
+
+_lib.dsc_subc_c32.argtypes = [_DscCtx, _DscTensor_p, _C32, _DscTensor_p]
+_lib.dsc_subc_c32.restype = _DscTensor_p
+
+
+def _dsc_subc_c64(ctx: _DscCtx, x: _DscTensor_p, val: complex, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_subc_c64(ctx, x, _C64(c_double(val.real), c_double(val.imag)), out)
+
+
+_lib.dsc_subc_c64.argtypes = [_DscCtx, _DscTensor_p, _C64, _DscTensor_p]
+_lib.dsc_subc_c64.restype = _DscTensor_p
+
+
+def _dsc_mulc_f32(ctx: _DscCtx, x: _DscTensor_p, val: float, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_mulc_f32(ctx, x, c_float(val), out)
+
+
+_lib.dsc_mulc_f32.argtypes = [_DscCtx, _DscTensor_p, c_float, _DscTensor_p]
 _lib.dsc_mulc_f32.restype = _DscTensor_p
 
 
-def _dsc_mulc_f64(ctx: _DscCtx, x: _DscTensor_p, val: float) -> _DscTensor_p:
-    return _lib.dsc_mulc_f64(ctx, x, c_double(val))
+def _dsc_mulc_f64(ctx: _DscCtx, x: _DscTensor_p, val: float, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_mulc_f64(ctx, x, c_double(val), out)
 
 
-_lib.dsc_mulc_f64.argtypes = [_DscCtx, _DscTensor_p, c_double]
+_lib.dsc_mulc_f64.argtypes = [_DscCtx, _DscTensor_p, c_double, _DscTensor_p]
 _lib.dsc_mulc_f64.restype = _DscTensor_p
 
 
-def _dsc_mulc_c32(ctx: _DscCtx, x: _DscTensor_p, val: complex) -> _DscTensor_p:
-    return _lib.dsc_mulc_c32(ctx, x, _C32(c_float(val.real), c_float(val.imag)))
+def _dsc_mulc_c32(ctx: _DscCtx, x: _DscTensor_p, val: complex, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_mulc_c32(ctx, x, _C32(c_float(val.real), c_float(val.imag)), out)
 
 
-_lib.dsc_mulc_c32.argtypes = [_DscCtx, _DscTensor_p, _C32]
+_lib.dsc_mulc_c32.argtypes = [_DscCtx, _DscTensor_p, _C32, _DscTensor_p]
 _lib.dsc_mulc_c32.restype = _DscTensor_p
 
 
-def _dsc_mulc_c64(ctx: _DscCtx, x: _DscTensor_p, val: complex) -> _DscTensor_p:
-    return _lib.dsc_mulc_c64(ctx, x, _C64(c_double(val.real), c_double(val.imag)))
+def _dsc_mulc_c64(ctx: _DscCtx, x: _DscTensor_p, val: complex, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_mulc_c64(ctx, x, _C64(c_double(val.real), c_double(val.imag)), out)
 
 
-_lib.dsc_mulc_c64.argtypes = [_DscCtx, _DscTensor_p, _C64]
+_lib.dsc_mulc_c64.argtypes = [_DscCtx, _DscTensor_p, _C64, _DscTensor_p]
 _lib.dsc_mulc_c64.restype = _DscTensor_p
+
+
+def _dsc_divc_f32(ctx: _DscCtx, x: _DscTensor_p, val: float, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_divc_f32(ctx, x, c_float(val), out)
+
+
+_lib.dsc_divc_f32.argtypes = [_DscCtx, _DscTensor_p, c_float, _DscTensor_p]
+_lib.dsc_divc_f32.restype = _DscTensor_p
+
+
+def _dsc_divc_f64(ctx: _DscCtx, x: _DscTensor_p, val: float, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_divc_f64(ctx, x, c_double(val), out)
+
+
+_lib.dsc_divc_f64.argtypes = [_DscCtx, _DscTensor_p, c_double, _DscTensor_p]
+_lib.dsc_divc_f64.restype = _DscTensor_p
+
+
+def _dsc_divc_c32(ctx: _DscCtx, x: _DscTensor_p, val: complex, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_divc_c32(ctx, x, _C32(c_float(val.real), c_float(val.imag)), out)
+
+
+_lib.dsc_divc_c32.argtypes = [_DscCtx, _DscTensor_p, _C32, _DscTensor_p]
+_lib.dsc_divc_c32.restype = _DscTensor_p
+
+
+def _dsc_divc_c64(ctx: _DscCtx, x: _DscTensor_p, val: complex, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_divc_c64(ctx, x, _C64(c_double(val.real), c_double(val.imag)), out)
+
+
+_lib.dsc_divc_c64.argtypes = [_DscCtx, _DscTensor_p, _C64, _DscTensor_p]
+_lib.dsc_divc_c64.restype = _DscTensor_p
 
 
 #def _dsc_full_f32(ctx: _DscCtx, n: int, val: float) -> _DscTensor_p:

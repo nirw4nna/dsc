@@ -2,6 +2,7 @@ import python.dsc as dsc
 import numpy as np
 import random
 import pytest
+from typing import List
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -20,6 +21,61 @@ def all_close(actual, target, eps=1e-5):
     return close
 
 
+def random_nd(shape: List[int], dtype: np.dtype = np.float64):
+    return np.random.randn(*tuple(shape)).astype(dtype)
+
+
+DTYPES = [np.float32, np.float64, np.complex64, np.complex128]
+OPS = {
+    'add': (np.add, '+'),
+    'sub': (np.subtract, '-'),
+    'mul': (np.multiply, '*'),
+    'div': (np.true_divide, '/'),
+}
+
+
+def test_ops():
+    for op_name in OPS.keys():
+        np_op, symbol = OPS[op_name]
+        for dtype in DTYPES:
+            print(f'Testing operator {op_name} ({symbol}) with {dtype.__name__}')
+            shape = [random.randint(2, 10) for _ in range(4)]
+
+            x = random_nd(shape, dtype=dtype)
+            x_dsc = dsc.from_numpy(x)
+
+            # Same shape
+            y = random_nd(shape, dtype=dtype)
+            y_dsc = dsc.from_numpy(y)
+
+            res_np = np_op(x, y)
+            res_dsc = eval(f'x_dsc {symbol} y_dsc')
+            assert all_close(res_dsc.numpy(), res_np)
+
+            # Broadcasting
+            collapse_idx = random.randint(0, 3)
+            shape[collapse_idx] = 1
+
+            y_b = random_nd(shape, dtype=dtype)
+            y_dsc_b = dsc.from_numpy(y_b)
+
+            res_np_b = np_op(x, y_b)
+            res_dsc_b = eval(f'x_dsc {symbol} y_dsc_b')
+            assert all_close(res_dsc_b.numpy(), res_np_b)
+
+            # Scalar
+            if dtype == np.complex64 or dtype == np.complex128:
+                y_s = complex(random.random(), random.random())
+            else:
+                y_s = random.random()
+
+            res_np_s = np_op(x, y_s)
+            res_dsc_s = eval(f'x_dsc {symbol} y_s')
+            assert all_close(res_dsc_s.numpy(), res_np_s)
+
+            dsc.clear()
+
+
 def test_fft():
     n_ = random.randint(3, 10)
     n = 2 ** n_
@@ -32,7 +88,7 @@ def test_fft():
             # n_change=0  -> copy
             # n_change=+1 -> padding
             fft_n = 2 ** (n_ + n_change)
-            x = np.random.randn(*tuple(shape)).astype(np.float64)
+            x = random_nd(shape)
             x_dsc = dsc.from_numpy(x)
 
             x_np_fft = np.fft.fft(x, n=fft_n, axis=axis)
