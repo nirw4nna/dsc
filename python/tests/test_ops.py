@@ -26,17 +26,17 @@ def random_nd(shape: List[int], dtype: np.dtype = np.float64):
 
 
 DTYPES = [np.float32, np.float64, np.complex64, np.complex128]
-OPS = {
-    'add': (np.add, '+'),
-    'sub': (np.subtract, '-'),
-    'mul': (np.multiply, '*'),
-    'div': (np.true_divide, '/'),
-}
 
 
 def test_ops():
-    for op_name in OPS.keys():
-        np_op, symbol = OPS[op_name]
+    ops = {
+        'add': (np.add, '+'),
+        'sub': (np.subtract, '-'),
+        'mul': (np.multiply, '*'),
+        'div': (np.true_divide, '/'),
+    }
+    for op_name in ops.keys():
+        np_op, symbol = ops[op_name]
         for dtype in DTYPES:
             print(f'Testing operator {op_name} ({symbol}) with {dtype.__name__}')
             shape = [random.randint(2, 10) for _ in range(4)]
@@ -74,6 +74,23 @@ def test_ops():
             assert all_close(res_dsc_s.numpy(), res_np_s)
 
             dsc.clear()
+
+
+def test_trig():
+    ops = {
+        'sin': (np.sin, dsc.sin),
+        'cos': (np.cos, dsc.cos),
+    }
+    for op_name in ops.keys():
+        np_op, dsc_op = ops[op_name]
+        for dtype in DTYPES:
+            print(f'Testing {op_name} with {dtype.__name__}')
+            x = random_nd([random.randint(1, 10) for _ in range(4)], dtype=dtype)
+            x_dsc = dsc.from_numpy(x)
+
+            res_np = np_op(x)
+            res_dsc = dsc_op(x_dsc)
+            assert all_close(res_dsc.numpy(), res_np)
 
 
 def test_fft():
