@@ -57,6 +57,31 @@
         }                                                                                           \
     } while(0)
 
+// Wrap a scalar value as a dsc_tensor allocated on the stack, this way we don't risk polluting the heap buffer
+// with tons of small tensors that are only used once.
+#define DSC_WRAP_VALUE(T, val) \
+    const usize nb = sizeof(dsc_tensor) + DSC_DTYPE_SIZE[dsc_type_mapping<T>::value];   \
+    dsc_tensor *x_val = (dsc_tensor *) alloca(nb);                                      \
+    do { \
+        x_val->dtype = dsc_type_mapping<T>::value;  \
+        x_val->n_dim = 1;                           \
+        x_val->ne = 1;                              \
+        x_val->data = (x_val + 1);                  \
+        for (int i = 0; i < DSC_MAX_DIMS; ++i) {    \
+            x_val->shape[i] = 1;                    \
+            x_val->stride[i] = 1;                   \
+        }                                           \
+        DSC_TENSOR_DATA(T, x_val);                  \
+        x_val_data[0] = val;                        \
+    } while (0)
+
+#define DSC_CTX_PUSH(CTX) \
+    dsc_obj *checkpointed_last_ = (CTX)->buffer->last;      \
+    const int checkpointed_n_objs_ = (CTX)->buffer->n_objs
+
+#define DSC_CTX_POP(CTX) \
+    (CTX)->buffer->last = checkpointed_last_;     \
+    (CTX)->buffer->n_objs = checkpointed_n_objs_
 
 //enum dsc_op : u8 {
 //    FFT,
@@ -246,7 +271,7 @@ static void binary_op(const dsc_tensor *DSC_RESTRICT xa,
             binary_op<c64>(xa, xb, out, op);
             break;
         default:
-            DSC_LOG_ERR("unknown dtype %d", out->dtype);
+            DSC_LOG_FATAL("unknown dtype %d", out->dtype);
     }
 }
 
@@ -268,7 +293,7 @@ static void unary_op(const dsc_tensor *DSC_RESTRICT x,
             unary_op<c64>(x, out, op);
             break;
         default:
-            DSC_LOG_ERR("unknown dtype %d", x->dtype);
+            DSC_LOG_FATAL("unknown dtype %d", x->dtype);
     }
 }
 
@@ -289,7 +314,7 @@ static void copy_op(const dsc_tensor *DSC_RESTRICT x,
             copy_op<Tx, c64>(x, out);
             break;
         default:
-            DSC_LOG_ERR("unknown dtype %d", x->dtype);
+            DSC_LOG_FATAL("unknown dtype %d", x->dtype);
     }
 }
 
@@ -309,17 +334,8 @@ static void copy(const dsc_tensor *DSC_RESTRICT x,
             copy_op<c64>(x, out);
             break;
         default:
-            DSC_LOG_ERR("unknown dtype %d", x->dtype);
+            DSC_LOG_FATAL("unknown dtype %d", x->dtype);
     }
-}
-
-template <typename T>
-static DSC_INLINE dsc_tensor *dsc_wrap_value(dsc_ctx *ctx, const T val) noexcept {
-    dsc_tensor *out = dsc_tensor_1d(ctx, dsc_type_mapping<T>::value, 1);
-    DSC_TENSOR_DATA(T, out);
-    out_data[0] = val;
-
-    return out;
 }
 
 template <typename T>
@@ -327,9 +343,9 @@ static DSC_INLINE dsc_tensor *dsc_addc(dsc_ctx *ctx,
                                        dsc_tensor *DSC_RESTRICT x,
                                        dsc_tensor *DSC_RESTRICT out,
                                        const T val) noexcept {
-    dsc_tensor *xb = dsc_wrap_value(ctx, val);
+    DSC_WRAP_VALUE(T, val);
 
-    return dsc_add(ctx, x, xb, out);
+    return dsc_add(ctx, x, x_val, out);
 }
 
 template <typename T>
@@ -337,9 +353,9 @@ static DSC_INLINE dsc_tensor *dsc_subc(dsc_ctx *ctx,
                                        dsc_tensor *DSC_RESTRICT x,
                                        dsc_tensor *DSC_RESTRICT out,
                                        const T val) noexcept {
-    dsc_tensor *xb = dsc_wrap_value(ctx, val);
+    DSC_WRAP_VALUE(T, val);
 
-    return dsc_sub(ctx, x, xb, out);
+    return dsc_sub(ctx, x, x_val, out);
 }
 
 template <typename T>
@@ -347,9 +363,9 @@ static DSC_INLINE dsc_tensor *dsc_mulc(dsc_ctx *ctx,
                                        dsc_tensor *DSC_RESTRICT x,
                                        dsc_tensor *DSC_RESTRICT out,
                                        const T val) noexcept {
-    dsc_tensor *xb = dsc_wrap_value(ctx, val);
+    DSC_WRAP_VALUE(T, val);
 
-    return dsc_mul(ctx, x, xb, out);
+    return dsc_mul(ctx, x, x_val, out);
 }
 
 template <typename T>
@@ -357,9 +373,9 @@ static DSC_INLINE dsc_tensor *dsc_divc(dsc_ctx *ctx,
                                        dsc_tensor *DSC_RESTRICT x,
                                        dsc_tensor *DSC_RESTRICT out,
                                        const T val) noexcept {
-    dsc_tensor *xb = dsc_wrap_value(ctx, val);
+    DSC_WRAP_VALUE(T, val);
 
-    return dsc_div(ctx, x, xb, out);
+    return dsc_div(ctx, x, x_val, out);
 }
 
 static bool DSC_INLINE DSC_PURE can_broadcast(const dsc_tensor *DSC_RESTRICT xa,
@@ -452,7 +468,7 @@ static dsc_tensor *dsc_interp1d(dsc_ctx *ctx, const dsc_tensor *x,
 }
 
 template<typename T>
-static void dsc_fill_rand(dsc_tensor *x) noexcept {
+static DSC_INLINE void dsc_fill_randn(dsc_tensor *x) noexcept {
     static_assert(dsc_is_real<T>(), "T must be real");
 
     DSC_TENSOR_DATA(T, x);
@@ -464,18 +480,118 @@ static void dsc_fill_rand(dsc_tensor *x) noexcept {
         x_data[i] = dist(rng);
 }
 
-static dsc_buffer *dsc_buffer_alloc(const usize nb) noexcept {
-    const usize buff_size = DSC_ALIGN(nb + sizeof(dsc_buffer), DSC_PAGE_SIZE);
+template<typename Tin, typename Tout, bool forward>
+static DSC_INLINE void exec_fft(dsc_ctx *ctx,
+                                const dsc_tensor *DSC_RESTRICT x,
+                                dsc_tensor *DSC_RESTRICT out,
+                                const int axis, const int x_n,
+                                const int fft_n) noexcept {
+    const dsc_dtype out_dtype = dsc_type_mapping<Tout>::value;
+    dsc_fft_plan *plan = dsc_plan_fft(ctx, fft_n, out_dtype);
 
-    dsc_buffer *buff = (dsc_buffer *) aligned_alloc(DSC_PAGE_SIZE, buff_size);
-    DSC_ASSERT(buff != nullptr);
+    DSC_CTX_PUSH(ctx);
+    // Push the arena to make these two buffers temporary
+    dsc_tensor *buff = dsc_tensor_1d(ctx, out_dtype, fft_n);
+    dsc_tensor *fft_work = dsc_tensor_1d(ctx, out_dtype, fft_n);
 
-    buff->nb = buff_size - sizeof(dsc_buffer);
-    buff->n_objs = 0;
-    buff->n_plans = 0;
-    buff->last = nullptr;
+    DSC_TENSOR_DATA(Tin, x);
+    DSC_TENSOR_DATA(Tout, buff);
+    DSC_TENSOR_DATA(Tout, out);
+    DSC_TENSOR_DATA(Tout, fft_work);
 
-    return buff;
+    dsc_iterator x_it(x, axis, fft_n);
+    dsc_iterator out_it(out, axis, fft_n);
+
+    while (x_it.has_next()) {
+        for (int i = 0; i < fft_n; ++i) {
+            if (i < x_n) {
+                int idx = x_it.idx();
+                if constexpr (dsc_is_type<Tin, Tout>()) {
+                    buff_data[i] = x_data[idx];
+                } else {
+                    buff_data[i] = cast_op().template operator()<Tin, Tout>(x_data[idx]);
+                }
+
+                x_it.next();
+            } else {
+                buff_data[i] = dsc_zero<Tout>();
+            }
+        }
+
+        dsc_cfft<Tout, forward>(plan, buff_data, fft_work_data);
+
+        for (int i = 0; i < fft_n; ++i) {
+            const int idx = out_it.idx();
+            out_data[idx] = buff_data[i];
+
+            out_it.next();
+        }
+    }
+
+    DSC_CTX_POP(ctx);
+}
+
+template<bool forward>
+static DSC_INLINE dsc_tensor *dsc_internal_fft(dsc_ctx *ctx,
+                                               const dsc_tensor *DSC_RESTRICT x,
+                                               dsc_tensor *DSC_RESTRICT out,
+                                               int n,
+                                               const int axis) noexcept {
+    DSC_ASSERT(x != nullptr);
+
+    const int axis_idx = dsc_tensor_dim(x, axis);
+    DSC_ASSERT(axis_idx < DSC_MAX_DIMS);
+
+    const int x_n = x->shape[axis_idx];
+    const int axis_n = dsc_fft_best_n(x_n);
+    if (n > 0) {
+        n = dsc_fft_best_n(n);
+    } else {
+        n = axis_n;
+    }
+
+    int out_shape[DSC_MAX_DIMS];
+    for (int i = 0; i < DSC_MAX_DIMS; ++i)
+        out_shape[i] = i != axis_idx ? x->shape[i] : n;
+
+    dsc_dtype out_dtype = x->dtype;
+    if (x->dtype == F32) {
+        out_dtype = C32;
+    } else if (x->dtype == F64) {
+        out_dtype = C64;
+    }
+
+    if (out == nullptr) {
+        out = dsc_new_tensor(ctx, x->n_dim, &out_shape[DSC_MAX_DIMS - x->n_dim], out_dtype);
+    } else {
+        DSC_ASSERT(out->dtype == out_dtype);
+        DSC_ASSERT(out->n_dim == x->n_dim);
+        DSC_ASSERT(memcmp(out_shape, out->shape, DSC_MAX_DIMS * sizeof(out->shape[0])) == 0);
+    }
+
+    DSC_LOG_DEBUG("performing %s FFT of length %d on x=[%d %d %d %d] over axis %d with size %d",
+                  forward ? "FWD" : "BWD", n,
+                  x->shape[0], x->shape[1], x->shape[2], x->shape[3],
+                  axis_idx, x->shape[axis_idx]);
+
+    switch (x->dtype) {
+        case F32:
+            exec_fft<f32, c32, forward>(ctx, x, out, axis_idx, x_n, n);
+            break;
+        case F64:
+            exec_fft<f64, c64, forward>(ctx, x, out, axis_idx, x_n, n);
+            break;
+        case C32:
+            exec_fft<c32, c32, forward>(ctx, x, out, axis_idx, x_n, n);
+            break;
+        case C64:
+            exec_fft<c64, c64, forward>(ctx, x, out, axis_idx, x_n, n);
+            break;
+        default:
+            DSC_LOG_FATAL("unknown dtype %d", x->dtype);
+    }
+
+    return out;
 }
 
 template<typename T>
@@ -499,6 +615,20 @@ static DSC_INLINE T *dsc_obj_alloc(dsc_buffer *buff, const usize nb) noexcept {
     buff->last = new_obj;
 
     return (T *) ((byte *) buff + sizeof(dsc_buffer) + buff->last->offset);
+}
+
+static dsc_buffer *dsc_buffer_alloc(const usize nb) noexcept {
+    const usize buff_size = DSC_ALIGN(nb + sizeof(dsc_buffer), DSC_PAGE_SIZE);
+
+    dsc_buffer *buff = (dsc_buffer *) aligned_alloc(DSC_PAGE_SIZE, buff_size);
+    DSC_ASSERT(buff != nullptr);
+
+    buff->nb = buff_size - sizeof(dsc_buffer);
+    buff->n_objs = 0;
+    buff->n_plans = 0;
+    buff->last = nullptr;
+
+    return buff;
 }
 
 //static DSC_NOINLINE void *fft_worker_thread(void *arg) noexcept {
@@ -596,7 +726,7 @@ static dsc_fft_plan *dsc_get_plan(dsc_ctx *ctx, const int n,
             twd_dtype = F64;
             break;
         default:
-            DSC_LOG_ERR("unknown dtype=%d", dtype);
+            DSC_LOG_FATAL("unknown dtype=%d", dtype);
     }
 
     const dsc_buffer *buffer = ctx->buffer;
@@ -853,8 +983,7 @@ dsc_tensor *dsc_arange(dsc_ctx *ctx,
             assign_op<c64>(out, dsc_complex(c64, 0, 0), dsc_complex(c64, 1, 0));
             break;
         default:
-            DSC_LOG_ERR("unknown dtype %d", dtype);
-            break;
+            DSC_LOG_FATAL("unknown dtype %d", dtype);
     }
     return out;
 }
@@ -867,10 +996,10 @@ dsc_tensor *dsc_randn(dsc_ctx *ctx,
 
     switch (res->dtype) {
         case F32:
-            dsc_fill_rand<f32>(res);
+            dsc_fill_randn<f32>(res);
             break;
         case F64:
-            dsc_fill_rand<f64>(res);
+            dsc_fill_randn<f64>(res);
             break;
         default:
             DSC_LOG_FATAL("dtype must be real");
@@ -994,118 +1123,6 @@ dsc_tensor *dsc_sin(dsc_ctx *ctx,
     validate_unary_params();
     
     unary_op(x, out, sin_op());
-
-    return out;
-}
-
-template<typename Tin, typename Tout, bool forward>
-static DSC_INLINE void exec_fft(dsc_ctx *ctx,
-                                const dsc_tensor *DSC_RESTRICT x,
-                                dsc_tensor *DSC_RESTRICT out,
-                                const int axis, const int x_n,
-                                const int fft_n) noexcept {
-    const dsc_dtype out_dtype = dsc_type_mapping<Tout>::value;
-    dsc_fft_plan *plan = dsc_plan_fft(ctx, fft_n, out_dtype);
-
-    // Todo: allocate work on a temporary context?
-    dsc_tensor *buff = dsc_tensor_1d(ctx, out_dtype, fft_n);
-    dsc_tensor *fft_work = dsc_tensor_1d(ctx, out_dtype, fft_n);
-
-    DSC_TENSOR_DATA(Tin, x);
-    DSC_TENSOR_DATA(Tout, buff);
-    DSC_TENSOR_DATA(Tout, out);
-    DSC_TENSOR_DATA(Tout, fft_work);
-
-    dsc_iterator x_it(x, axis, fft_n);
-    dsc_iterator out_it(out, axis, fft_n);
-
-    while (x_it.has_next()) {
-        for (int i = 0; i < fft_n; ++i) {
-            if (i < x_n) {
-                int idx = x_it.idx();
-                if constexpr (dsc_is_type<Tin, Tout>()) {
-                    buff_data[i] = x_data[idx];
-                } else {
-                    buff_data[i] = cast_op().template operator()<Tin, Tout>(x_data[idx]);
-                }
-
-                x_it.next();
-            } else {
-                buff_data[i] = dsc_zero<Tout>();
-            }
-        }
-
-        dsc_cfft<Tout, forward>(plan, buff_data, fft_work_data);
-
-        for (int i = 0; i < fft_n; ++i) {
-            const int idx = out_it.idx();
-            out_data[idx] = buff_data[i];
-
-            out_it.next();
-        }
-    }
-}
-
-template<bool forward>
-static DSC_INLINE dsc_tensor *dsc_internal_fft(dsc_ctx *ctx,
-                                               const dsc_tensor *DSC_RESTRICT x,
-                                               dsc_tensor *DSC_RESTRICT out,
-                                               int n,
-                                               const int axis) noexcept {
-    DSC_ASSERT(x != nullptr);
-
-    const int axis_idx = dsc_tensor_dim(x, axis);
-    DSC_ASSERT(axis_idx < DSC_MAX_DIMS);
-
-    const int x_n = x->shape[axis_idx];
-    const int axis_n = dsc_fft_best_n(x_n);
-    if (n > 0) {
-        n = dsc_fft_best_n(n);
-    } else {
-        n = axis_n;
-    }
-
-    int out_shape[DSC_MAX_DIMS];
-    for (int i = 0; i < DSC_MAX_DIMS; ++i)
-        out_shape[i] = i != axis_idx ? x->shape[i] : n;
-
-    dsc_dtype out_dtype = x->dtype;
-    if (x->dtype == F32) {
-        out_dtype = C32;
-    } else if (x->dtype == F64) {
-        out_dtype = C64;
-    }
-
-    if (out == nullptr) {
-        out = dsc_new_tensor(ctx, x->n_dim, &out_shape[DSC_MAX_DIMS - x->n_dim], out_dtype);
-    } else {
-        DSC_ASSERT(out->dtype == out_dtype);
-        DSC_ASSERT(out->n_dim == x->n_dim);
-        DSC_ASSERT(memcmp(out_shape, out->shape, DSC_MAX_DIMS * sizeof(out->shape[0])) == 0);
-    }
-
-    DSC_LOG_DEBUG("performing %s FFT of length %d on x=[%d %d %d %d] over axis %d with size %d",
-                  forward ? "FWD" : "BWD", n,
-                  x->shape[0], x->shape[1], x->shape[2], x->shape[3],
-                  axis_idx, x->shape[axis_idx]);
-
-    switch (x->dtype) {
-        case F32:
-            exec_fft<f32, c32, forward>(ctx, x, out, axis_idx, x_n, n);
-            break;
-        case F64:
-            exec_fft<f64, c64, forward>(ctx, x, out, axis_idx, x_n, n);
-            break;
-        case C32:
-            exec_fft<c32, c32, forward>(ctx, x, out, axis_idx, x_n, n);
-            break;
-        case C64:
-            exec_fft<c64, c64, forward>(ctx, x, out, axis_idx, x_n, n);
-            break;
-        default:
-            DSC_LOG_ERR("unknown dtype %d", x->dtype);
-            break;
-    }
 
     return out;
 }

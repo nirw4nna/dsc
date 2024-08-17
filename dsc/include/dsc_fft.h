@@ -119,7 +119,7 @@ static DSC_STRICTLY_PURE usize dsc_fft_storage(const int n, const dsc_dtype dtyp
             dtype_size = DSC_DTYPE_SIZE[F64];
             break;
         default:
-            DSC_LOG_ERR("unknown dtype=%d", dtype);
+            DSC_LOG_FATAL("unknown dtype=%d", dtype);
     }
     return twiddle_storage * dtype_size;
 }
@@ -139,7 +139,7 @@ static void dsc_init_plan(dsc_fft_plan *plan, int n,
             dsc_init_plan<f64>(plan, n, F64);
             break;
         default:
-            DSC_LOG_ERR("unknown dtype=%d", dtype);
+            DSC_LOG_FATAL("unknown dtype=%d", dtype);
     }
 }
 
