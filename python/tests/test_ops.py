@@ -26,6 +26,12 @@ def random_nd(shape: List[int], dtype: np.dtype = np.float64):
 
 
 DTYPES = [np.float32, np.float64, np.complex64, np.complex128]
+DSC_DTYPES = {
+    np.float32: dsc.Dtype.F32,
+    np.float64: dsc.Dtype.F64,
+    np.complex64: dsc.Dtype.C32,
+    np.complex128: dsc.Dtype.C64
+}
 
 
 def test_ops():
@@ -117,5 +123,36 @@ def test_fft():
             x_dsc_ifft = dsc.ifft(x_dsc_fft, axis=axis)
 
             assert all_close(x_dsc_ifft.numpy(), x_np_ifft)
+
+            dsc.clear()
+
+
+def test_arange():
+    for _ in range(10):
+        n = random.randint(1, 10_000)
+
+        for dtype in DTYPES:
+            print(f'Tensing arange with N={n} and dtype={dtype.__name__}')
+            res_np = np.arange(n, dtype=dtype)
+            res_dsc = dsc.arange(n, dtype=DSC_DTYPES[dtype])
+            assert all_close(res_dsc.numpy(), res_np)
+
+            dsc.clear()
+
+
+def test_random():
+    for _ in range(10):
+        shape = tuple([random.randint(1, 10) for _ in range(4)])
+        for dtype in DTYPES:
+            if dtype == np.complex64 or dtype == np.complex128:
+                continue
+            print(f'Tensing randn with dtype={dtype.__name__}')
+
+            res_np = np.random.randn(*shape).astype(dtype)
+            res_dsc = dsc.randn(*shape, dtype=DSC_DTYPES[dtype])
+            res_dsc_np = res_dsc.numpy()
+
+            assert res_dsc_np.dtype == res_np.dtype
+            assert res_dsc_np.shape == res_np.shape
 
             dsc.clear()

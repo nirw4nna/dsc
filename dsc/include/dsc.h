@@ -38,7 +38,7 @@
 #define DSC_MB(mb)           ((usize) ((mb) * 1024l * 1024l))
 #define DSC_KB(kb)           ((usize) ((kb) * 1024l))
 
-#if defined(__GNUC__)
+#if defined(__GNUC__) && !defined(EMSCRIPTEN)
 // A 'strictly pure' function is a function whose return value doesn't depend on the global state of the program,
 // this means that it must not access global variables subject to change or access parameters passed by pointer
 // unless the actual value of the pointer does not change after the first invocation.
@@ -109,7 +109,7 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code!");
 #define dsc_broadcast_offset_3(PTR)  ((dsc_broadcast_offset_2(PTR)) + (((d3) % (d3_##PTR)) * (d3_stride_##PTR)))
 #define dsc_broadcast_offset(PTR, n) dsc_broadcast_offset_##n(PTR)
 
-#define dsc_new_like(CTX, PTR) (dsc_new_tensor((CTX), (PTR)->n_dim, (PTR)->shape, (PTR)->dtype))
+#define dsc_new_like(CTX, PTR) (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[DSC_MAX_DIMS - (PTR)->n_dim], (PTR)->dtype))
 
 #define dsc_for_0(PTR)   for (int d0 = 0; d0 < (d0_##PTR); ++d0)
 #define dsc_for_1(PTR)   dsc_for_0(PTR) \
@@ -183,6 +183,11 @@ extern dsc_tensor *dsc_tensor_4d(dsc_ctx *ctx,
 extern dsc_tensor *dsc_arange(dsc_ctx *ctx,
                               int n,
                               dsc_dtype dtype = DSC_DEFAULT_TYPE) noexcept;
+
+extern dsc_tensor *dsc_randn(dsc_ctx *ctx,
+                             int n_dim,
+                             const int *shape,
+                             dsc_dtype dtype = DSC_DEFAULT_TYPE) noexcept;
 
 // Todo: if we decide to stick with this pattern for external function (c-like api + internal generic impl with templates)
 //  then it makes sense to use a more generic macro, similar to CONST_FUNC_DECL that can take care also of the arguments to declare all the functions.

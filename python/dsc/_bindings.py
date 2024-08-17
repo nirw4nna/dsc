@@ -150,6 +150,19 @@ _lib.dsc_arange.argtypes = [_DscCtx, c_int, c_uint8]
 _lib.dsc_arange.restype = _DscTensor_p
 
 
+# extern dsc_tensor *dsc_randn(dsc_ctx *ctx,
+#                              int n_dim,
+#                              const int *shape,
+#                              dsc_dtype dtype = DSC_DEFAULT_TYPE) noexcept;
+def _dsc_randn(ctx: _DscCtx, shape: tuple[int, ...], dtype: c_uint8) -> _DscTensor_p:
+    shape_type = c_int * len(shape)
+    return _lib.dsc_randn(ctx, len(shape), shape_type(*shape), dtype)
+
+
+_lib.dsc_randn.argtypes = [_DscCtx, c_int, POINTER(c_int), c_uint8]
+_lib.dsc_randn.restype = _DscTensor_p
+
+
 # extern dsc_tensor *dsc_add(dsc_ctx *ctx,
 #                            dsc_tensor *__restrict xa,
 #                            dsc_tensor *__restrict xb,

@@ -140,9 +140,9 @@ static consteval bool dsc_is_real() noexcept {
 template<typename T>
 static consteval T dsc_pi() noexcept {
     if constexpr (dsc_is_type<T, f32>()) {
-        return M_PIf;
+        return 3.14159265358979323846f;
     } else {
-        return M_PI;
+        return 3.14159265358979323846;
     }
 }
 

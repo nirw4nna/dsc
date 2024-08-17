@@ -2,6 +2,7 @@
 #include "dsc_ops.h"
 #include "dsc_fft.h"
 #include <cstring>
+#include <random>
 //#include <pthread.h>
 //#include <atomic>
 //#include <sys/sysinfo.h> // get_nprocs()
@@ -49,7 +50,6 @@
         DSC_ASSERT(x != nullptr);       \
         if (out == nullptr) {           \
             out = dsc_new_like(ctx, x); \
-            copy(x, out);               \
         } else {                        \
             DSC_ASSERT(out->dtype == x->dtype);                                                     \
             DSC_ASSERT(out->n_dim == x->n_dim);                                                     \
@@ -272,7 +272,6 @@ static void unary_op(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-
 template<typename Tx>
 static void copy_op(const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out) noexcept {
@@ -450,6 +449,19 @@ static dsc_tensor *dsc_interp1d(dsc_ctx *ctx, const dsc_tensor *x,
     }
 
     return out;
+}
+
+template<typename T>
+static void dsc_fill_rand(dsc_tensor *x) noexcept {
+    static_assert(dsc_is_real<T>(), "T must be real");
+
+    DSC_TENSOR_DATA(T, x);
+
+    std::mt19937 rng;
+    std::normal_distribution<T> dist;
+
+    for (int i = 0; i < x->ne; ++i)
+        x_data[i] = dist(rng);
 }
 
 static dsc_buffer *dsc_buffer_alloc(const usize nb) noexcept {
@@ -749,6 +761,7 @@ void dsc_ctx_clear(dsc_ctx *ctx) noexcept {
     ctx->buffer->n_plans = 0;
 }
 
+#define alignment 32
 
 dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                            const int n_dim,
@@ -759,7 +772,7 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
     int ne = 1;
     for (int i = 0; i < n_dim; ++i) ne *= shape[i];
 
-    const usize mem_needed = sizeof(dsc_tensor) + ne * DSC_DTYPE_SIZE[dtype];
+    const usize mem_needed = sizeof(dsc_tensor) + ne * DSC_DTYPE_SIZE[dtype] + alignment; // 32=alignment in bytes
 
     dsc_buffer *buff = ctx->buffer;
 
@@ -784,7 +797,8 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
         new_tensor->stride[i] = new_tensor->stride[i + 1] * new_tensor->shape[i + 1];
     }
 
-    new_tensor->data = (new_tensor + 1);
+    const uintptr_t unaligned_offset = (uintptr_t) ((byte *) new_tensor + sizeof(dsc_tensor));
+    new_tensor->data = (void *) (DSC_ALIGN(unaligned_offset, alignment));
 
     DSC_LOG_DEBUG("n_dim=%d shape=[%d, %d, %d, %d] stride=[%d, %d, %d, %d] dtype=%s",
                   n_dim, new_tensor->shape[0], new_tensor->shape[1], new_tensor->shape[2],
@@ -845,6 +859,26 @@ dsc_tensor *dsc_arange(dsc_ctx *ctx,
     return out;
 }
 
+dsc_tensor *dsc_randn(dsc_ctx *ctx,
+                      const int n_dim,
+                      const int *shape,
+                      const dsc_dtype dtype) noexcept {
+    dsc_tensor *res = dsc_new_tensor(ctx, n_dim, shape, dtype);
+
+    switch (res->dtype) {
+        case F32:
+            dsc_fill_rand<f32>(res);
+            break;
+        case F64:
+            dsc_fill_rand<f64>(res);
+            break;
+        default:
+            DSC_LOG_FATAL("dtype must be real");
+    }
+
+    return res;
+}
+
 dsc_tensor *dsc_log_space_f32(dsc_ctx *ctx, const f32 start, const f32 stop,
                               const int n, const f32 base) noexcept {
     return dsc_log_space(ctx, start, stop, n, base);
@@ -872,7 +906,7 @@ dsc_tensor *dsc_cast(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
     if (x->dtype == new_dtype)
         return x;
 
-    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, x->shape, new_dtype);
+    dsc_tensor *out = dsc_new_like(ctx, x);
     copy(x, out);
 
     return out;

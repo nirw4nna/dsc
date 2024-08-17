@@ -4,7 +4,7 @@ from ._bindings import (
     _dsc_subc_f32, _dsc_subc_f64, _dsc_subc_c32, _dsc_subc_c64,
     _dsc_mulc_f32, _dsc_mulc_f64, _dsc_mulc_c32, _dsc_mulc_c64,
     _dsc_divc_f32, _dsc_divc_f64, _dsc_divc_c32, _dsc_divc_c64,
-    _dsc_plan_fft, _dsc_fft, _dsc_ifft, _dsc_arange,
+    _dsc_plan_fft, _dsc_fft, _dsc_ifft, _dsc_arange, _dsc_randn,
     _dsc_cos, _dsc_sin, _dsc_tensor_1d, _dsc_tensor_2d, _dsc_tensor_3d, _dsc_tensor_4d,
 )
 from .dtype import *
@@ -40,56 +40,17 @@ class Tensor:
     def n_dim(self) -> int:
         return self._n_dim
 
-    def _scalar_op(self, other: Union[float, complex], op_base_name: str) -> 'Tensor':
-        op_dtype = self.dtype
-        if isinstance(other, float):
-            if self.dtype == Dtype.C32 or self.dtype == Dtype.C64:
-                other = complex(other, 0)
-        else:
-            # The cast op is handled by the C library
-            if self.dtype == Dtype.F32:
-                op_dtype = Dtype.C32
-            elif self.dtype == Dtype.F64:
-                op_dtype = Dtype.C64
+    def __add__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+        return add(self, other)
 
-        op_name = f'{op_base_name}_{op_dtype}'
-        if hasattr(sys.modules[__name__], op_name):
-            op = getattr(sys.modules[__name__], op_name)
-            return Tensor(op(_get_ctx(), self._c_ptr, other))
-        else:
-            raise RuntimeError(f'operation "{op_name}" doesn\'t exist in module')
+    def __sub__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+        return sub(self, other)
 
-    def __add__(self, other):
-        if isinstance(other, (float, complex)):
-            return self._scalar_op(other, '_dsc_addc')
-        elif isinstance(other, Tensor):
-            return Tensor(_dsc_add(_get_ctx(), self._c_ptr, _c_ptr(other)))
-        else:
-            raise RuntimeError(f'can\'t add Tensor with object of type {type(other)}')
+    def __mul__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+        return mul(self, other)
 
-    def __sub__(self, other):
-        if isinstance(other, (float, complex)):
-            return self._scalar_op(other, '_dsc_subc')
-        elif isinstance(other, Tensor):
-            return Tensor(_dsc_sub(_get_ctx(), self._c_ptr, _c_ptr(other)))
-        else:
-            raise RuntimeError(f'can\'t subtract Tensor with object of type {type(other)}')
-
-    def __mul__(self, other: Union[float, complex, 'Tensor']) -> 'Tensor':
-        if isinstance(other, (float, complex)):
-            return self._scalar_op(other, '_dsc_mulc')
-        elif isinstance(other, Tensor):
-            return Tensor(_dsc_mul(_get_ctx(), self._c_ptr, _c_ptr(other)))
-        else:
-            raise RuntimeError(f'can\'t multiply Tensor with object of type {type(other)}')
-
-    def __truediv__(self, other):
-        if isinstance(other, (float, complex)):
-            return self._scalar_op(other, '_dsc_divc')
-        elif isinstance(other, Tensor):
-            return Tensor(_dsc_div(_get_ctx(), self._c_ptr, _c_ptr(other)))
-        else:
-            raise RuntimeError(f'can\'t multiply Tensor with object of type {type(other)}')
+    def __truediv__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+        return true_div(self, other)
 
     def numpy(self) -> np.ndarray:
         raw_tensor = self._c_ptr.contents
@@ -140,22 +101,75 @@ def from_numpy(x: np.ndarray) -> Tensor:
     return res
 
 
-# TODO: val can be also an integer, in that case _check_dtype will throw. Handle this case!
-#def full(n: int, val: ConstType, dtype: Dtype = Dtype.F32) -> Tensor:
-#    _check_dtype(dtype, val)
-#
-#    if dtype == Dtype.F32:
-#        return Tensor(_dsc_full_f32(_get_ctx(), n, val))
-#    elif dtype == Dtype.F64:
-#        return Tensor(_dsc_full_f64(_get_ctx(), n, val))
-#    elif dtype == Dtype.C32:
-#        return Tensor(_dsc_full_c32(_get_ctx(), n, val))
-#    elif dtype == Dtype.C64:
-#        return Tensor(_dsc_full_c64(_get_ctx(), n, val))
-#    else:
-#        raise RuntimeError(f'Unknown dtype {dtype}')
+def _scalar_op(xa: Tensor, xb: Union[float, complex], out: Tensor, op_base_name: str) -> Tensor:
+    op_dtype = xa.dtype
+    if isinstance(xb, float):
+        if xa.dtype == Dtype.C32 or xa.dtype == Dtype.C64:
+            xb = complex(xb, 0)
+    else:
+        # The cast op is handled by the C library
+        if xa.dtype == Dtype.F32:
+            op_dtype = Dtype.C32
+        elif xa.dtype == Dtype.F64:
+            op_dtype = Dtype.C64
 
-# Todo: implement 'static' functions for add, sub, mul and div so that we can expose also the 'out' parameter
+    op_name = f'{op_base_name}_{op_dtype}'
+    if hasattr(sys.modules[__name__], op_name):
+        op = getattr(sys.modules[__name__], op_name)
+        return Tensor(op(_get_ctx(), _c_ptr(xa), xb, _c_ptr(out)))
+    else:
+        raise RuntimeError(f'scalar operation "{op_name}" doesn\'t exist in module')
+
+
+def _tensor_op(xa: Tensor, xb: Union[Tensor, np.ndarray], out: Tensor, op_name: str) -> Tensor:
+    if isinstance(xb, np.ndarray):
+        # The conversion from (and to) NumPy is not free, so it's better to do that once and then work with DSC tensors.
+        # This is here just for convenience not because it's a best practice.
+        xb = from_numpy(xb)
+
+    if hasattr(sys.modules[__name__], op_name):
+        op = getattr(sys.modules[__name__], op_name)
+        return Tensor(op(_get_ctx(), _c_ptr(xa), _c_ptr(xb), _c_ptr(out)))
+    else:
+        raise RuntimeError(f'tensor operation "{op_name}" doesn\'t exist in module')
+
+
+def add(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
+    if isinstance(xb, (float, complex)):
+        return _scalar_op(xa, xb, out, op_base_name='_dsc_addc')
+    elif isinstance(xb, (np.ndarray, Tensor)):
+        return _tensor_op(xa, xb, out, op_name='_dsc_add')
+    else:
+        raise RuntimeError(f'can\'t add Tensor with object of type {type(xb)}')
+
+
+def sub(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
+    if isinstance(xb, (float, complex)):
+        return _scalar_op(xa, xb, out, op_base_name='_dsc_subc')
+    elif isinstance(xb, (np.ndarray, Tensor)):
+        return _tensor_op(xa, xb, out, op_name='_dsc_sub')
+    else:
+        raise RuntimeError(f'can\'t subtract Tensor with object of type {type(xb)}')
+
+
+def mul(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
+    if isinstance(xb, (float, complex)):
+        return _scalar_op(xa, xb, out, op_base_name='_dsc_mulc')
+    elif isinstance(xb, (np.ndarray, Tensor)):
+        return _tensor_op(xa, xb, out, op_name='_dsc_mul')
+    else:
+        raise RuntimeError(f'can\'t multiply Tensor with object of type {type(xb)}')
+
+
+def true_div(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
+    if isinstance(xb, (float, complex)):
+        return _scalar_op(xa, xb, out, op_base_name='_dsc_divc')
+    elif isinstance(xb, (np.ndarray, Tensor)):
+        return _tensor_op(xa, xb, out, op_name='_dsc_div')
+    else:
+        raise RuntimeError(f'can\'t divide Tensor with object of type {type(xb)}')
+
+
 def cos(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_cos(_get_ctx(), _c_ptr(x), _c_ptr(out)))
 
@@ -166,6 +180,10 @@ def sin(x: Tensor, out: Tensor = None) -> Tensor:
 
 def arange(n: int, dtype: Dtype = Dtype.F32) -> Tensor:
     return Tensor(_dsc_arange(_get_ctx(), n, c_uint8(dtype.value)))
+
+
+def randn(*shape: int, dtype: Dtype = Dtype.F32) -> Tensor:
+    return Tensor(_dsc_randn(_get_ctx(), shape, c_uint8(dtype.value)))
 
 
 def plan_fft(n: int, dtype: Dtype = Dtype.F64):
