@@ -5,3 +5,4 @@ numpy
 matplotlib
 PyQt5
 pytest
+tabulate

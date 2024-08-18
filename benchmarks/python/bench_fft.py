@@ -7,11 +7,7 @@ import python.dsc as dsc
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from typing import List
-
-
-WARMUP = 2
-BENCH_STEPS = 5
+from utils import WARMUP, BENCH_STEPS, random_nd
 
 
 def bench(x, op):
@@ -27,11 +23,7 @@ def bench(x, op):
     return op_time_ns
 
 
-def random_nd(shape: List[int], dtype: np.dtype = np.float64):
-    return np.random.randn(*tuple(shape)).astype(dtype)
-
-
-def bench_fft(plot: bool = True):
+def bench_fft(show_plot: bool = True):
     dsc.init(1024 * 1024 * 1024 * 2)
     # FLOPS = 5N * log2(N) / s (https://www.fftw.org/speed/method.html)
     np_f32_flops = {}
@@ -67,7 +59,7 @@ def bench_fft(plot: bool = True):
     print(f'F64: NumPy is {round(np_speed_f64, 1)}X faster (NumPy Avg. GFLOPS={round(np_f64_mean_flops, 2)}\tDSC Avg. '
           f'GFLOPS={round(dsc_f64_mean_flops, 2)})')
 
-    if plot:
+    if show_plot:
         labels = list(np_f32_flops.keys())
         x = range(len(labels))
         plt.plot(x, list(np_f32_flops.values()), marker='d', label='NumPy (f32)')
