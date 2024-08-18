@@ -4,7 +4,7 @@ from ._bindings import (
     _dsc_subc_f32, _dsc_subc_f64, _dsc_subc_c32, _dsc_subc_c64,
     _dsc_mulc_f32, _dsc_mulc_f64, _dsc_mulc_c32, _dsc_mulc_c64,
     _dsc_divc_f32, _dsc_divc_f64, _dsc_divc_c32, _dsc_divc_c64,
-    _dsc_plan_fft, _dsc_fft, _dsc_ifft, _dsc_arange, _dsc_randn,
+    _dsc_plan_fft, _dsc_fft, _dsc_ifft, _dsc_rfftfreq, _dsc_arange, _dsc_randn,
     _dsc_cos, _dsc_sin, _dsc_tensor_1d, _dsc_tensor_2d, _dsc_tensor_3d, _dsc_tensor_4d,
 )
 from .dtype import *
@@ -201,3 +201,7 @@ def fft(x: Tensor, out: Tensor = None, n: int = -1, axis: int = -1) -> Tensor:
 
 def ifft(x: Tensor, out: Tensor = None, n: int = -1, axis: int = -1) -> Tensor:
     return Tensor(_dsc_ifft(_get_ctx(), _c_ptr(x), _c_ptr(out), n=c_int(n), axis=c_int(axis)))
+
+
+def rfftfreq(n: int, d: float = 1., dtype: Dtype = Dtype.F32) -> Tensor:
+    return Tensor(_dsc_rfftfreq(_get_ctx(), c_int(n), c_double(d), c_uint8(dtype.value)))

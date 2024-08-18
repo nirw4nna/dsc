@@ -428,3 +428,15 @@ def _dsc_ifft(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None, n: c_int 
 
 _lib.dsc_ifft.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_int]
 _lib.dsc_ifft.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_rfftfreq(dsc_ctx *ctx,
+#                                 int n,
+#                                 f64 d = 1.,
+#                                 dsc_dtype dtype = DSC_DEFAULT_TYPE) noexcept;
+def _dsc_rfftfreq(ctx: _DscCtx, n: c_int, d: c_double, dtype: c_uint8) -> _DscTensor_p:
+    return _lib.dsc_rfftfreq(ctx, n, d, dtype)
+
+
+_lib.dsc_rfftfreq.argtypes = [_DscCtx, c_int, c_double, c_uint8]
+_lib.dsc_rfftfreq.restype = _DscTensor_p

@@ -595,6 +595,19 @@ static DSC_INLINE dsc_tensor *dsc_internal_fft(dsc_ctx *ctx,
 }
 
 template<typename T>
+static DSC_INLINE void dsc_compute_rfftfreq(dsc_tensor *x,
+                                            const int n,
+                                            const T d) noexcept {
+    const T factor = 1 / (n * d);
+
+    DSC_TENSOR_DATA(T, x);
+
+    for (int i = 0; i < x->ne; ++i) {
+        x_data[i] = i * factor;
+    }
+}
+
+template<typename T>
 static DSC_INLINE T *dsc_obj_alloc(dsc_buffer *buff, const usize nb) noexcept {
     const usize last_offset = buff->last == nullptr ? 0 : buff->last->offset;
     const usize last_size = buff->last == nullptr ? 0 : buff->last->nb;
@@ -992,20 +1005,20 @@ dsc_tensor *dsc_randn(dsc_ctx *ctx,
                       const int n_dim,
                       const int *shape,
                       const dsc_dtype dtype) noexcept {
-    dsc_tensor *res = dsc_new_tensor(ctx, n_dim, shape, dtype);
+    dsc_tensor *out = dsc_new_tensor(ctx, n_dim, shape, dtype);
 
-    switch (res->dtype) {
+    switch (out->dtype) {
         case F32:
-            dsc_fill_randn<f32>(res);
+            dsc_fill_randn<f32>(out);
             break;
         case F64:
-            dsc_fill_randn<f64>(res);
+            dsc_fill_randn<f64>(out);
             break;
         default:
             DSC_LOG_FATAL("dtype must be real");
     }
 
-    return res;
+    return out;
 }
 
 dsc_tensor *dsc_log_space_f32(dsc_ctx *ctx, const f32 start, const f32 stop,
@@ -1154,4 +1167,29 @@ dsc_tensor *dsc_ifft(dsc_ctx *ctx,
                      const int n,
                      const int axis) noexcept {
     return dsc_internal_fft<false>(ctx, x, out, n, axis);
+}
+
+dsc_tensor *dsc_rfftfreq(dsc_ctx *ctx,
+                         const int n,
+                         const f64 d,
+                         const dsc_dtype dtype) noexcept {
+    DSC_ASSERT(n > 0);
+    // out = [0, 1, ...,     n/2-1,     n/2] / (d*n)   if n is even
+    // out = [0, 1, ..., (n-1)/2-1, (n-1)/2] / (d*n)   if n is odd
+    // Note that the value of n that multiplies d is the same in both cases.
+    const int n2 = (n & 1) ? (((n - 1) >> 1) + 1) : ((n >> 1) + 1);
+
+    dsc_tensor *out = dsc_tensor_1d(ctx, dtype, n2);
+    switch (dtype) {
+        case F32:
+            dsc_compute_rfftfreq(out, n, (f32) d);
+            break;
+        case F64:
+            dsc_compute_rfftfreq(out, n, (f64) d);
+            break;
+        default:
+            DSC_LOG_FATAL("dtype must be real");
+    }
+
+    return out;
 }

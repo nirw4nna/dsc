@@ -127,6 +127,27 @@ def test_fft():
             dsc.clear()
 
 
+def test_rfftfreq():
+    for _ in range(10):
+        n = random.randint(1, 10_000)
+        for dtype in DTYPES:
+            if dtype == np.complex64 or dtype == np.complex128:
+                continue
+            print(f'Tensing rfftfreq with N={n} and dtype={dtype.__name__}')
+
+            # With default d
+            res_np = np.fft.rfftfreq(n).astype(dtype)
+            res_dsc = dsc.rfftfreq(n, dtype=DSC_DTYPES[dtype])
+            assert all_close(res_np, res_dsc.numpy())
+
+            # With random d
+            d = random.random()
+            res_np_d = np.fft.rfftfreq(n, d).astype(dtype)
+            res_dsc_d = dsc.rfftfreq(n, d, dtype=DSC_DTYPES[dtype])
+            assert all_close(res_np_d, res_dsc_d.numpy())
+            dsc.clear()
+
+
 def test_arange():
     for _ in range(10):
         n = random.randint(1, 10_000)

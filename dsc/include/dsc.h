@@ -288,6 +288,11 @@ extern dsc_tensor *dsc_ifft(dsc_ctx *ctx,
                             int n = -1,
                             int axis = -1) noexcept;
 
+extern dsc_tensor *dsc_rfftfreq(dsc_ctx *ctx,
+                                int n,
+                                f64 d = 1.,
+                                dsc_dtype dtype = DSC_DEFAULT_TYPE) noexcept;
+
 #if defined(__cplusplus)
 }
 #endif
