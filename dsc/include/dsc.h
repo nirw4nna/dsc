@@ -75,52 +75,10 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code!");
                                            type val,                            \
                                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
 
-#define DSC_TENSOR_DIMS_0(PTR)   const int d0_##PTR = (PTR)->shape[0]
-#define DSC_TENSOR_DIMS_1(PTR)   DSC_TENSOR_DIMS_0(PTR); \
-                                 const int d1_##PTR = (PTR)->shape[1]
-#define DSC_TENSOR_DIMS_2(PTR)   DSC_TENSOR_DIMS_1(PTR); \
-                                 const int d2_##PTR = (PTR)->shape[2]
-#define DSC_TENSOR_DIMS_3(PTR)   DSC_TENSOR_DIMS_2(PTR); \
-                                 const int d3_##PTR = (PTR)->shape[3]
+#define DSC_TENSOR_DATA(T, PTR) T *DSC_RESTRICT PTR##_data = (T *) (PTR)->data
 
-#define DSC_TENSOR_STRIDES_0(PTR)    const int d0_stride_##PTR = (PTR)->stride[0]
-#define DSC_TENSOR_STRIDES_1(PTR)    DSC_TENSOR_STRIDES_0(PTR); \
-                                     const int d1_stride_##PTR = (PTR)->stride[1]
-#define DSC_TENSOR_STRIDES_2(PTR)    DSC_TENSOR_STRIDES_1(PTR); \
-                                     const int d2_stride_##PTR = (PTR)->stride[2]
-#define DSC_TENSOR_STRIDES_3(PTR)    DSC_TENSOR_STRIDES_2(PTR); \
-                                     const int d3_stride_##PTR = (PTR)->stride[3]
-
-#define DSC_TENSOR_DIMS(PTR, n)         DSC_TENSOR_DIMS_##n(PTR)
-#define DSC_TENSOR_STRIDES(PTR, n)      DSC_TENSOR_STRIDES_##n(PTR)
-#define DSC_TENSOR_FIELDS(PTR, n)       DSC_TENSOR_DIMS(PTR, n); DSC_TENSOR_STRIDES(PTR, n)
-#define DSC_TENSOR_DATA(T, PTR)         T *DSC_RESTRICT PTR##_data = (T *) (PTR)->data
-
-// Todo: upper or lower case?
-#define dsc_offset_0(PTR)    ((d0) * (d0_stride_##PTR))
-#define dsc_offset_1(PTR)    ((dsc_offset_0(PTR)) + ((d1) * (d1_stride_##PTR)))
-#define dsc_offset_2(PTR)    ((dsc_offset_1(PTR)) + ((d2) * (d2_stride_##PTR)))
-#define dsc_offset_3(PTR)    ((dsc_offset_2(PTR)) + ((d3) * (d3_stride_##PTR)))
-#define dsc_offset(PTR, n)   dsc_offset_##n(PTR)
-
-#define dsc_broadcast_offset_0(PTR)  (((d0) % (d0_##PTR)) * (d0_stride_##PTR))
-#define dsc_broadcast_offset_1(PTR)  ((dsc_broadcast_offset_0(PTR)) + (((d1) % (d1_##PTR)) * (d1_stride_##PTR)))
-#define dsc_broadcast_offset_2(PTR)  ((dsc_broadcast_offset_1(PTR)) + (((d2) % (d2_##PTR)) * (d2_stride_##PTR)))
-#define dsc_broadcast_offset_3(PTR)  ((dsc_broadcast_offset_2(PTR)) + (((d3) % (d3_##PTR)) * (d3_stride_##PTR)))
-#define dsc_broadcast_offset(PTR, n) dsc_broadcast_offset_##n(PTR)
-
-#define dsc_new_like(CTX, PTR) (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[DSC_MAX_DIMS - (PTR)->n_dim], (PTR)->dtype))
-
-#define dsc_for_0(PTR)   for (int d0 = 0; d0 < (d0_##PTR); ++d0)
-#define dsc_for_1(PTR)   dsc_for_0(PTR) \
-                         for (int d1 = 0; d1 < (d1_##PTR); ++d1)
-#define dsc_for_2(PTR)   dsc_for_1(PTR) \
-                         for (int d2 = 0; d2 < (d2_##PTR); ++d2)
-#define dsc_for_3(PTR)   dsc_for_2(PTR) \
-                         for (int d3 = 0; d3 < (d3_##PTR); ++d3)
-#define dsc_for(PTR, n)  dsc_for_##n(PTR)
-
-#define dsc_tensor_dim(PTR, dim) (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (PTR)->n_dim + (dim)))
+#define dsc_new_like(CTX, PTR)      (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[DSC_MAX_DIMS - (PTR)->n_dim], (PTR)->dtype))
+#define dsc_tensor_dim(PTR, dim)    (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (PTR)->n_dim + (dim)))
 
 #if defined(__cplusplus)
 extern "C" {

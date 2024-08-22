@@ -1,6 +1,7 @@
 #include "dsc.h"
 #include "dsc_ops.h"
 #include "dsc_fft.h"
+#include "dsc_iter.h"
 #include <cstring>
 #include <random>
 //#include <pthread.h>
@@ -20,6 +21,8 @@
         return dsc_##func(ctx, x, out, val);                                    \
 }
 
+// This needs to be a macro otherwise the pointer assignments to out, xa and xb
+// would not work unless I pass them as pointers to pointers which is very ugly.
 #define validate_binary_params() \
     do {                                    \
         DSC_ASSERT(xa != nullptr);          \
@@ -57,23 +60,7 @@
         }                                                                                           \
     } while(0)
 
-// Wrap a scalar value as a dsc_tensor allocated on the stack, this way we don't risk polluting the heap buffer
-// with tons of small tensors that are only used once.
-#define DSC_WRAP_VALUE(T, val) \
-    const usize nb = sizeof(dsc_tensor) + DSC_DTYPE_SIZE[dsc_type_mapping<T>::value];   \
-    dsc_tensor *x_val = (dsc_tensor *) alloca(nb);                                      \
-    do { \
-        x_val->dtype = dsc_type_mapping<T>::value;  \
-        x_val->n_dim = 1;                           \
-        x_val->ne = 1;                              \
-        x_val->data = (x_val + 1);                  \
-        for (int i = 0; i < DSC_MAX_DIMS; ++i) {    \
-            x_val->shape[i] = 1;                    \
-            x_val->stride[i] = 1;                   \
-        }                                           \
-        DSC_TENSOR_DATA(T, x_val);                  \
-        x_val_data[0] = val;                        \
-    } while (0)
+#define dsc_for(idx, X) for (int idx = 0; idx < (X)->ne; ++idx)
 
 #define DSC_CTX_PUSH(CTX) \
     dsc_obj *checkpointed_last_ = (CTX)->buffer->last;      \
@@ -135,63 +122,6 @@ struct dsc_ctx {
 //    int n_workers;
 };
 
-struct dsc_iterator {
-    dsc_iterator(const dsc_tensor *x, int axis, int axis_n) noexcept :
-            shape_(x->shape), stride_(x->stride),
-             axis_(axis), axis_n_(axis_n < x->shape[axis] ? axis_n : x->shape[axis]){
-    }
-
-    DSC_INLINE void next() noexcept {
-        ++idx_[axis_];
-        if (idx_[axis_] >= axis_n_) {
-            idx_[axis_] = 0;
-
-            bool still_left = false;
-            for (int i = DSC_MAX_DIMS - 1; i >= 0; --i) {
-                if (i == axis_)
-                    continue;
-
-                if (++idx_[i] < shape_[i]) {
-                    still_left = true;
-                    break;
-                }
-
-                // Rollover this dimension
-                idx_[i] = 0;
-                // If this is the first dimension, and it rolls over we are done
-                end_ = i == 0;
-            }
-            if (axis_ == 0 && !still_left)
-                end_ = true;
-        }
-    }
-
-    DSC_INLINE int idx() const noexcept {
-        return compute_idx<DSC_MAX_DIMS>();
-    }
-
-    DSC_INLINE bool has_next() const noexcept {
-        return !end_;
-    }
-
-private:
-    template<int N, int Cur = 0>
-    constexpr int compute_idx() const noexcept {
-        if constexpr (Cur == N) {
-            return 0;
-        } else {
-            return idx_[Cur] * stride_[Cur] + compute_idx<N, Cur + 1>();
-        }
-    }
-
-    int idx_[DSC_MAX_DIMS] = {0};
-    const int *shape_;
-    const int *stride_;
-    const int axis_;
-    const int axis_n_;
-    bool end_ = false;
-};
-
 // ================================================== Private Functions ================================================== //
 template<typename T, typename Op>
 static void binary_op(const dsc_tensor *DSC_RESTRICT xa,
@@ -202,15 +132,27 @@ static void binary_op(const dsc_tensor *DSC_RESTRICT xa,
     DSC_TENSOR_DATA(T, xb);
     DSC_TENSOR_DATA(T, out);
 
-    DSC_TENSOR_FIELDS(xa, 3);
-    DSC_TENSOR_FIELDS(xb, 3);
-    DSC_TENSOR_FIELDS(out, 3);
-
-    dsc_for(out, 3) {
-        out_data[dsc_offset(out, 3)] = op(
-                xa_data[dsc_broadcast_offset(xa, 3)],
-                xb_data[dsc_broadcast_offset(xb, 3)]
+    dsc_broadcast_iterator xa_it(xa, out->shape), xb_it(xb, out->shape);
+    dsc_for(i, out) {
+        out_data[i] = op(
+                xa_data[xa_it.index()],
+                xb_data[xb_it.index()]
         );
+        xa_it.next(), xb_it.next();
+    }
+}
+
+template<typename T, typename Op>
+static DSC_INLINE void scalar_op(dsc_tensor *DSC_RESTRICT x,
+                                 dsc_tensor *DSC_RESTRICT out,
+                                 const T val,
+                                 Op op) noexcept {
+
+    DSC_TENSOR_DATA(T, x);
+    DSC_TENSOR_DATA(T, out);
+
+    dsc_for(i, out) {
+        out_data[i] = op(x_data[i], val);
     }
 }
 
@@ -221,7 +163,7 @@ static void unary_op(const dsc_tensor *DSC_RESTRICT x,
     DSC_TENSOR_DATA(T, x);
     DSC_TENSOR_DATA(T, out);
 
-    for (int i = 0; i < x->ne; ++i) {
+    dsc_for(i, out) {
         out_data[i] = op(x_data[i]);
     }
 }
@@ -235,7 +177,7 @@ static void copy_op(const dsc_tensor *DSC_RESTRICT x,
     DSC_ASSERT(out->ne == x->ne);
 
     // Todo: I can probably do better but (if it works) it's fine for now
-    for (int i = 0; i < out->ne; ++i) {
+    dsc_for(i, out) {
         out_data[i] = cast_op().template operator()<Tx, To>(x_data[i]);
     }
 }
@@ -246,7 +188,7 @@ static void assign_op(dsc_tensor *DSC_RESTRICT x,
     DSC_TENSOR_DATA(T, x);
 
     T val = start;
-    for (int i = 0; i < x->ne; ++i) {
+    dsc_for(i, x) {
         x_data[i] = val;
         val = add_op()(val, step);
     }
@@ -343,9 +285,9 @@ static DSC_INLINE dsc_tensor *dsc_addc(dsc_ctx *ctx,
                                        dsc_tensor *DSC_RESTRICT x,
                                        dsc_tensor *DSC_RESTRICT out,
                                        const T val) noexcept {
-    DSC_WRAP_VALUE(T, val);
-
-    return dsc_add(ctx, x, x_val, out);
+    validate_unary_params();
+    scalar_op(x, out, val, add_op());
+    return out;
 }
 
 template <typename T>
@@ -353,9 +295,9 @@ static DSC_INLINE dsc_tensor *dsc_subc(dsc_ctx *ctx,
                                        dsc_tensor *DSC_RESTRICT x,
                                        dsc_tensor *DSC_RESTRICT out,
                                        const T val) noexcept {
-    DSC_WRAP_VALUE(T, val);
-
-    return dsc_sub(ctx, x, x_val, out);
+    validate_unary_params();
+    scalar_op(x, out, val, sub_op());
+    return out;
 }
 
 template <typename T>
@@ -363,9 +305,9 @@ static DSC_INLINE dsc_tensor *dsc_mulc(dsc_ctx *ctx,
                                        dsc_tensor *DSC_RESTRICT x,
                                        dsc_tensor *DSC_RESTRICT out,
                                        const T val) noexcept {
-    DSC_WRAP_VALUE(T, val);
-
-    return dsc_mul(ctx, x, x_val, out);
+    validate_unary_params();
+    scalar_op(x, out, val, mul_op());
+    return out;
 }
 
 template <typename T>
@@ -373,9 +315,9 @@ static DSC_INLINE dsc_tensor *dsc_divc(dsc_ctx *ctx,
                                        dsc_tensor *DSC_RESTRICT x,
                                        dsc_tensor *DSC_RESTRICT out,
                                        const T val) noexcept {
-    DSC_WRAP_VALUE(T, val);
-
-    return dsc_div(ctx, x, x_val, out);
+    validate_unary_params();
+    scalar_op(x, out, val, div_op());
+    return out;
 }
 
 static bool DSC_INLINE DSC_PURE can_broadcast(const dsc_tensor *DSC_RESTRICT xa,
@@ -499,13 +441,13 @@ static DSC_INLINE void exec_fft(dsc_ctx *ctx,
     DSC_TENSOR_DATA(Tout, out);
     DSC_TENSOR_DATA(Tout, fft_work);
 
-    dsc_iterator x_it(x, axis, fft_n);
-    dsc_iterator out_it(out, axis, fft_n);
+    dsc_axis_iterator x_it(x, axis, fft_n);
+    dsc_axis_iterator out_it(out, axis, fft_n);
 
     while (x_it.has_next()) {
         for (int i = 0; i < fft_n; ++i) {
             if (i < x_n) {
-                int idx = x_it.idx();
+                int idx = x_it.index();
                 if constexpr (dsc_is_type<Tin, Tout>()) {
                     buff_data[i] = x_data[idx];
                 } else {
@@ -521,7 +463,7 @@ static DSC_INLINE void exec_fft(dsc_ctx *ctx,
         dsc_cfft<Tout, forward>(plan, buff_data, fft_work_data);
 
         for (int i = 0; i < fft_n; ++i) {
-            const int idx = out_it.idx();
+            const int idx = out_it.index();
             out_data[idx] = buff_data[i];
 
             out_it.next();
@@ -598,6 +540,7 @@ template<typename T>
 static DSC_INLINE void dsc_compute_rfftfreq(dsc_tensor *x,
                                             const int n,
                                             const T d) noexcept {
+    static_assert(dsc_is_real<T>(), "T must be real");
     const T factor = 1 / (n * d);
 
     DSC_TENSOR_DATA(T, x);
@@ -1118,7 +1061,6 @@ CONST_OP_IMPL(divc, f64)
 CONST_OP_IMPL(divc, c32)
 CONST_OP_IMPL(divc, c64)
 
-
 dsc_tensor *dsc_cos(dsc_ctx *ctx,
                     const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out) noexcept {
@@ -1128,7 +1070,6 @@ dsc_tensor *dsc_cos(dsc_ctx *ctx,
 
     return out;
 }
-
 
 dsc_tensor *dsc_sin(dsc_ctx *ctx,
                     const dsc_tensor *DSC_RESTRICT x,

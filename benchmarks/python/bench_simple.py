@@ -146,5 +146,5 @@ def bench_trig(show_plot: bool = True):
 
 
 if __name__ == '__main__':
-    # bench_ops()
-    bench_trig()
+    bench_ops()
+    # bench_trig()
