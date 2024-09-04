@@ -1277,6 +1277,15 @@ dsc_tensor *dsc_sin(dsc_ctx *ctx,
     return out;
 }
 
+dsc_tensor *dsc_sinc(dsc_ctx *ctx,
+                     const dsc_tensor *DSC_RESTRICT x,
+                     dsc_tensor *DSC_RESTRICT out) noexcept {
+    validate_unary_params();
+
+    unary_op(x, out, sinc_op());
+
+    return out;
+}
 
 dsc_tensor *dsc_logn(dsc_ctx *ctx,
                      const dsc_tensor *DSC_RESTRICT x,

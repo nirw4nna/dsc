@@ -237,6 +237,10 @@ extern dsc_tensor *dsc_sin(dsc_ctx *ctx,
                            const dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
 
+extern dsc_tensor *dsc_sinc(dsc_ctx *ctx,
+                            const dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
 extern dsc_tensor *dsc_logn(dsc_ctx *ctx,
                             const dsc_tensor *DSC_RESTRICT x,
                             dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;

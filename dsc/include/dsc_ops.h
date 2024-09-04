@@ -6,7 +6,7 @@
 
 struct cast_op {
     template<typename Tin, typename Tout>
-    DSC_INLINE Tout operator()(const Tin in) noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE Tout operator()(const Tin in) noexcept {
         if constexpr (dsc_is_complex<Tout>()) {
             if constexpr (dsc_is_real<Tin>()) {
                 if constexpr (dsc_is_type<Tout, c32>()) {
@@ -40,7 +40,7 @@ struct cast_op {
 
 struct add_op {
     template<typename T>
-    DSC_INLINE T operator()(const T xa, const T xb) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T xa, const T xb) const noexcept {
         if constexpr (dsc_is_complex<T>()) {
             return dsc_complex(T, xa.real + xb.real, xa.imag + xb.imag);
         } else {
@@ -51,7 +51,7 @@ struct add_op {
 
 struct sub_op {
     template<typename T>
-    DSC_INLINE T operator()(const T xa, const T xb) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T xa, const T xb) const noexcept {
         if constexpr (dsc_is_complex<T>()) {
             return dsc_complex(T, xa.real - xb.real, xa.imag - xb.imag);
         } else {
@@ -62,7 +62,7 @@ struct sub_op {
 
 struct mul_op {
     template<typename T>
-    DSC_INLINE T operator()(const T xa, const T xb) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T xa, const T xb) const noexcept {
         if constexpr (dsc_is_complex<T>()) {
             return dsc_complex(T, (xa.real * xb.real) - (xa.imag * xb.imag),
                                (xa.real * xb.imag) + (xa.imag * xb.real));
@@ -74,7 +74,7 @@ struct mul_op {
 
 struct div_op {
     template<typename T>
-    DSC_INLINE T operator()(const T xa, const T xb) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T xa, const T xb) const noexcept {
         if constexpr (dsc_is_complex<T>()) {
             return dsc_complex(T, ((xa.real * xb.real) + (xa.imag * xb.imag)) / ((xb.real * xb.real) + (xb.imag * xb.imag)),
                                ((xa.imag * xb.real) - (xa.real * xb.imag)) / ((xb.real * xb.real) + (xb.imag * xb.imag)));
@@ -86,7 +86,7 @@ struct div_op {
 
 struct cos_op {
     template<typename T>
-    DSC_INLINE T operator()(const T x) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T x) const noexcept {
         static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "cos_op - dtype must be either float or complex");
 
         if constexpr (dsc_is_type<T, f32>()) {
@@ -103,7 +103,7 @@ struct cos_op {
 
 struct sin_op {
     template<typename T>
-    DSC_INLINE T operator()(const T x) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T x) const noexcept {
         static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "sin_op - dtype must be either float or complex");
 
         if constexpr (dsc_is_type<T, f32>()) {
@@ -118,9 +118,30 @@ struct sin_op {
     }
 };
 
+struct sinc_op {
+    template<typename T>
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T x) const noexcept {
+        static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "sinc_op - dtype must be either float or complex");
+
+        static constexpr real<T> pi = dsc_pi<real<T>>();
+        static constexpr real<T> zero = dsc_zero<real<T>>();
+
+        if constexpr (dsc_is_real<T>()) {
+            const T pi_x = pi * x;
+            return (x == zero) ? 1 : sin_op()(pi_x) / pi_x;
+        } else {
+            const T pi_x = dsc_complex(T, pi * x.real, pi * x.imag);
+
+            return (x.real == zero && x.imag == zero) ?
+                   dsc_complex(T, 1, 0) :
+                   div_op()(sin_op()(pi_x), pi_x);
+        }
+    }
+};
+
 struct logn_op {
     template <typename T>
-    DSC_INLINE T operator()(const T x) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T x) const noexcept {
         static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "logn_op - dtype must be either float or complex");
 
         if constexpr (dsc_is_type<T, f32>()) {
@@ -137,7 +158,7 @@ struct logn_op {
 
 struct log2_op {
     template <typename T>
-    DSC_INLINE T operator()(const T x) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T x) const noexcept {
         static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "log2_op - dtype must be either float or complex");
 
         if constexpr (dsc_is_type<T, f32>()) {
@@ -156,7 +177,7 @@ struct log2_op {
 
 struct log10_op {
     template <typename T>
-    DSC_INLINE T operator()(const T x) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T x) const noexcept {
         static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "log10_op - dtype must be either float or complex");
 
         if constexpr (dsc_is_type<T, f32>()) {
@@ -175,7 +196,7 @@ struct log10_op {
 
 struct sqrt_op {
     template <typename T>
-    DSC_INLINE T operator()(const T x) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T x) const noexcept {
         static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "sqrt_op - dtype must be either float or complex");
 
         if constexpr (dsc_is_type<T, f32>()) {
@@ -196,7 +217,7 @@ struct sqrt_op {
 
 struct exp_op {
     template <typename T>
-    DSC_INLINE T operator()(const T x) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T x) const noexcept {
         static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "exp_op - dtype must be either float or complex");
 
         if constexpr (dsc_is_type<T, f32>()) {
@@ -215,7 +236,7 @@ struct exp_op {
 
 struct conj_op {
     template <typename T>
-    DSC_INLINE T operator()(const T x) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T x) const noexcept {
         static_assert(dsc_is_complex<T>(), "conj_op - dtype must be complex");
 
         return dsc_complex(T, x.real, -x.imag);
@@ -224,7 +245,7 @@ struct conj_op {
 
 struct real_op {
     template <typename T>
-    DSC_INLINE real<T> operator()(const T x) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE real<T> operator()(const T x) const noexcept {
         static_assert(dsc_is_complex<T>(), "real_op - dtype must be complex");
 
         return x.real;
@@ -233,7 +254,7 @@ struct real_op {
 
 struct imag_op {
     template <typename T>
-    DSC_INLINE real<T> operator()(const T x) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE real<T> operator()(const T x) const noexcept {
         static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "imag_op - dtype must be either float or complex");
 
         if constexpr (dsc_is_real<T>()) {
@@ -246,7 +267,7 @@ struct imag_op {
 
 struct abs_op {
     template <typename T>
-    DSC_INLINE real<T> operator()(const T x) const noexcept {
+    DSC_INLINE DSC_STRICTLY_PURE real<T> operator()(const T x) const noexcept {
         static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "abs_op - dtype must be either float or complex");
 
         if constexpr (dsc_is_real<T>()) {

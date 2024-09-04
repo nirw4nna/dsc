@@ -120,14 +120,13 @@ def bench_unary(show_plot: bool = True):
     dsc.init(1024 * 1024 * 1024 * 2)
     ops = {
         'sin': (np.sin, dsc.sin),
+        'sinc': (np.sinc, dsc.sinc),
         'cos': (np.cos, dsc.cos),
         'logn': (np.log, dsc.logn),
         'log2': (np.log2, dsc.log2),
         'log10': (np.log10, dsc.log10),
         'exp': (np.exp, dsc.exp),
         'sqrt': (np.sqrt, dsc.sqrt),
-        'absolute': (np.absolute, dsc.absolute),
-        'conj': (np.conj, dsc.conj),
     }
     np_latency = {}
     dsc_latency = {}
@@ -137,19 +136,13 @@ def bench_unary(show_plot: bool = True):
         for dtype in DTYPES:
             shape = [60, 60_000]
             a = random_nd(shape, dtype)
-            out_dtype = a.dtype
-            if op_name == 'abs':
-                # These functions always return a real number
-                if dtype == np.complex64:
-                    out_dtype = np.float32
-                elif dtype == np.complex128:
-                    out_dtype = np.float64
-                else:
-                    out_dtype = dtype
-
-            out = np.empty_like(a, dtype=out_dtype)
+            out = np.empty_like(a)
             a_dsc = dsc.from_numpy(a)
             out_dsc = dsc.from_numpy(out)
+
+            if op_name == 'sinc':
+                # These functions don't support the out keyword parameter
+                out = None
 
             np_latency[f'{op_name}_{dtype.__name__}'] = bench(np_op, a, out=out) * 1e3
             dsc_latency[f'{op_name}_{dtype.__name__}'] = bench(dsc_op, a_dsc, out=out_dsc) * 1e3

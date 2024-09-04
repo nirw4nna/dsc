@@ -5,8 +5,8 @@ from ._bindings import (
     _dsc_mulc_f32, _dsc_mulc_f64, _dsc_mulc_c32, _dsc_mulc_c64,
     _dsc_divc_f32, _dsc_divc_f64, _dsc_divc_c32, _dsc_divc_c64,
     _dsc_plan_fft, _dsc_fft, _dsc_ifft, _dsc_rfft, _dsc_irfft, _dsc_fftfreq, _dsc_rfftfreq, _dsc_arange, _dsc_randn,
-    _dsc_cos, _dsc_sin, _dsc_logn, _dsc_log2, _dsc_log10, _dsc_exp, _dsc_sqrt, _dsc_abs, _dsc_conj, _dsc_real,
-    _dsc_imag, _dsc_tensor_1d, _dsc_tensor_2d, _dsc_tensor_3d, _dsc_tensor_4d,
+    _dsc_cos, _dsc_sin, _dsc_sinc, _dsc_logn, _dsc_log2, _dsc_log10, _dsc_exp, _dsc_sqrt, _dsc_abs, _dsc_conj,
+    _dsc_real, _dsc_imag, _dsc_tensor_1d, _dsc_tensor_2d, _dsc_tensor_3d, _dsc_tensor_4d,
 )
 from .dtype import *
 from .context import _get_ctx
@@ -52,6 +52,9 @@ class Tensor:
 
     def __truediv__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
         return true_div(self, other)
+
+    def __len__(self):
+        return self.shape[0]
 
     def numpy(self) -> np.ndarray:
         raw_tensor = self._c_ptr.contents
@@ -177,6 +180,10 @@ def cos(x: Tensor, out: Tensor = None) -> Tensor:
 
 def sin(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_sin(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+
+
+def sinc(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_sinc(_get_ctx(), _c_ptr(x), _c_ptr(out)))
 
 
 def logn(x: Tensor, out: Tensor = None) -> Tensor:

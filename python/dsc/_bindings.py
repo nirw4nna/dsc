@@ -404,6 +404,17 @@ _lib.dsc_sin.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
 _lib.dsc_sin.restype = _DscTensor_p
 
 
+# extern dsc_tensor *dsc_sinc(dsc_ctx *,
+#                             const dsc_tensor *__restrict x,
+#                             dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_sinc(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_sinc(ctx, x, out)
+
+
+_lib.dsc_sinc.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_sinc.restype = _DscTensor_p
+
+
 # extern dsc_tensor *dsc_logn(dsc_ctx *,
 #                             const dsc_tensor *__restrict x,
 #                             dsc_tensor *__restrict out = nullptr) noexcept;

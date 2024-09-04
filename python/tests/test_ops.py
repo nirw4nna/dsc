@@ -85,6 +85,7 @@ def test_ops():
 def test_unary():
     ops = {
         'sin': (np.sin, dsc.sin),
+        'sinc': (np.sinc, dsc.sinc),
         'cos': (np.cos, dsc.cos),
         'logn': (np.log, dsc.logn),
         'log2': (np.log2, dsc.log2),
