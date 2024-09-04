@@ -96,31 +96,31 @@ struct dsc_type_mapping<c64> {
 
 namespace {
     template<typename T>
-    struct dsc_real_;
+    struct real_;
 
     template<>
-    struct dsc_real_<c32> {
+    struct real_<c32> {
         using type = f32;
     };
 
     template<>
-    struct dsc_real_<c64> {
+    struct real_<c64> {
         using type = f64;
     };
 
     template<>
-    struct dsc_real_<f32> {
+    struct real_<f32> {
         using type = f32;
     };
 
     template<>
-    struct dsc_real_<f64> {
+    struct real_<f64> {
         using type = f64;
     };
 }
 
 template <typename T>
-using dsc_real = typename dsc_real_<T>::type;
+using real = typename real_<T>::type;
 
 template<typename Ta, typename Tb>
 static consteval bool dsc_is_type() noexcept {

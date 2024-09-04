@@ -237,6 +237,43 @@ extern dsc_tensor *dsc_sin(dsc_ctx *ctx,
                            const dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
 
+extern dsc_tensor *dsc_logn(dsc_ctx *ctx,
+                            const dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
+extern dsc_tensor *dsc_log2(dsc_ctx *ctx,
+                            const dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
+extern dsc_tensor *dsc_log10(dsc_ctx *ctx,
+                             const dsc_tensor *DSC_RESTRICT x,
+                             dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
+extern dsc_tensor *dsc_exp(dsc_ctx *ctx,
+                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
+extern dsc_tensor *dsc_sqrt(dsc_ctx *ctx,
+                            const dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
+extern dsc_tensor *dsc_abs(dsc_ctx *ctx,
+                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
+// conj and real are NOP if the input is real meaning x will be returned as is.
+extern dsc_tensor *dsc_conj(dsc_ctx *ctx,
+                            dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
+extern dsc_tensor *dsc_real(dsc_ctx *ctx,
+                            dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
+extern dsc_tensor *dsc_imag(dsc_ctx *ctx,
+                            const dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
 // FFTs are always performed out-of-place. If the out param is provided then
 // it will be used to store the result otherwise a new tensor will be allocated.
 // The axis parameter specifies over which dimension the FFT must be performed,

@@ -404,6 +404,105 @@ _lib.dsc_sin.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
 _lib.dsc_sin.restype = _DscTensor_p
 
 
+# extern dsc_tensor *dsc_logn(dsc_ctx *,
+#                             const dsc_tensor *__restrict x,
+#                             dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_logn(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_logn(ctx, x, out)
+
+
+_lib.dsc_logn.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_logn.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_log2(dsc_ctx *,
+#                             const dsc_tensor *__restrict x,
+#                             dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_log2(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_log2(ctx, x, out)
+
+
+_lib.dsc_log2.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_log2.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_log10(dsc_ctx *,
+#                              const dsc_tensor *__restrict x,
+#                              dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_log10(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_log10(ctx, x, out)
+
+
+_lib.dsc_log10.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_log10.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_exp(dsc_ctx *,
+#                            const dsc_tensor *__restrict x,
+#                            dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_exp(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_exp(ctx, x, out)
+
+
+_lib.dsc_exp.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_exp.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_sqrt(dsc_ctx *,
+#                             const dsc_tensor *__restrict x,
+#                             dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_sqrt(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_sqrt(ctx, x, out)
+
+
+_lib.dsc_sqrt.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_sqrt.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_abs(dsc_ctx *,
+#                             const dsc_tensor *__restrict x,
+#                             dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_abs(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_abs(ctx, x, out)
+
+
+_lib.dsc_abs.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_abs.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_conj(dsc_ctx *,
+#                             dsc_tensor *__restrict x,
+#                             dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_conj(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_conj(ctx, x, out)
+
+
+_lib.dsc_conj.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_conj.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_real(dsc_ctx *,
+#                             dsc_tensor *__restrict x,
+#                             dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_real(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_real(ctx, x, out)
+
+
+_lib.dsc_real.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_real.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_imag(dsc_ctx *,
+#                             dsc_tensor *__restrict x,
+#                             dsc_tensor *__restrict out = nullptr) noexcept;
+def _dsc_imag(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
+    return _lib.dsc_imag(ctx, x, out)
+
+
+_lib.dsc_imag.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_imag.restype = _DscTensor_p
+
+
 # extern dsc_tensor *dsc_fft(dsc_ctx *ctx,
 #                            const dsc_tensor *DSC_RESTRICT x,
 #                            dsc_tensor *DSC_RESTRICT out,

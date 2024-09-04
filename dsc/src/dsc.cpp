@@ -123,6 +123,30 @@ struct dsc_ctx {
 };
 
 // ================================================== Private Functions ================================================== //
+template <typename T, typename Op>
+static DSC_INLINE void complex_unary(const dsc_tensor *DSC_RESTRICT x,
+                                     dsc_tensor *DSC_RESTRICT out,
+                                     Op op) noexcept {
+    DSC_TENSOR_DATA(T, x);
+    DSC_TENSOR_DATA(T, out);
+
+    dsc_for(i, x) {
+        out_data[i] = op(x_data[i]);
+    }
+}
+
+template <typename Tx, typename To, typename Op>
+static DSC_INLINE void complex_binary(const dsc_tensor *DSC_RESTRICT x,
+                                      dsc_tensor *DSC_RESTRICT out,
+                                      Op op) noexcept {
+    DSC_TENSOR_DATA(Tx, x);
+    DSC_TENSOR_DATA(To, out);
+
+    dsc_for(i, x) {
+        out_data[i] = op(x_data[i]);
+    }
+}
+
 template<typename T, typename Op>
 static void binary_op(const dsc_tensor *DSC_RESTRICT xa,
                       const dsc_tensor *DSC_RESTRICT xb,
@@ -173,8 +197,6 @@ static void copy_op(const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out) noexcept {
     DSC_TENSOR_DATA(Tx, x);
     DSC_TENSOR_DATA(To, out);
-
-    DSC_ASSERT(out->ne == x->ne);
 
     // Todo: I can probably do better but (if it works) it's fine for now
     dsc_for(i, out) {
@@ -324,6 +346,18 @@ static bool DSC_INLINE DSC_PURE can_broadcast(const dsc_tensor *DSC_RESTRICT xa,
     }
 
     return can_broadcast;
+}
+
+static DSC_INLINE DSC_STRICTLY_PURE dsc_dtype dtype_as_real(const dsc_dtype dtype) noexcept {
+    switch (dtype) {
+        case F64:
+        case C64:
+            return F64;
+        case F32:
+        case C32:
+            return F32;
+        DSC_INVALID_CASE("unknown dtype=%d", dtype);
+    }
 }
 
 template<typename T>
@@ -495,10 +529,10 @@ static DSC_INLINE void exec_rfft(dsc_ctx *ctx,
             for (int i = 0; i < (fft_order << 1); ++i) {
                 if (i < x_n) {
                     int idx = x_it.index();
-                    ((dsc_real<T> *) buff->data)[i] = ((dsc_real<T> *) x->data)[idx];
+                    ((real<T> *) buff->data)[i] = ((real<T> *) x->data)[idx];
                     x_it.next();
                 } else {
-                    ((dsc_real<T> *) buff->data)[i] = dsc_zero<dsc_real<T>>();
+                    ((real<T> *) buff->data)[i] = dsc_zero<real<T>>();
                 }
             }
 
@@ -530,7 +564,7 @@ static DSC_INLINE void exec_rfft(dsc_ctx *ctx,
 
             for (int i = 0; i < out_n; ++i) {
                 const int idx = out_it.index();
-                ((dsc_real<T> *) out->data)[idx] = ((dsc_real<T> *) buff->data)[i];
+                ((real<T> *) out->data)[idx] = ((real<T> *) buff->data)[i];
 
                 out_it.next();
             }
@@ -1239,6 +1273,180 @@ dsc_tensor *dsc_sin(dsc_ctx *ctx,
     validate_unary_params();
     
     unary_op(x, out, sin_op());
+
+    return out;
+}
+
+
+dsc_tensor *dsc_logn(dsc_ctx *ctx,
+                     const dsc_tensor *DSC_RESTRICT x,
+                     dsc_tensor *DSC_RESTRICT out) noexcept {
+    validate_unary_params();
+
+    unary_op(x, out, logn_op());
+
+    return out;
+}
+
+dsc_tensor *dsc_log2(dsc_ctx *ctx,
+                     const dsc_tensor *DSC_RESTRICT x,
+                     dsc_tensor *DSC_RESTRICT out) noexcept {
+    validate_unary_params();
+
+    unary_op(x, out, log2_op());
+
+    return out;
+}
+
+dsc_tensor *dsc_log10(dsc_ctx *ctx,
+                      const dsc_tensor *DSC_RESTRICT x,
+                      dsc_tensor *DSC_RESTRICT out) noexcept {
+    validate_unary_params();
+
+    unary_op(x, out, log10_op());
+
+    return out;
+}
+
+dsc_tensor *dsc_exp(dsc_ctx *ctx,
+                    const dsc_tensor *DSC_RESTRICT x,
+                    dsc_tensor *DSC_RESTRICT out) noexcept {
+    validate_unary_params();
+
+    unary_op(x, out, exp_op());
+
+    return out;
+}
+
+dsc_tensor *dsc_sqrt(dsc_ctx *ctx,
+                     const dsc_tensor *DSC_RESTRICT x,
+                     dsc_tensor *DSC_RESTRICT out) noexcept {
+    validate_unary_params();
+
+    unary_op(x, out, sqrt_op());
+
+    return out;
+}
+
+dsc_tensor *dsc_conj(dsc_ctx *ctx,
+                     dsc_tensor *DSC_RESTRICT x,
+                     dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_ASSERT(x != nullptr);
+
+    if (x->dtype == F32 || x->dtype == F64) {
+        DSC_LOG_DEBUG("the input is real so it will be returned");
+        return x;
+    }
+
+    validate_unary_params();
+
+    switch (x->dtype) {
+        case C32:
+            complex_unary<c32>(x, out, conj_op());
+            break;
+        case C64:
+            complex_unary<c64>(x, out, conj_op());
+            break;
+        DSC_INVALID_CASE("dtype must be complex");
+    }
+
+    return out;
+}
+
+dsc_tensor *dsc_abs(dsc_ctx *ctx,
+                    const dsc_tensor *DSC_RESTRICT x,
+                    dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_ASSERT(x != nullptr);
+
+    const dsc_dtype out_dtype = dtype_as_real(x->dtype);
+    if (out == nullptr) {
+        out = dsc_new_tensor(ctx, x->n_dim, &x->shape[DSC_MAX_DIMS - x->n_dim], out_dtype);
+    } else {
+        DSC_ASSERT(out->dtype == out_dtype);
+        DSC_ASSERT(out->n_dim == x->n_dim);
+        DSC_ASSERT(memcmp(out->shape, x->shape, DSC_MAX_DIMS * sizeof(out->shape[0])) == 0);
+    }
+
+    switch (x->dtype) {
+        case F32:
+            complex_binary<f32, f32>(x, out, abs_op());
+            break;
+        case F64:
+            complex_binary<f64, f64>(x, out, abs_op());
+            break;
+        case C32:
+            complex_binary<c32, f32>(x, out, abs_op());
+            break;
+        case C64:
+            complex_binary<c64, f64>(x, out, abs_op());
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
+    }
+
+    return out;
+}
+
+dsc_tensor *dsc_real(dsc_ctx *ctx,
+                     dsc_tensor *DSC_RESTRICT x,
+                     dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_ASSERT(x != nullptr);
+
+    if (x->dtype == F32 || x->dtype == F64) {
+        DSC_LOG_DEBUG("the input is real, no operation will be performed");
+        return x;
+    }
+
+    const dsc_dtype out_dtype = dtype_as_real(x->dtype);
+    if (out == nullptr) {
+        out = dsc_new_tensor(ctx, x->n_dim, &x->shape[DSC_MAX_DIMS - x->n_dim], out_dtype);
+    } else {
+        DSC_ASSERT(out->dtype == out_dtype);
+        DSC_ASSERT(out->n_dim == x->n_dim);
+        DSC_ASSERT(memcmp(out->shape, x->shape, DSC_MAX_DIMS * sizeof(out->shape[0])) == 0);
+    }
+
+    switch (x->dtype) {
+        case C32:
+            complex_binary<c32, f32>(x, out, real_op());
+            break;
+        case C64:
+            complex_binary<c64, f64>(x, out, real_op());
+            break;
+        DSC_INVALID_CASE("invalid dtype=%d", x->dtype);
+    }
+
+    return out;
+}
+
+dsc_tensor *dsc_imag(dsc_ctx *ctx,
+                     const dsc_tensor *DSC_RESTRICT x,
+                     dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_ASSERT(x != nullptr);
+
+    const dsc_dtype out_dtype = dtype_as_real(x->dtype);
+    if (out == nullptr) {
+        out = dsc_new_tensor(ctx, x->n_dim, &x->shape[DSC_MAX_DIMS - x->n_dim], out_dtype);
+    } else {
+        DSC_ASSERT(out->dtype == out_dtype);
+        DSC_ASSERT(out->n_dim == x->n_dim);
+        DSC_ASSERT(memcmp(out->shape, x->shape, DSC_MAX_DIMS * sizeof(out->shape[0])) == 0);
+    }
+
+    switch (x->dtype) {
+        case F32:
+            complex_binary<f32, f32>(x, out, imag_op());
+            break;
+        case F64:
+            complex_binary<f64, f64>(x, out, imag_op());
+            break;
+        case C32:
+            complex_binary<c32, f32>(x, out, imag_op());
+            break;
+        case C64:
+            complex_binary<c64, f64>(x, out, imag_op());
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
+    }
 
     return out;
 }

@@ -1,4 +1,5 @@
 import os
+
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['GOTO_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -11,7 +12,6 @@ import random
 import matplotlib.pyplot as plt
 from tabulate import tabulate
 
-
 DTYPES = [np.float32, np.float64, np.complex64, np.complex128]
 
 
@@ -21,8 +21,8 @@ def plot(np_latency, dsc_latency, unit: str):
     width = 0.35
 
     fig, ax = plt.subplots(figsize=(12, 6))
-    rects1 = ax.bar(x - width/2, np_latency.values(), width, label='NumPy')
-    rects2 = ax.bar(x + width/2, dsc_latency.values(), width, label='DSC')
+    rects1 = ax.bar(x - width / 2, np_latency.values(), width, label='NumPy')
+    rects2 = ax.bar(x + width / 2, dsc_latency.values(), width, label='DSC')
 
     ax.set_ylabel(f'Latency ({unit})')
     ax.set_title('Latency Comparison when X = [60 x 60000]')
@@ -48,20 +48,20 @@ def draw_table(np_latency, dsc_latency, unit: str):
     print(table)
 
 
-def bench(a, b, out, op) -> float:
-    for _ in range(WARMUP):
-        if b is not None:
-            op(a, b, out=out)
+def bench(op, *args, out=None) -> float:
+    def _call_op():
+        if out is not None:
+            op(*args, out=out)
         else:
-            op(a, out=out)
+            op(*args)
+
+    for _ in range(WARMUP):
+        _call_op()
 
     op_time = float('+inf')
     for _ in range(BENCH_STEPS):
         start_ = time.perf_counter()
-        if b is not None:
-            op(a, b, out=out)
-        else:
-            op(a, out=out)
+        _call_op()
         this_time = time.perf_counter() - start_
         op_time = this_time if this_time < op_time else op_time
     return op_time
@@ -69,8 +69,8 @@ def bench(a, b, out, op) -> float:
 
 # To run from CLI
 # export PYTHONPATH=/home/lowl/Scrivania/projects/dspcraft/dsc:$PYTHONPATH
-def bench_ops(show_plot: bool = True):
-    dsc.init(1024*1024*1024*2)
+def bench_binary(show_plot: bool = True):
+    dsc.init(1024 * 1024 * 1024 * 2)
     ops = {
         'add': (np.add, dsc.add),
         'addc': (np.add, dsc.add),
@@ -105,8 +105,8 @@ def bench_ops(show_plot: bool = True):
                 b_dsc = dsc.from_numpy(b)
             out_dsc = dsc.from_numpy(out)
 
-            np_latency[f'{op_name}_{dtype.__name__}'] = bench(a, b, out, np_op) * 1e3
-            dsc_latency[f'{op_name}_{dtype.__name__}'] = bench(a_dsc, b_dsc, out_dsc, dsc_op) * 1e3
+            np_latency[f'{op_name}_{dtype.__name__}'] = bench(np_op, a, b, out=out) * 1e3
+            dsc_latency[f'{op_name}_{dtype.__name__}'] = bench(dsc_op, a_dsc, b_dsc, out=out_dsc) * 1e3
 
             dsc.clear()
 
@@ -116,26 +116,43 @@ def bench_ops(show_plot: bool = True):
         plot(np_latency, dsc_latency, 'ms')
 
 
-def bench_trig(show_plot: bool = True):
-    dsc.init(1024*1024*1024*2)
+def bench_unary(show_plot: bool = True):
+    dsc.init(1024 * 1024 * 1024 * 2)
     ops = {
         'sin': (np.sin, dsc.sin),
         'cos': (np.cos, dsc.cos),
+        'logn': (np.log, dsc.logn),
+        'log2': (np.log2, dsc.log2),
+        'log10': (np.log10, dsc.log10),
+        'exp': (np.exp, dsc.exp),
+        'sqrt': (np.sqrt, dsc.sqrt),
+        'absolute': (np.absolute, dsc.absolute),
+        'conj': (np.conj, dsc.conj),
     }
     np_latency = {}
     dsc_latency = {}
+
     for op_name in ops.keys():
         np_op, dsc_op = ops[op_name]
         for dtype in DTYPES:
             shape = [60, 60_000]
             a = random_nd(shape, dtype)
-            out = np.empty_like(a)
+            out_dtype = a.dtype
+            if op_name == 'abs':
+                # These functions always return a real number
+                if dtype == np.complex64:
+                    out_dtype = np.float32
+                elif dtype == np.complex128:
+                    out_dtype = np.float64
+                else:
+                    out_dtype = dtype
 
+            out = np.empty_like(a, dtype=out_dtype)
             a_dsc = dsc.from_numpy(a)
             out_dsc = dsc.from_numpy(out)
 
-            np_latency[f'{op_name}_{dtype.__name__}'] = bench(a, None, out, np_op) * 1e3
-            dsc_latency[f'{op_name}_{dtype.__name__}'] = bench(a_dsc, None, out_dsc, dsc_op) * 1e3
+            np_latency[f'{op_name}_{dtype.__name__}'] = bench(np_op, a, out=out) * 1e3
+            dsc_latency[f'{op_name}_{dtype.__name__}'] = bench(dsc_op, a_dsc, out=out_dsc) * 1e3
 
             dsc.clear()
 
@@ -146,5 +163,5 @@ def bench_trig(show_plot: bool = True):
 
 
 if __name__ == '__main__':
-    bench_ops()
-    # bench_trig()
+    bench_unary(True)
+    # bench_binary(True)

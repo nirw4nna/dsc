@@ -5,7 +5,8 @@ from ._bindings import (
     _dsc_mulc_f32, _dsc_mulc_f64, _dsc_mulc_c32, _dsc_mulc_c64,
     _dsc_divc_f32, _dsc_divc_f64, _dsc_divc_c32, _dsc_divc_c64,
     _dsc_plan_fft, _dsc_fft, _dsc_ifft, _dsc_rfft, _dsc_irfft, _dsc_fftfreq, _dsc_rfftfreq, _dsc_arange, _dsc_randn,
-    _dsc_cos, _dsc_sin, _dsc_tensor_1d, _dsc_tensor_2d, _dsc_tensor_3d, _dsc_tensor_4d,
+    _dsc_cos, _dsc_sin, _dsc_logn, _dsc_log2, _dsc_log10, _dsc_exp, _dsc_sqrt, _dsc_abs, _dsc_conj, _dsc_real,
+    _dsc_imag, _dsc_tensor_1d, _dsc_tensor_2d, _dsc_tensor_3d, _dsc_tensor_4d,
 )
 from .dtype import *
 from .context import _get_ctx
@@ -176,6 +177,42 @@ def cos(x: Tensor, out: Tensor = None) -> Tensor:
 
 def sin(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_sin(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+
+
+def logn(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_logn(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+
+
+def log2(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_log2(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+
+
+def log10(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_log10(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+
+
+def exp(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_exp(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+
+
+def sqrt(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_sqrt(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+
+
+def absolute(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_abs(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+
+
+def conj(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_conj(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+
+
+def real(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_real(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+
+
+def imag(x: Tensor, out: Tensor = None) -> Tensor:
+    return Tensor(_dsc_imag(_get_ctx(), _c_ptr(x), _c_ptr(out)))
 
 
 def arange(n: int, dtype: Dtype = Dtype.F32) -> Tensor:

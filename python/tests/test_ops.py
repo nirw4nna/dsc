@@ -82,10 +82,19 @@ def test_ops():
             dsc.clear()
 
 
-def test_trig():
+def test_unary():
     ops = {
         'sin': (np.sin, dsc.sin),
         'cos': (np.cos, dsc.cos),
+        'logn': (np.log, dsc.logn),
+        'log2': (np.log2, dsc.log2),
+        'log10': (np.log10, dsc.log10),
+        'exp': (np.exp, dsc.exp),
+        'sqrt': (np.sqrt, dsc.sqrt),
+        'absolute': (np.absolute, dsc.absolute),
+        'conj': (np.conj, dsc.conj),
+        'real': (np.real, dsc.real),
+        'imag': (np.imag, dsc.imag),
     }
     for op_name in ops.keys():
         np_op, dsc_op = ops[op_name]
@@ -97,6 +106,7 @@ def test_trig():
             res_np = np_op(x)
             res_dsc = dsc_op(x_dsc)
             assert all_close(res_dsc.numpy(), res_np)
+            dsc.clear()
 
 
 def test_fft():
