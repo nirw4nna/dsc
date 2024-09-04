@@ -14,9 +14,11 @@ ifeq ($(UNAME_M),$(filter $(UNAME_M),x86_64))
 	CFLAGS		+= 	-march=native -mtune=native
 endif
 
+# Defining the __FAST_MATH__ macro makes computations faster even without adding any actual -ffast-math like flag.
+# On the other hand, -ffast-math makes the FFTs slower.
 ifdef DSC_FAST
-	CXXFLAGS	+= -DDSC_FAST -O3 -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
-	CFLAGS		+= -DDSC_FAST -O3 -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
+	CXXFLAGS	+= -DDSC_FAST -O3 -D__FAST_MATH__ -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
+	CFLAGS		+= -DDSC_FAST -O3 -D__FAST_MATH__ -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
 else
 	CXXFLAGS	+= -DDSC_DEBUG -O0 -fno-omit-frame-pointer -g
 	CFLAGS		+= -DDSC_DEBUG -O0 -fno-omit-frame-pointer -g
@@ -53,9 +55,9 @@ shared: $(OBJS)
 
 #pocketfft.o: dsc/tests/pocketfft.c
 #	$(CC) $(CFLAGS) -c $< -o $@
-#
-#test_fft: dsc/tests/test_fft.cpp $(OBJS) pocketfft.o
-#	$(CXX) $(CXXFLAGS) $< -o $@ $(OBJS) pocketfft.o $(LDFLAGS)
+
+#test_fft: dsc/tests/test_fft.cpp $(OBJS)
+#	$(CXX) $(CXXFLAGS) $< -o $@ $(OBJS) $(LDFLAGS)
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@

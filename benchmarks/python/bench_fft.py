@@ -25,47 +25,62 @@ def bench(x, op):
 
 def bench_fft(show_plot: bool = True):
     dsc.init(1024 * 1024 * 1024 * 2)
-    # FLOPS = 5N * log2(N) / s (https://www.fftw.org/speed/method.html)
-    np_f32_flops = {}
-    np_f64_flops = {}
-    dsc_f32_flops = {}
-    dsc_f64_flops = {}
+    # FLOPS = 5N * log2(N) / s for the FFT (https://www.fftw.org/speed/method.html)
+
+    np_f64_fft_flops = {}
+    dsc_f32_fft_flops = {}
+    dsc_f64_fft_flops = {}
+    np_f64_rfft_flops = {}
+    dsc_f32_rfft_flops = {}
+    dsc_f64_rfft_flops = {}
 
     for n_ in range(6, 21):
         n = 2**n_
         flops = 5 * n * n_
         x_f32 = random_nd([n], dtype=np.float32)
         x_f64 = random_nd([n], dtype=np.float64)
-        x_dsc_f32 = dsc.from_numpy(x_f32)
 
-        np_f32_flops[n] = flops / bench(x_f32, np.fft.fft)
-        np_f64_flops[n] = flops / bench(x_f64, np.fft.fft)
-        dsc_f32_flops[n] = flops / bench(x_dsc_f32, dsc.fft)
+        # FFT
+        x_dsc_f32 = dsc.from_numpy(x_f32)
+        np_f64_fft_flops[n] = flops / bench(x_f64, np.fft.fft)
+        dsc_f32_fft_flops[n] = flops / bench(x_dsc_f32, dsc.fft)
         dsc.clear()
         x_dsc_f64 = dsc.from_numpy(x_f64)
-        dsc_f64_flops[n] = flops / bench(x_dsc_f64, dsc.fft)
+        dsc_f64_fft_flops[n] = flops / bench(x_dsc_f64, dsc.fft)
         dsc.clear()
 
-    runs = len(np_f32_flops)
-    np_f32_mean_flops = sum(np_f32_flops.values()) / runs
-    np_f64_mean_flops = sum(np_f64_flops.values()) / runs
-    dsc_f32_mean_flops = sum(dsc_f32_flops.values()) / runs
-    dsc_f64_mean_flops = sum(dsc_f64_flops.values()) / runs
+        # RFFT
+        flops = 0.5 * flops
+        x_dsc_f32 = dsc.from_numpy(x_f32)
+        np_f64_rfft_flops[n] = flops / bench(x_f64, np.fft.rfft)
+        dsc_f32_rfft_flops[n] = flops / bench(x_dsc_f32, dsc.rfft)
+        dsc.clear()
+        x_dsc_f64 = dsc.from_numpy(x_f64)
+        dsc_f64_rfft_flops[n] = flops / bench(x_dsc_f64, dsc.rfft)
+        dsc.clear()
 
-    np_speed_f32 = np_f32_mean_flops / dsc_f32_mean_flops
-    np_speed_f64 = np_f64_mean_flops / dsc_f64_mean_flops
-    print(f'F32: NumPy is {round(np_speed_f32, 1)}X faster (NumPy Avg. GFLOPS={round(np_f32_mean_flops, 2)}\tDSC Avg. '
-          f'GFLOPS={round(dsc_f32_mean_flops, 2)})')
-    print(f'F64: NumPy is {round(np_speed_f64, 1)}X faster (NumPy Avg. GFLOPS={round(np_f64_mean_flops, 2)}\tDSC Avg. '
-          f'GFLOPS={round(dsc_f64_mean_flops, 2)})')
+    runs = len(np_f64_fft_flops)
+    np_f64_fft_mean_flops = sum(np_f64_fft_flops.values()) / runs
+    dsc_f64_fft_mean_flops = sum(dsc_f64_fft_flops.values()) / runs
+    np_f64_rfft_mean_flops = sum(np_f64_rfft_flops.values()) / runs
+    dsc_f64_rfft_mean_flops = sum(dsc_f64_rfft_flops.values()) / runs
+
+    np_speed_fft_f64 = np_f64_fft_mean_flops / dsc_f64_fft_mean_flops
+    np_speed_rfft_f64 = np_f64_rfft_mean_flops / dsc_f64_rfft_mean_flops
+    print(f'FFT NumPy is {round(np_speed_fft_f64, 1)}X faster (NumPy Avg. GFLOPS={round(np_f64_fft_mean_flops, 2)}'
+          f'\tDSC Avg. GFLOPS={round(dsc_f64_fft_mean_flops, 2)})')
+    print(f'RFFT NumPy is {round(np_speed_rfft_f64, 1)}X faster (NumPy Avg. GFLOPS={round(np_f64_rfft_mean_flops, 2)}'
+          f'\tDSC Avg. GFLOPS={round(dsc_f64_rfft_mean_flops, 2)})')
 
     if show_plot:
-        labels = list(np_f32_flops.keys())
+        labels = list(np_f64_fft_flops.keys())
         x = range(len(labels))
-        plt.plot(x, list(np_f32_flops.values()), marker='d', label='NumPy (f32)')
-        plt.plot(x, list(np_f64_flops.values()), marker='s', label='NumPy (f64)')
-        plt.plot(x, list(dsc_f32_flops.values()),  marker='v', label='DSC (f32)')
-        plt.plot(x, list(dsc_f64_flops.values()),  marker='^', label='DSC (f64)')
+        plt.plot(x, list(np_f64_fft_flops.values()), marker='s', label='NumPy FFT (f64)')
+        plt.plot(x, list(dsc_f32_fft_flops.values()),  marker='v', label='DSC FFT (f32)')
+        plt.plot(x, list(dsc_f64_fft_flops.values()),  marker='^', label='DSC FFT (f64)')
+        plt.plot(x, list(np_f64_rfft_flops.values()), marker='D', label='NumPy RFFT (f64)')
+        plt.plot(x, list(dsc_f32_rfft_flops.values()),  marker='<', label='DSC RFFT (f32)')
+        plt.plot(x, list(dsc_f64_rfft_flops.values()),  marker='>', label='DSC RFFT (f64)')
         plt.grid(True)
         plt.xlabel('Size')
         plt.ylabel('GFLOPS')
@@ -83,4 +98,4 @@ def bench_fft(show_plot: bool = True):
 
 
 if __name__ == '__main__':
-    bench_fft()
+    bench_fft(show_plot=True)

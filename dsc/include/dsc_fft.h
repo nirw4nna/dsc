@@ -9,17 +9,22 @@ struct dsc_fft_plan {
     void *twiddles;
     int n;
     dsc_dtype dtype;
+    // An RFFT plan is equal to an FFT plan with N = N/2 but with an extra set
+    // of twiddles (hence the storage requirement is the same of an order N FFT).
+    dsc_fft_type fft_type;
 };
 
 namespace {
 template<typename T>
 void dsc_init_plan(dsc_fft_plan *plan, const int n,
-                   const dsc_dtype dtype) {
-    static_assert(dsc_is_real<T>(), "Twiddles dtype must be real!");
+                   const dsc_dtype dtype, const dsc_fft_type fft_type) {
+    static_assert(dsc_is_real<T>(), "Twiddles dtype must be real");
 
     T *twiddles = (T *) plan->twiddles;
 
-    for (int twiddle_n = 2; twiddle_n <= n; twiddle_n <<= 1) {
+    const int sets = fft_type == REAL ? (n << 1) : n;
+
+    for (int twiddle_n = 2; twiddle_n <= sets; twiddle_n <<= 1) {
         const int twiddle_n2 = twiddle_n >> 1;
         for (int k = 0; k < twiddle_n2; ++k) {
             const T theta = ((T) (-2.) * dsc_pi<T>() * k) / (T) (twiddle_n);
@@ -30,9 +35,9 @@ void dsc_init_plan(dsc_fft_plan *plan, const int n,
 
     plan->n = n;
     plan->dtype = dtype;
+    plan->fft_type = fft_type;
 }
 
-// Todo: profile NOINLINE vs INLINE
 template<typename T, dsc_real<T> sign>
 DSC_NOINLINE void dsc_fft_pass2(T *DSC_RESTRICT x,
                                 T *DSC_RESTRICT work,
@@ -96,15 +101,16 @@ static DSC_STRICTLY_PURE int dsc_fft_best_n(const int n) noexcept {
     return next_pow2_n + 1;
 }
 
-static DSC_STRICTLY_PURE usize dsc_fft_storage(const int n, const dsc_dtype dtype) noexcept {
+static DSC_STRICTLY_PURE usize dsc_fft_storage(const int n, const dsc_dtype dtype,
+                                               const dsc_fft_type fft_type) noexcept {
     // Compute how much storage is needed for the plan (twiddles * dtype).
     DSC_ASSERT(n > 0);
     // N must be a power-of-2
     DSC_ASSERT((n & (n - 1)) == 0);
 
-    // Todo: a lot of storage can be saved by exploiting the periodic properties of sin/cos
     usize twiddle_storage = 0;
-    for (int twiddle_n = 2; twiddle_n <= n; twiddle_n <<= 1) {
+    const int sets = fft_type == REAL ? (n << 1) : n;
+    for (int twiddle_n = 2; twiddle_n <= sets; twiddle_n <<= 1) {
         // Given N we need N/2 twiddle factors but each twiddle factor has a real and an imaginary part so that's N
         twiddle_storage += twiddle_n;
     }
@@ -118,38 +124,41 @@ static DSC_STRICTLY_PURE usize dsc_fft_storage(const int n, const dsc_dtype dtyp
         case F64:
             dtype_size = DSC_DTYPE_SIZE[F64];
             break;
-        default:
-            DSC_LOG_FATAL("unknown dtype=%d", dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", dtype);
     }
     return twiddle_storage * dtype_size;
 }
 
 static void dsc_init_plan(dsc_fft_plan *plan, int n,
-                          dsc_dtype dtype) noexcept {
+                          const dsc_dtype dtype,
+                          const dsc_fft_type fft_type) noexcept {
     DSC_ASSERT(n > 0);
     DSC_ASSERT((n & (n - 1)) == 0);
 
     switch (dtype) {
         case C32:
         case F32:
-            dsc_init_plan<f32>(plan, n, F32);
+            dsc_init_plan<f32>(plan, n, F32, fft_type);
             break;
         case C64:
         case F64:
-            dsc_init_plan<f64>(plan, n, F64);
+            dsc_init_plan<f64>(plan, n, F64, fft_type);
             break;
-        default:
-            DSC_LOG_FATAL("unknown dtype=%d", dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", dtype);
     }
 }
 
 template<typename T, bool forward>
-static void dsc_cfft(dsc_fft_plan *plan,
-                     T *DSC_RESTRICT x,
-                     T *DSC_RESTRICT work) noexcept {
+static void dsc_complex_fft(dsc_fft_plan *plan,
+                            T *DSC_RESTRICT x,
+                            T *DSC_RESTRICT work) noexcept {
     static_assert(dsc_is_complex<T>(), "T must be a complex type, use rfft for real-valued FFTs");
 
-    dsc_fft_pass2<T, forward ? (dsc_real<T>) +1 : (dsc_real<T>) -1>(x, work, (dsc_real<T> *) plan->twiddles, plan->n);
+    dsc_fft_pass2<T, forward ? (dsc_real<T>) 1 : (dsc_real<T>) -1>(x,
+                                                                    work,
+                                                                    (dsc_real<T> *) plan->twiddles,
+                                                                    plan->n
+    );
 
     if constexpr (!forward) {
         // Divide all the elements by N
@@ -161,10 +170,64 @@ static void dsc_cfft(dsc_fft_plan *plan,
     }
 }
 
-//template<typename T, bool forward>
-//extern void dsc_rfft(dsc_fft_plan *plan,
-//                     T *DSC_RESTRICT x,
-//                     T *DSC_RESTRICT work) noexcept;
-//
+template<typename T, bool forward>
+static void dsc_real_fft(dsc_fft_plan *plan,
+                         T *DSC_RESTRICT x,
+                         T *DSC_RESTRICT work) noexcept {
+    static_assert(dsc_is_complex<T>(), "T must be a complex type, use rfft for real-valued FFTs");
 
+    const dsc_real<T> *twiddles = (dsc_real<T> *) plan->twiddles;
 
+    const int n = plan->n;
+    const int n2 = n >> 1;
+
+    dsc_real<T> c, twd_sign;
+    if constexpr (forward) {
+        c = -0.5;
+        twd_sign = 1;
+        dsc_fft_pass2<T, (dsc_real<T>) 1>(x, work, twiddles, n);
+    } else {
+        c = 0.5;
+        twd_sign = -1;
+    }
+
+    const int t_base = (n - 1) << 1;
+    for (int k = 1; k < n2; ++k) {
+        const dsc_real<T> h1r = (dsc_real<T>) (0.5) * (x[k].real + x[n - k].real);
+        const dsc_real<T> h1i = (dsc_real<T>) (0.5) * (x[k].imag - x[n - k].imag);
+
+        const dsc_real<T> h2r = -c * (x[k].imag + x[n - k].imag);
+        const dsc_real<T> h2i = c * (x[k].real - x[n - k].real);
+
+        const dsc_real<T> wkr = twiddles[t_base + (2 * k)];
+        const dsc_real<T> wki = twd_sign * twiddles[t_base + (2 * k) + 1];
+
+        x[k].real = h1r + (wkr * h2r) - (wki * h2i);
+        x[k].imag = h1i + (wkr * h2i) + (wki * h2r);
+        x[n - k].real = h1r - (wkr * h2r) + (wki * h2i);
+        x[n - k].imag = -h1i + (wkr * h2i) + (wki * h2r);
+    }
+
+    const T x0 = x[0];
+
+    x[n2].imag = -x[n2].imag;
+
+    if constexpr (forward) {
+        x[0].real = x0.real + x0.imag;
+        x[0].imag = 0;
+
+        x[n].real = x0.real - x0.imag;
+        x[n].imag = 0;
+    } else {
+        x[0].real = (dsc_real<T>) (0.5) * (x0.real + x[n].real);
+        x[0].imag = (dsc_real<T>) (0.5) * (x0.real - x[n].real);
+
+        dsc_fft_pass2<T, (dsc_real<T>) -1>(x, work, twiddles, n);
+
+        dsc_real<T> scale = (dsc_real<T>) (2) / (dsc_real<T>) (n << 1);
+        for (int i = 0; i < n; ++i) {
+            x[i].real *= scale;
+            x[i].imag *= scale;
+        }
+    }
+}

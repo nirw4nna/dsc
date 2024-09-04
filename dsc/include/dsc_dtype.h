@@ -157,6 +157,6 @@ static consteval T dsc_zero() noexcept {
     } else if constexpr (dsc_is_type<T, c64>()) {
         return dsc_complex(c64, 0., 0.);
     } else {
-        static_assert("T is not supported!");
+        static_assert("T is not supported");
     }
 }

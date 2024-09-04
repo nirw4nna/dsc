@@ -28,6 +28,10 @@
 #   define DSC_LOG_DEBUG(format, ...)  ((void) 0)
 #endif
 
+#define DSC_INVALID_CASE(format, ...)   \
+    default:                            \
+        DSC_LOG_FATAL(format, ##__VA_ARGS__)
+
 #define DSC_UNUSED(x)        ((void) (x))
 // Compute the next value of X aligned to Y
 #define DSC_ALIGN(x, y)      (((x) + (y) - 1) & ~((y) - 1))
@@ -67,7 +71,7 @@
 
 #define DSC_MAX_DIMS     ((int) 4)
 
-static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code!");
+static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 
 #define CONST_FUNC_DECL(func, type) \
     extern dsc_tensor *dsc_##func##_##type(dsc_ctx *ctx,                        \
@@ -87,6 +91,11 @@ extern "C" {
 struct dsc_ctx;
 struct dsc_obj;
 struct dsc_fft_plan;
+
+enum dsc_fft_type : u8 {
+    REAL,
+    COMPLEX
+};
 
 struct dsc_tensor {
     // The shape of this tensor, right-aligned. For example a 1D tensor T of 4 elements
@@ -109,6 +118,7 @@ static DSC_INLINE f64 dsc_timer() noexcept {
 extern dsc_ctx *dsc_ctx_init(usize nb) noexcept;
 
 extern dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, int n,
+                                  dsc_fft_type fft_type,
                                   dsc_dtype dtype = dsc_dtype::F64) noexcept;
 
 extern void dsc_ctx_free(dsc_ctx *ctx) noexcept;
@@ -245,6 +255,23 @@ extern dsc_tensor *dsc_ifft(dsc_ctx *ctx,
                             dsc_tensor *DSC_RESTRICT out = nullptr,
                             int n = -1,
                             int axis = -1) noexcept;
+
+extern dsc_tensor *dsc_rfft(dsc_ctx *ctx,
+                            const dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT out = nullptr,
+                            int n = -1,
+                            int axis = -1) noexcept;
+
+extern dsc_tensor *dsc_irfft(dsc_ctx *ctx,
+                             const dsc_tensor *DSC_RESTRICT x,
+                             dsc_tensor *DSC_RESTRICT out = nullptr,
+                             int n = -1,
+                             int axis = -1) noexcept;
+
+extern dsc_tensor *dsc_fftfreq(dsc_ctx *ctx,
+                               int n,
+                               f64 d = 1.,
+                               dsc_dtype dtype = DSC_DEFAULT_TYPE) noexcept;
 
 extern dsc_tensor *dsc_rfftfreq(dsc_ctx *ctx,
                                 int n,

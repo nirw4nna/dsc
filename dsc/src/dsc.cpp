@@ -212,8 +212,7 @@ static void binary_op(const dsc_tensor *DSC_RESTRICT xa,
         case dsc_dtype::C64:
             binary_op<c64>(xa, xb, out, op);
             break;
-        default:
-            DSC_LOG_FATAL("unknown dtype %d", out->dtype);
+        DSC_INVALID_CASE("unknown dtype %d", out->dtype);
     }
 }
 
@@ -234,15 +233,14 @@ static void unary_op(const dsc_tensor *DSC_RESTRICT x,
         case dsc_dtype::C64:
             unary_op<c64>(x, out, op);
             break;
-        default:
-            DSC_LOG_FATAL("unknown dtype %d", x->dtype);
+        DSC_INVALID_CASE("unknown dtype %d", x->dtype);
     }
 }
 
 template<typename Tx>
 static void copy_op(const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out) noexcept {
-    switch (x->dtype) {
+    switch (out->dtype) {
         case dsc_dtype::F32:
             copy_op<Tx, f32>(x, out);
             break;
@@ -255,8 +253,7 @@ static void copy_op(const dsc_tensor *DSC_RESTRICT x,
         case dsc_dtype::C64:
             copy_op<Tx, c64>(x, out);
             break;
-        default:
-            DSC_LOG_FATAL("unknown dtype %d", x->dtype);
+        DSC_INVALID_CASE("unknown dtype %d", x->dtype);
     }
 }
 
@@ -275,8 +272,7 @@ static void copy(const dsc_tensor *DSC_RESTRICT x,
         case dsc_dtype::C64:
             copy_op<c64>(x, out);
             break;
-        default:
-            DSC_LOG_FATAL("unknown dtype %d", x->dtype);
+        DSC_INVALID_CASE("unknown dtype %d", x->dtype);
     }
 }
 
@@ -428,8 +424,8 @@ static DSC_INLINE void exec_fft(dsc_ctx *ctx,
                                 dsc_tensor *DSC_RESTRICT out,
                                 const int axis, const int x_n,
                                 const int fft_n) noexcept {
-    const dsc_dtype out_dtype = dsc_type_mapping<Tout>::value;
-    dsc_fft_plan *plan = dsc_plan_fft(ctx, fft_n, out_dtype);
+    const dsc_dtype out_dtype = out->dtype;
+    dsc_fft_plan *plan = dsc_plan_fft(ctx, fft_n, COMPLEX, out_dtype);
 
     DSC_CTX_PUSH(ctx);
     // Push the arena to make these two buffers temporary
@@ -460,7 +456,7 @@ static DSC_INLINE void exec_fft(dsc_ctx *ctx,
             }
         }
 
-        dsc_cfft<Tout, forward>(plan, buff_data, fft_work_data);
+        dsc_complex_fft<Tout, forward>(plan, buff_data, fft_work_data);
 
         for (int i = 0; i < fft_n; ++i) {
             const int idx = out_it.index();
@@ -469,6 +465,78 @@ static DSC_INLINE void exec_fft(dsc_ctx *ctx,
             out_it.next();
         }
     }
+
+    DSC_CTX_POP(ctx);
+}
+
+template<typename T, bool forward>
+static DSC_INLINE void exec_rfft(dsc_ctx *ctx,
+                                 const dsc_tensor *DSC_RESTRICT x,
+                                 dsc_tensor *DSC_RESTRICT out,
+                                 const int axis, const int x_n,
+                                 const int out_n, const int fft_order) noexcept {
+    static_assert(dsc_is_complex<T>(), "T must be the complex type of the transform");
+
+    const dsc_dtype out_dtype = out->dtype;
+    dsc_fft_plan *plan = dsc_plan_fft(ctx, fft_order, REAL, out_dtype);
+
+    DSC_CTX_PUSH(ctx);
+    // Push the arena to make these two buffers temporary
+    dsc_tensor *buff = dsc_tensor_1d(ctx, out_dtype, out_n);
+    dsc_tensor *fft_work = dsc_tensor_1d(ctx, out_dtype, out_n);
+
+    DSC_TENSOR_DATA(T, fft_work);
+
+    if constexpr (forward) {
+        dsc_axis_iterator x_it(x, axis, DSC_MIN(x_n, fft_order * 2));
+        dsc_axis_iterator out_it(out, axis, out_n);
+
+        while (x_it.has_next()) {
+            for (int i = 0; i < (fft_order << 1); ++i) {
+                if (i < x_n) {
+                    int idx = x_it.index();
+                    ((dsc_real<T> *) buff->data)[i] = ((dsc_real<T> *) x->data)[idx];
+                    x_it.next();
+                } else {
+                    ((dsc_real<T> *) buff->data)[i] = dsc_zero<dsc_real<T>>();
+                }
+            }
+
+            dsc_real_fft<T, true>(plan, (T *)buff->data, fft_work_data);
+
+            for (int i = 0; i < out_n; ++i) {
+                const int idx = out_it.index();
+                ((T *) out->data)[idx] = ((T *)buff->data)[i];
+
+                out_it.next();
+            }
+        }
+    } else {
+        dsc_axis_iterator x_it(x, axis, fft_order + 1);
+        dsc_axis_iterator out_it(out, axis, out_n);
+
+        while (x_it.has_next()) {
+            for (int i = 0; i < fft_order + 1; ++i) {
+                if (i < x_n) {
+                    int idx = x_it.index();
+                    ((T *) buff->data)[i] = ((T *) x->data)[idx];
+                    x_it.next();
+                } else {
+                    ((T *) buff->data)[i] = dsc_zero<T>();
+                }
+            }
+
+            dsc_real_fft<T, false>(plan, (T *) buff->data, fft_work_data);
+
+            for (int i = 0; i < out_n; ++i) {
+                const int idx = out_it.index();
+                ((dsc_real<T> *) out->data)[idx] = ((dsc_real<T> *) buff->data)[i];
+
+                out_it.next();
+            }
+        }
+    }
+
 
     DSC_CTX_POP(ctx);
 }
@@ -529,11 +597,101 @@ static DSC_INLINE dsc_tensor *dsc_internal_fft(dsc_ctx *ctx,
         case C64:
             exec_fft<c64, c64, forward>(ctx, x, out, axis_idx, x_n, n);
             break;
-        default:
-            DSC_LOG_FATAL("unknown dtype %d", x->dtype);
+        DSC_INVALID_CASE("unknown dtype %d", x->dtype);
     }
 
     return out;
+}
+
+template<bool forward>
+static DSC_INLINE dsc_tensor *dsc_internal_rfft(dsc_ctx *ctx,
+                                                const dsc_tensor *DSC_RESTRICT x,
+                                                dsc_tensor *DSC_RESTRICT out,
+                                                const int n,
+                                                const int axis) noexcept {
+    // For an RFFT if N is not specified N = (dim / 2) + 1
+    // For an IRFFT if N is not specified N = 2 * (dim - 1)
+    // Note: for now, since we support only power of 2 FFTs, the input of IRFFT is assumed to have
+    //       the same shape as the output of RFFT. If this is not the case be careful, there can be
+    //       issues with the results of IRFFT.
+    DSC_ASSERT(x != nullptr);
+
+    const int axis_idx = dsc_tensor_dim(x, axis);
+    DSC_ASSERT(axis_idx < DSC_MAX_DIMS);
+
+    const int x_n = x->shape[axis_idx];
+    int out_n, fft_order;
+
+    if constexpr (forward) {
+        fft_order = ((n > 0) ? dsc_fft_best_n(n) : dsc_fft_best_n(x_n)) >> 1;
+        out_n = fft_order + 1;
+    } else {
+        // Todo: verify that this makes sense
+        fft_order = (n > 0) ? dsc_fft_best_n(n - 1) : dsc_fft_best_n(x_n - 1);
+        out_n = fft_order << 1;
+    }
+
+    int out_shape[DSC_MAX_DIMS];
+    for (int i = 0; i < DSC_MAX_DIMS; ++i)
+        out_shape[i] = i != axis_idx ? x->shape[i] : out_n;
+
+    dsc_dtype out_dtype;
+    if constexpr (forward) {
+        if (x->dtype == F32) out_dtype = C32;
+        else if (x->dtype == F64) out_dtype = C64;
+        else DSC_LOG_FATAL("RFFT input must be real");
+    } else {
+        if (x->dtype == C32) out_dtype = F32;
+        else if (x->dtype == C64) out_dtype = F64;
+        else DSC_LOG_FATAL("IRFFT input must be complex");
+    }
+
+    if (out == nullptr) {
+        out = dsc_new_tensor(ctx, x->n_dim, &out_shape[DSC_MAX_DIMS - x->n_dim], out_dtype);
+    } else {
+        DSC_ASSERT(out->dtype == out_dtype);
+        DSC_ASSERT(out->n_dim == x->n_dim);
+        DSC_ASSERT(memcmp(out_shape, out->shape, DSC_MAX_DIMS * sizeof(out->shape[0])) == 0);
+    }
+
+    DSC_LOG_DEBUG("performing %s RFFT of length %d on x=[%d %d %d %d] over axis %d with size %d",
+                  forward ? "FWD" : "BWD", n,
+                  x->shape[0], x->shape[1], x->shape[2], x->shape[3],
+                  axis_idx, x->shape[axis_idx]);
+
+    switch (x->dtype) {
+        case F32:
+        case C32:
+            exec_rfft<c32, forward>(ctx, x, out, axis_idx, x_n, out_n, fft_order);
+            break;
+        case F64:
+        case C64:
+            exec_rfft<c64, forward>(ctx, x, out, axis_idx, x_n, out_n, fft_order);
+            break;
+        DSC_INVALID_CASE("unknown dtype %d", x->dtype);
+    }
+
+    return out;
+}
+
+template<typename T>
+static DSC_INLINE void dsc_compute_fftfreq(dsc_tensor *x,
+                                           const int n,
+                                           const T d) noexcept {
+    static_assert(dsc_is_real<T>(), "T must be real");
+    const T factor = 1 / (n * d);
+
+    DSC_TENSOR_DATA(T, x);
+
+    const int odd = n & 1;
+    const int n2 = odd ? ((n - 1) >> 1) : (n >> 1);
+
+    for (int i = 0; i < (n2 + odd); ++i)
+        x_data[i] = i * factor;
+
+    for (int i = 0; i < n2; ++i)
+        x_data[(n2 + odd) + i] = (-n2 + i) * factor;
+
 }
 
 template<typename T>
@@ -670,6 +828,7 @@ dsc_ctx *dsc_ctx_init(const usize nb) noexcept {
 }
 
 static dsc_fft_plan *dsc_get_plan(dsc_ctx *ctx, const int n,
+                                  const dsc_fft_type fft_type,
                                   const dsc_dtype dtype) noexcept {
     dsc_dtype twd_dtype;
     switch (dtype) {
@@ -681,8 +840,7 @@ static dsc_fft_plan *dsc_get_plan(dsc_ctx *ctx, const int n,
         case F64:
             twd_dtype = F64;
             break;
-        default:
-            DSC_LOG_FATAL("unknown dtype=%d", dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", dtype);
     }
 
     const dsc_buffer *buffer = ctx->buffer;
@@ -691,6 +849,9 @@ static dsc_fft_plan *dsc_get_plan(dsc_ctx *ctx, const int n,
         dsc_fft_plan *cached_plan = buffer->plans[i];
         if ((cached_plan != nullptr) &&
             (cached_plan->n == n) &&
+            // Note: technically we could support complex FFTs of order N from real FFTs plans
+            // but not the other way around because we need an extra set of twiddles in the RFFT.
+            (cached_plan->fft_type == fft_type) &&
             (cached_plan->dtype == twd_dtype)) {
             plan = cached_plan;
             break;
@@ -701,29 +862,32 @@ static dsc_fft_plan *dsc_get_plan(dsc_ctx *ctx, const int n,
 }
 
 dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, const int n,
+                           const dsc_fft_type fft_type,
                            const dsc_dtype dtype) noexcept {
     const int fft_n = dsc_fft_best_n(n);
 
-    dsc_fft_plan *plan = dsc_get_plan(ctx, fft_n, dtype);
+    dsc_fft_plan *plan = dsc_get_plan(ctx, fft_n, fft_type, dtype);
 
     if (plan == nullptr) {
         dsc_buffer *buffer = ctx->buffer;
         if (buffer->n_plans <= DSC_FFT_PLANS) {
-            const usize storage = sizeof(dsc_fft_plan) + dsc_fft_storage(fft_n, dtype);
+            const usize storage = sizeof(dsc_fft_plan) + dsc_fft_storage(fft_n, dtype, fft_type);
 
-            DSC_LOG_DEBUG("allocating new FFT plan with N=%d dtype=%s",
+            DSC_LOG_DEBUG("allocating new %s plan with N=%d dtype=%s",
+                          fft_type == REAL ? "RFFT" : "FFT",
                           fft_n, DSC_DTYPE_NAMES[dtype]);
 
             plan = dsc_obj_alloc<dsc_fft_plan>(buffer, storage);
             plan->twiddles = (plan + 1);
-            dsc_init_plan(plan, fft_n, dtype);
+            dsc_init_plan(plan, fft_n, dtype, fft_type);
 
             buffer->plans[buffer->n_plans++] = plan;
         } else {
             DSC_LOG_FATAL("too many plans in context");
         }
     } else {
-        DSC_LOG_DEBUG("found cached FFT plan with N=%d dtype=%s",
+        DSC_LOG_DEBUG("found cached %s plan with N=%d dtype=%s",
+                      fft_type == REAL ? "RFFT" : "FFT",
                       fft_n, DSC_DTYPE_NAMES[dtype]);
     }
 
@@ -938,8 +1102,7 @@ dsc_tensor *dsc_arange(dsc_ctx *ctx,
         case dsc_dtype::C64:
             assign_op<c64>(out, dsc_complex(c64, 0, 0), dsc_complex(c64, 1, 0));
             break;
-        default:
-            DSC_LOG_FATAL("unknown dtype %d", dtype);
+        DSC_INVALID_CASE("unknown dtype %d", dtype);
     }
     return out;
 }
@@ -957,8 +1120,7 @@ dsc_tensor *dsc_randn(dsc_ctx *ctx,
         case F64:
             dsc_fill_randn<f64>(out);
             break;
-        default:
-            DSC_LOG_FATAL("dtype must be real");
+        DSC_INVALID_CASE("dtype must be real");
     }
 
     return out;
@@ -991,7 +1153,7 @@ dsc_tensor *dsc_cast(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
     if (x->dtype == new_dtype)
         return x;
 
-    dsc_tensor *out = dsc_new_like(ctx, x);
+    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &x->shape[DSC_MAX_DIMS - x->n_dim], new_dtype);
     copy(x, out);
 
     return out;
@@ -1110,6 +1272,46 @@ dsc_tensor *dsc_ifft(dsc_ctx *ctx,
     return dsc_internal_fft<false>(ctx, x, out, n, axis);
 }
 
+
+dsc_tensor *dsc_rfft(dsc_ctx *ctx,
+                     const dsc_tensor *DSC_RESTRICT x,
+                     dsc_tensor *DSC_RESTRICT out,
+                     const int n,
+                     const int axis) noexcept {
+    return dsc_internal_rfft<true>(ctx, x, out, n, axis);
+}
+
+dsc_tensor *dsc_irfft(dsc_ctx *ctx,
+                      const dsc_tensor *DSC_RESTRICT x,
+                      dsc_tensor *DSC_RESTRICT out,
+                      const int n,
+                      const int axis) noexcept {
+    return dsc_internal_rfft<false>(ctx, x, out, n, axis);
+}
+
+dsc_tensor *dsc_fftfreq(dsc_ctx *ctx,
+                        const int n,
+                        const f64 d,
+                        const dsc_dtype dtype) noexcept {
+    DSC_ASSERT(n > 0);
+
+    // out = [0, 1, ...,   n/2-1,     -n/2, ..., -1] / (d*n)   if n is even
+    // out = [0, 1, ..., (n-1)/2, -(n-1)/2, ..., -1] / (d*n)   if n is odd
+
+    dsc_tensor *out = dsc_tensor_1d(ctx, dtype, n);
+    switch (dtype) {
+        case F32:
+            dsc_compute_fftfreq(out, n, (f32) d);
+            break;
+        case F64:
+            dsc_compute_fftfreq(out, n, (f64) d);
+            break;
+        DSC_INVALID_CASE("dtype must be real");
+    }
+
+    return out;
+}
+
 dsc_tensor *dsc_rfftfreq(dsc_ctx *ctx,
                          const int n,
                          const f64 d,
@@ -1128,8 +1330,7 @@ dsc_tensor *dsc_rfftfreq(dsc_ctx *ctx,
         case F64:
             dsc_compute_rfftfreq(out, n, (f64) d);
             break;
-        default:
-            DSC_LOG_FATAL("dtype must be real");
+        DSC_INVALID_CASE("dtype must be real");
     }
 
     return out;

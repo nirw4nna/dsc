@@ -3,9 +3,11 @@
 #include "dsc.h"
 
 struct dsc_axis_iterator {
-    dsc_axis_iterator(const dsc_tensor *x, int axis, int axis_n) noexcept :
+    dsc_axis_iterator(const dsc_tensor *x, const int axis,
+                      const int axis_n) noexcept :
             shape_(x->shape), stride_(x->stride),
-            axis_(axis), axis_n_(axis_n < x->shape[axis] ? axis_n : x->shape[axis]){
+            axis_(axis), axis_n_(axis_n < x->shape[axis] ? axis_n : x->shape[axis]) {
+
     }
 
     DSC_INLINE void next() noexcept {

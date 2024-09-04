@@ -100,6 +100,10 @@ def test_trig():
 
 
 def test_fft():
+    ops = {
+        'fft': ((np.fft.fft, np.fft.ifft), (dsc.fft, dsc.ifft)),
+        'rfft': ((np.fft.rfft, np.fft.irfft), (dsc.rfft, dsc.irfft)),
+    }
     n_ = random.randint(3, 10)
     n = 2 ** n_
 
@@ -107,32 +111,37 @@ def test_fft():
         shape = [8] * 4
         shape[axis] = n
         for n_change in range(-1, 2):
-            # n_change=-1 -> cropping
-            # n_change=0  -> copy
-            # n_change=+1 -> padding
-            fft_n = 2 ** (n_ + n_change)
-            x = random_nd(shape)
-            x_dsc = dsc.from_numpy(x)
+            for op_name in ops.keys():
+                # n_change=-1 -> cropping
+                # n_change=0  -> copy
+                # n_change=+1 -> padding
+                fft_n = 2 ** (n_ + n_change)
+                print(f'Testing {op_name} with N={fft_n}')
+                np_fft_op, np_ifft_op = ops[op_name][0]
+                dsc_fft_op, dsc_ifft_op = ops[op_name][1]
+                x = random_nd(shape)
+                x_dsc = dsc.from_numpy(x)
 
-            x_np_fft = np.fft.fft(x, n=fft_n, axis=axis)
-            x_dsc_fft = dsc.fft(x_dsc, n=fft_n, axis=axis)
+                x_np_fft = np_fft_op(x, n=fft_n, axis=axis)
+                x_dsc_fft = dsc_fft_op(x_dsc, n=fft_n, axis=axis)
 
-            assert all_close(x_dsc_fft.numpy(), x_np_fft)
+                assert all_close(x_dsc_fft.numpy(), x_np_fft)
 
-            x_np_ifft = np.fft.ifft(x_np_fft, axis=axis)
-            x_dsc_ifft = dsc.ifft(x_dsc_fft, axis=axis)
+                x_np_ifft = np_ifft_op(x_np_fft, axis=axis)
+                x_dsc_ifft = dsc_ifft_op(x_dsc_fft, axis=axis)
 
-            assert all_close(x_dsc_ifft.numpy(), x_np_ifft)
+                assert all_close(x_dsc_ifft.numpy(), x_np_ifft)
 
-            dsc.clear()
+                dsc.clear()
 
 
-def test_rfftfreq():
+def test_fftfreq():
     for _ in range(10):
         n = random.randint(1, 10_000)
         for dtype in DTYPES:
             if dtype == np.complex64 or dtype == np.complex128:
                 continue
+
             print(f'Tensing rfftfreq with N={n} and dtype={dtype.__name__}')
 
             # With default d
@@ -145,6 +154,20 @@ def test_rfftfreq():
             res_np_d = np.fft.rfftfreq(n, d).astype(dtype)
             res_dsc_d = dsc.rfftfreq(n, d, dtype=DSC_DTYPES[dtype])
             assert all_close(res_np_d, res_dsc_d.numpy())
+
+            print(f'Tensing fftfreq with N={n} and dtype={dtype.__name__}')
+
+            # With default d
+            res_np = np.fft.fftfreq(n).astype(dtype)
+            res_dsc = dsc.fftfreq(n, dtype=DSC_DTYPES[dtype])
+            assert all_close(res_np, res_dsc.numpy())
+
+            # With random d
+            d = random.random()
+            res_np_d = np.fft.fftfreq(n, d).astype(dtype)
+            res_dsc_d = dsc.fftfreq(n, d, dtype=DSC_DTYPES[dtype])
+            assert all_close(res_np_d, res_dsc_d.numpy())
+
             dsc.clear()
 
 
