@@ -338,6 +338,16 @@ static DSC_INLINE dsc_tensor *dsc_divc(dsc_ctx *ctx,
     return out;
 }
 
+template <typename T>
+static DSC_INLINE dsc_tensor *dsc_powc(dsc_ctx *ctx,
+                                       dsc_tensor *DSC_RESTRICT x,
+                                       dsc_tensor *DSC_RESTRICT out,
+                                       const T val) noexcept {
+    validate_unary_params();
+    scalar_op(x, out, val, pow_op());
+    return out;
+}
+
 static bool DSC_INLINE DSC_PURE can_broadcast(const dsc_tensor *DSC_RESTRICT xa,
                                               const dsc_tensor *DSC_RESTRICT xb) noexcept {
     bool can_broadcast = true;
@@ -743,7 +753,7 @@ static DSC_INLINE void dsc_compute_rfftfreq(dsc_tensor *x,
 }
 
 template<typename T>
-static DSC_INLINE T *dsc_obj_alloc(dsc_buffer *buff, const usize nb) noexcept {
+static DSC_MALLOC DSC_INLINE T *dsc_obj_alloc(dsc_buffer *buff, const usize nb) noexcept {
     const usize last_offset = buff->last == nullptr ? 0 : buff->last->offset;
     const usize last_size = buff->last == nullptr ? 0 : buff->last->nb;
     const usize last_end = last_offset + last_size;
@@ -765,7 +775,7 @@ static DSC_INLINE T *dsc_obj_alloc(dsc_buffer *buff, const usize nb) noexcept {
     return (T *) ((byte *) buff + sizeof(dsc_buffer) + buff->last->offset);
 }
 
-static dsc_buffer *dsc_buffer_alloc(const usize nb) noexcept {
+static DSC_MALLOC dsc_buffer *dsc_buffer_alloc(const usize nb) noexcept {
     const usize buff_size = DSC_ALIGN(nb + sizeof(dsc_buffer), DSC_PAGE_SIZE);
 
     dsc_buffer *buff = (dsc_buffer *) aligned_alloc(DSC_PAGE_SIZE, buff_size);
@@ -1047,10 +1057,10 @@ void dsc_ctx_clear(dsc_ctx *ctx) noexcept {
 
 #define alignment 32
 
-dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
-                           const int n_dim,
-                           const int *shape,
-                           const dsc_dtype dtype) noexcept {
+DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
+                                      const int n_dim,
+                                      const int *shape,
+                                      const dsc_dtype dtype) noexcept {
     DSC_ASSERT((unsigned) n_dim <= DSC_MAX_DIMS);
 
     int ne = 1;
@@ -1237,6 +1247,17 @@ dsc_tensor *dsc_div(dsc_ctx *ctx,
     return out;
 }
 
+dsc_tensor *dsc_pow(dsc_ctx *ctx,
+                    dsc_tensor *DSC_RESTRICT xa,
+                    dsc_tensor *DSC_RESTRICT xb,
+                    dsc_tensor *DSC_RESTRICT out) noexcept {
+    validate_binary_params();
+
+    binary_op(xa, xb, out, pow_op());
+
+    return out;
+}
+
 CONST_OP_IMPL(addc, f32)
 CONST_OP_IMPL(addc, f64)
 CONST_OP_IMPL(addc, c32)
@@ -1256,6 +1277,11 @@ CONST_OP_IMPL(divc, f32)
 CONST_OP_IMPL(divc, f64)
 CONST_OP_IMPL(divc, c32)
 CONST_OP_IMPL(divc, c64)
+
+CONST_OP_IMPL(powc, f32)
+CONST_OP_IMPL(powc, f64)
+CONST_OP_IMPL(powc, c32)
+CONST_OP_IMPL(powc, c64)
 
 dsc_tensor *dsc_cos(dsc_ctx *ctx,
                     const dsc_tensor *DSC_RESTRICT x,
@@ -1390,6 +1416,39 @@ dsc_tensor *dsc_abs(dsc_ctx *ctx,
             complex_binary<c64, f64>(x, out, abs_op());
             break;
         DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
+    }
+
+    return out;
+}
+
+dsc_tensor *dsc_angle(dsc_ctx *ctx,
+                      const dsc_tensor *DSC_RESTRICT x,
+                      dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_ASSERT(x != nullptr);
+
+    const dsc_dtype out_dtype = dtype_as_real(x->dtype);
+    if (out == nullptr) {
+        out = dsc_new_tensor(ctx, x->n_dim, &x->shape[DSC_MAX_DIMS - x->n_dim], out_dtype);
+    } else {
+        DSC_ASSERT(out->dtype == out_dtype);
+        DSC_ASSERT(out->n_dim == x->n_dim);
+        DSC_ASSERT(memcmp(out->shape, x->shape, DSC_MAX_DIMS * sizeof(out->shape[0])) == 0);
+    }
+
+    switch (x->dtype) {
+        case F32:
+            complex_binary<f32, f32>(x, out, atan2_op());
+            break;
+        case F64:
+            complex_binary<f64, f64>(x, out, atan2_op());
+            break;
+        case C32:
+            complex_binary<c32, f32>(x, out, atan2_op());
+            break;
+        case C64:
+            complex_binary<c64, f64>(x, out, atan2_op());
+            break;
+            DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
 
     return out;

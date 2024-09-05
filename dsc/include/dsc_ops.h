@@ -279,3 +279,33 @@ struct abs_op {
         }
     }
 };
+
+struct atan2_op {
+    template <typename T>
+    DSC_INLINE DSC_STRICTLY_PURE real<T> operator()(const T x) const noexcept {
+        static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "atan2_op - dtype must be either float or complex");
+
+        if constexpr (dsc_is_type<T, f32>()) {
+            return atan2f(0.f, x);
+        } else if constexpr (dsc_is_type<T, f64>()) {
+            return atan2(0., x);
+        } else if constexpr (dsc_is_type<T, c32>()) {
+            return atan2f(x.imag, x.real);
+        } else {
+            return atan2(x.imag, x.real);
+        }
+    }
+};
+
+struct pow_op {
+    template<typename T>
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T base, const T exp) const noexcept {
+        if constexpr (dsc_is_type<f32, T>()) {
+            return powf(base, exp);
+        } else if constexpr (dsc_is_type<f64, T>()) {
+            return pow(base, exp);
+        } else {
+            return exp_op()(mul_op()(exp, logn_op()(base)));
+        }
+    }
+};

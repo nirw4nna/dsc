@@ -53,11 +53,14 @@
 #   define DSC_PURE             __attribute_pure__
 #   define DSC_INLINE           inline __attribute__((always_inline))
 #   define DSC_NOINLINE         __attribute__((noinline))
+// Todo: check whether malloc actually does something
+#   define DSC_MALLOC           __attribute__((malloc))
 #else
 #   define DSC_STRICTLY_PURE
 #   define DSC_PURE
 #   define DSC_INLINE           inline
 #   define DSC_NOINLINE
+#   define DSC_MALLOC
 #endif
 
 #define DSC_RESTRICT     __restrict
@@ -125,10 +128,10 @@ extern void dsc_ctx_free(dsc_ctx *ctx) noexcept;
 
 extern void dsc_ctx_clear(dsc_ctx *ctx) noexcept;
 
-extern dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
-                                  int n_dim,
-                                  const int *shape,
-                                  dsc_dtype dtype) noexcept;
+extern DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
+                                             int n_dim,
+                                             const int *shape,
+                                             dsc_dtype dtype) noexcept;
 
 extern dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx,
                                  dsc_dtype dtype,
@@ -209,6 +212,11 @@ extern dsc_tensor *dsc_div(dsc_ctx *ctx,
                            dsc_tensor *DSC_RESTRICT xb,
                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
 
+extern dsc_tensor *dsc_pow(dsc_ctx *ctx,
+                           dsc_tensor *DSC_RESTRICT xa,
+                           dsc_tensor *DSC_RESTRICT xb,
+                           dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
 CONST_FUNC_DECL(addc, f32)
 CONST_FUNC_DECL(addc, f64)
 CONST_FUNC_DECL(addc, c32)
@@ -228,6 +236,11 @@ CONST_FUNC_DECL(divc, f32)
 CONST_FUNC_DECL(divc, f64)
 CONST_FUNC_DECL(divc, c32)
 CONST_FUNC_DECL(divc, c64)
+
+CONST_FUNC_DECL(powc, f32)
+CONST_FUNC_DECL(powc, f64)
+CONST_FUNC_DECL(powc, c32)
+CONST_FUNC_DECL(powc, c64)
 
 extern dsc_tensor *dsc_cos(dsc_ctx *ctx,
                            const dsc_tensor *DSC_RESTRICT x,
@@ -264,6 +277,10 @@ extern dsc_tensor *dsc_sqrt(dsc_ctx *ctx,
 extern dsc_tensor *dsc_abs(dsc_ctx *ctx,
                            const dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+
+extern dsc_tensor *dsc_angle(dsc_ctx *ctx,
+                             const dsc_tensor *DSC_RESTRICT x,
+                             dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
 
 // conj and real are NOP if the input is real meaning x will be returned as is.
 extern dsc_tensor *dsc_conj(dsc_ctx *ctx,

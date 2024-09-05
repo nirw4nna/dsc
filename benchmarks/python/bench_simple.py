@@ -79,7 +79,9 @@ def bench_binary(show_plot: bool = True):
         'mul': (np.multiply, dsc.mul),
         'mulc': (np.multiply, dsc.mul),
         'true_div': (np.true_divide, dsc.true_div),
-        'true_divc': (np.true_divide, dsc.true_div)
+        'true_divc': (np.true_divide, dsc.true_div),
+        'pow': (np.power, dsc.power),
+        'powc': (np.power, dsc.power)
     }
     np_latency = {}
     dsc_latency = {}

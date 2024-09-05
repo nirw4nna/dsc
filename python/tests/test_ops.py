@@ -40,6 +40,7 @@ def test_ops():
         'sub': (np.subtract, '-'),
         'mul': (np.multiply, '*'),
         'div': (np.true_divide, '/'),
+        'power': (np.power, '**'),
     }
     for op_name in ops.keys():
         np_op, symbol = ops[op_name]
@@ -93,6 +94,7 @@ def test_unary():
         'exp': (np.exp, dsc.exp),
         'sqrt': (np.sqrt, dsc.sqrt),
         'absolute': (np.absolute, dsc.absolute),
+        'angle': (np.angle, dsc.angle),
         'conj': (np.conj, dsc.conj),
         'real': (np.real, dsc.real),
         'imag': (np.imag, dsc.imag),
