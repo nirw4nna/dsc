@@ -116,6 +116,28 @@ class TestOps:
                 assert all_close(res_dsc.numpy(), res_np)
                 dsc.clear()
 
+    def test_unary_axis(self):
+        ops = {
+            'sum': (np.sum, dsc.sum),
+        }
+        for op_name in ops.keys():
+            np_op, dsc_op = ops[op_name]
+            for dtype in DTYPES:
+                for axis in range(-4, 4):
+                    print(f'Testing {op_name} with {dtype.__name__} along axis {axis}')
+                    x = random_nd([random.randint(1, 10) for _ in range(4)], dtype=dtype)
+                    x_dsc = dsc.from_numpy(x)
+
+                    res_np = np_op(x, axis=axis, keepdims=True)
+                    res_dsc = dsc_op(x_dsc, axis=axis, keepdims=True)
+                    assert all_close(res_dsc.numpy(), res_np)
+
+                    res_np_2 = np_op(x, axis=axis, keepdims=False)
+                    res_dsc_2 = dsc_op(x_dsc, axis=axis, keepdims=False)
+                    assert all_close(res_dsc_2.numpy(), res_np_2)
+
+                    dsc.clear()
+
 class TestInit:
     def test_arange(self):
         for _ in range(10):

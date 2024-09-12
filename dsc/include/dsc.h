@@ -283,7 +283,7 @@ extern dsc_tensor *dsc_sum(dsc_ctx *ctx,
                            const dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out = nullptr,
                            int axis = -1,
-                           bool keep_dim = true) noexcept;
+                           bool keep_dims = true) noexcept;
 
 // ============================================================
 // Fourier Transforms

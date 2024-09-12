@@ -54,12 +54,9 @@ def draw_table(np_latency, dsc_latency, unit: str):
     print(table)
 
 
-def bench(op, *args, out=None) -> float:
+def bench(op, *args, **kwargs) -> float:
     def _call_op():
-        if out is not None:
-            op(*args, out=out)
-        else:
-            op(*args)
+        op(*args, **kwargs)
 
     for _ in range(WARMUP):
         _call_op()
@@ -166,6 +163,35 @@ def bench_unary(show_plot: bool = True):
         plot(np_latency, dsc_latency, 'ms')
 
 
+def bench_unary_along_axis(show_plot: bool = True):
+    dsc.init(1024 * 1024 * 1024 * 2)
+    ops = {
+        'sum': (np.sum, dsc.sum),
+    }
+    np_latency = {}
+    dsc_latency = {}
+
+    for op_name in ops.keys():
+        np_op, dsc_op = ops[op_name]
+        for dtype in DTYPES:
+            shape = [60, 60_000]
+            a = random_nd(shape, dtype)
+            out = np.empty((1, 60_000), dtype=dtype)
+            a_dsc = dsc.from_numpy(a)
+            out_dsc = dsc.from_numpy(out)
+
+            np_latency[f'{op_name}_{dtype.__name__}'] = bench(np_op, a, out=out, axis=0, keepdims=True) * 1e3
+            dsc_latency[f'{op_name}_{dtype.__name__}'] = bench(dsc_op, a_dsc, out=out_dsc, axis=0, keepdims=True) * 1e3
+
+            dsc.clear()
+
+    draw_table(np_latency, dsc_latency, 'ms')
+
+    if show_plot:
+        plot(np_latency, dsc_latency, 'ms')
+
+
 if __name__ == '__main__':
-    # bench_unary(True)
-    bench_binary(True)
+    # bench_unary(False)
+    # bench_binary(False)
+    bench_unary_along_axis(False)

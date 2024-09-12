@@ -5,7 +5,7 @@
 # (https://opensource.org/license/bsd-3-clause).
 
 from ._bindings import (
-    _DscTensor_p, _DSC_MAX_DIMS, _dsc_add, _dsc_sub, _dsc_mul, _dsc_div, _dsc_pow, _dsc_cast,
+    _DscTensor_p, _DSC_MAX_DIMS, _dsc_add, _dsc_sub, _dsc_mul, _dsc_div, _dsc_pow, _dsc_cast, _dsc_sum,
     _dsc_addc_f32, _dsc_addc_f64, _dsc_addc_c32, _dsc_addc_c64,
     _dsc_subc_f32, _dsc_subc_f64, _dsc_subc_c32, _dsc_subc_c64,
     _dsc_mulc_f32, _dsc_mulc_f64, _dsc_mulc_c32, _dsc_mulc_c64,
@@ -245,6 +245,8 @@ def real(x: Tensor) -> Tensor:
 def imag(x: Tensor) -> Tensor:
     return Tensor(_dsc_imag(_get_ctx(), _c_ptr(x)))
 
+def sum(x: Tensor, out: Tensor = None, axis: int = -1, keepdims: bool = True) -> Tensor:
+    return Tensor(_dsc_sum(_get_ctx(), _c_ptr(x), _c_ptr(out), axis, keepdims))
 
 def arange(n: int, dtype: Dtype = Dtype.F32) -> Tensor:
     return Tensor(_dsc_arange(_get_ctx(), n, c_uint8(dtype.value)))
