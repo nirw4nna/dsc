@@ -1,3 +1,9 @@
+# Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+# All rights reserved.
+#
+# This code is licensed under the terms of the 3-clause BSD license
+# (https://opensource.org/license/bsd-3-clause).
+
 import os
 import ctypes
 from ctypes import (
@@ -526,24 +532,22 @@ _lib.dsc_abs.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_angle(dsc_ctx *,
-#                              const dsc_tensor *__restrict x,
-#                              dsc_tensor *__restrict out = nullptr) noexcept;
-def _dsc_angle(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
-    return _lib.dsc_angle(ctx, x, out)
+#                              const dsc_tensor *__restrict x) noexcept;
+def _dsc_angle(ctx: _DscCtx, x: _DscTensor_p) -> _DscTensor_p:
+    return _lib.dsc_angle(ctx, x)
 
 
-_lib.dsc_angle.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_angle.argtypes = [_DscCtx, _DscTensor_p]
 _lib.dsc_angle.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_conj(dsc_ctx *,
-#                             dsc_tensor *__restrict x,
-#                             dsc_tensor *__restrict out = nullptr) noexcept;
-def _dsc_conj(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p = None) -> _DscTensor_p:
-    return _lib.dsc_conj(ctx, x, out)
+#                             dsc_tensor *__restrict x) noexcept;
+def _dsc_conj(ctx: _DscCtx, x: _DscTensor_p) -> _DscTensor_p:
+    return _lib.dsc_conj(ctx, x)
 
 
-_lib.dsc_conj.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_conj.argtypes = [_DscCtx, _DscTensor_p]
 _lib.dsc_conj.restype = _DscTensor_p
 
 

@@ -1,3 +1,9 @@
+# Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+# All rights reserved.
+#
+# This code is licensed under the terms of the 3-clause BSD license
+# (https://opensource.org/license/bsd-3-clause).
+
 import python.dsc as dsc
 import numpy as np
 import random
@@ -33,84 +39,113 @@ DSC_DTYPES = {
     np.complex128: dsc.Dtype.C64
 }
 
+class TestOps:
+    def test_binary(self):
+        ops = {
+            'add': (np.add, dsc.add),
+            'sub': (np.subtract, dsc.sub),
+            'mul': (np.multiply, dsc.mul),
+            'div': (np.true_divide, dsc.true_div),
+            'power': (np.power, dsc.power),
+        }
+        for op_name in ops.keys():
+            np_op, dsc_op = ops[op_name]
+            for dtype in DTYPES:
+                print(f'Testing operator {op_name} with {dtype.__name__}')
+                shape = [random.randint(2, 10) for _ in range(4)]
 
-def test_ops():
-    ops = {
-        'add': (np.add, '+'),
-        'sub': (np.subtract, '-'),
-        'mul': (np.multiply, '*'),
-        'div': (np.true_divide, '/'),
-        'power': (np.power, '**'),
-    }
-    for op_name in ops.keys():
-        np_op, symbol = ops[op_name]
-        for dtype in DTYPES:
-            print(f'Testing operator {op_name} ({symbol}) with {dtype.__name__}')
-            shape = [random.randint(2, 10) for _ in range(4)]
+                x = random_nd(shape, dtype=dtype)
+                x_dsc = dsc.from_numpy(x)
 
-            x = random_nd(shape, dtype=dtype)
-            x_dsc = dsc.from_numpy(x)
+                # Same shape
+                y = random_nd(shape, dtype=dtype)
+                y_dsc = dsc.from_numpy(y)
 
-            # Same shape
-            y = random_nd(shape, dtype=dtype)
-            y_dsc = dsc.from_numpy(y)
+                res_np = np_op(x, y)
+                res_dsc = dsc_op(x_dsc, y_dsc)
+                assert all_close(res_dsc.numpy(), res_np)
 
-            res_np = np_op(x, y)
-            res_dsc = eval(f'x_dsc {symbol} y_dsc')
-            assert all_close(res_dsc.numpy(), res_np)
+                # Broadcasting
+                collapse_idx = random.randint(0, 3)
+                shape[collapse_idx] = 1
 
-            # Broadcasting
-            collapse_idx = random.randint(0, 3)
-            shape[collapse_idx] = 1
+                y_b = random_nd(shape, dtype=dtype)
+                y_dsc_b = dsc.from_numpy(y_b)
 
-            y_b = random_nd(shape, dtype=dtype)
-            y_dsc_b = dsc.from_numpy(y_b)
+                res_np_b = np_op(x, y_b)
+                res_dsc_b = dsc_op(x_dsc, y_dsc_b)
+                assert all_close(res_dsc_b.numpy(), res_np_b)
 
-            res_np_b = np_op(x, y_b)
-            res_dsc_b = eval(f'x_dsc {symbol} y_dsc_b')
-            assert all_close(res_dsc_b.numpy(), res_np_b)
+                # Scalar
+                if dtype == np.complex64 or dtype == np.complex128:
+                    y_s = complex(random.random(), random.random())
+                else:
+                    y_s = random.random()
 
-            # Scalar
-            if dtype == np.complex64 or dtype == np.complex128:
-                y_s = complex(random.random(), random.random())
-            else:
-                y_s = random.random()
+                res_np_s = np_op(x, y_s)
+                res_dsc_s = dsc_op(x_dsc, y_s)
+                assert all_close(res_dsc_s.numpy(), res_np_s)
 
-            res_np_s = np_op(x, y_s)
-            res_dsc_s = eval(f'x_dsc {symbol} y_s')
-            assert all_close(res_dsc_s.numpy(), res_np_s)
+                dsc.clear()
 
-            dsc.clear()
+    def test_unary(self):
+        ops = {
+            'sin': (np.sin, dsc.sin),
+            'sinc': (np.sinc, dsc.sinc),
+            'cos': (np.cos, dsc.cos),
+            'logn': (np.log, dsc.logn),
+            'log2': (np.log2, dsc.log2),
+            'log10': (np.log10, dsc.log10),
+            'exp': (np.exp, dsc.exp),
+            'sqrt': (np.sqrt, dsc.sqrt),
+            'absolute': (np.absolute, dsc.absolute),
+            'angle': (np.angle, dsc.angle),
+            'conj': (np.conj, dsc.conj),
+            'real': (np.real, dsc.real),
+            'imag': (np.imag, dsc.imag),
+        }
+        for op_name in ops.keys():
+            np_op, dsc_op = ops[op_name]
+            for dtype in DTYPES:
+                print(f'Testing {op_name} with {dtype.__name__}')
+                x = random_nd([random.randint(1, 10) for _ in range(4)], dtype=dtype)
+                x_dsc = dsc.from_numpy(x)
+
+                res_np = np_op(x)
+                res_dsc = dsc_op(x_dsc)
+                assert all_close(res_dsc.numpy(), res_np)
+                dsc.clear()
+
+class TestInit:
+    def test_arange(self):
+        for _ in range(10):
+            n = random.randint(1, 10_000)
+
+            for dtype in DTYPES:
+                print(f'Tensing arange with N={n} and dtype={dtype.__name__}')
+                res_np = np.arange(n, dtype=dtype)
+                res_dsc = dsc.arange(n, dtype=DSC_DTYPES[dtype])
+                assert all_close(res_dsc.numpy(), res_np)
+
+                dsc.clear()
 
 
-def test_unary():
-    ops = {
-        'sin': (np.sin, dsc.sin),
-        'sinc': (np.sinc, dsc.sinc),
-        'cos': (np.cos, dsc.cos),
-        'logn': (np.log, dsc.logn),
-        'log2': (np.log2, dsc.log2),
-        'log10': (np.log10, dsc.log10),
-        'exp': (np.exp, dsc.exp),
-        'sqrt': (np.sqrt, dsc.sqrt),
-        'absolute': (np.absolute, dsc.absolute),
-        'angle': (np.angle, dsc.angle),
-        'conj': (np.conj, dsc.conj),
-        'real': (np.real, dsc.real),
-        'imag': (np.imag, dsc.imag),
-    }
-    for op_name in ops.keys():
-        np_op, dsc_op = ops[op_name]
-        for dtype in DTYPES:
-            print(f'Testing {op_name} with {dtype.__name__}')
-            x = random_nd([random.randint(1, 10) for _ in range(4)], dtype=dtype)
-            x_dsc = dsc.from_numpy(x)
+    def test_random(self):
+        for _ in range(10):
+            shape = tuple([random.randint(1, 10) for _ in range(4)])
+            for dtype in DTYPES:
+                if dtype == np.complex64 or dtype == np.complex128:
+                    continue
+                print(f'Tensing randn with dtype={dtype.__name__}')
 
-            res_np = np_op(x)
-            res_dsc = dsc_op(x_dsc)
-            assert all_close(res_dsc.numpy(), res_np)
-            dsc.clear()
+                res_np = np.random.randn(*shape).astype(dtype)
+                res_dsc = dsc.randn(*shape, dtype=DSC_DTYPES[dtype])
+                res_dsc_np = res_dsc.numpy()
 
+                assert res_dsc_np.dtype == res_np.dtype
+                assert res_dsc_np.shape == res_np.shape
+
+                dsc.clear()
 
 def test_fft():
     ops = {
@@ -147,7 +182,6 @@ def test_fft():
 
                 dsc.clear()
 
-
 def test_fftfreq():
     for _ in range(10):
         n = random.randint(1, 10_000)
@@ -180,36 +214,5 @@ def test_fftfreq():
             res_np_d = np.fft.fftfreq(n, d).astype(dtype)
             res_dsc_d = dsc.fftfreq(n, d, dtype=DSC_DTYPES[dtype])
             assert all_close(res_np_d, res_dsc_d.numpy())
-
-            dsc.clear()
-
-
-def test_arange():
-    for _ in range(10):
-        n = random.randint(1, 10_000)
-
-        for dtype in DTYPES:
-            print(f'Tensing arange with N={n} and dtype={dtype.__name__}')
-            res_np = np.arange(n, dtype=dtype)
-            res_dsc = dsc.arange(n, dtype=DSC_DTYPES[dtype])
-            assert all_close(res_dsc.numpy(), res_np)
-
-            dsc.clear()
-
-
-def test_random():
-    for _ in range(10):
-        shape = tuple([random.randint(1, 10) for _ in range(4)])
-        for dtype in DTYPES:
-            if dtype == np.complex64 or dtype == np.complex128:
-                continue
-            print(f'Tensing randn with dtype={dtype.__name__}')
-
-            res_np = np.random.randn(*shape).astype(dtype)
-            res_dsc = dsc.randn(*shape, dtype=DSC_DTYPES[dtype])
-            res_dsc_np = res_dsc.numpy()
-
-            assert res_dsc_np.dtype == res_np.dtype
-            assert res_dsc_np.shape == res_np.shape
 
             dsc.clear()

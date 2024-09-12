@@ -1,3 +1,9 @@
+# Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+# All rights reserved.
+#
+# This code is licensed under the terms of the 3-clause BSD license
+# (https://opensource.org/license/bsd-3-clause).
+
 from ._bindings import _dsc_ctx_init, _dsc_ctx_clear, _dsc_ctx_free
 
 

@@ -1,3 +1,9 @@
+# Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+# All rights reserved.
+#
+# This code is licensed under the terms of the 3-clause BSD license
+# (https://opensource.org/license/bsd-3-clause).
+
 from enum import Enum
 import numpy as np
 from ctypes import (
@@ -5,7 +11,6 @@ from ctypes import (
     c_float,
     c_double
 )
-from typing import Union
 
 
 class Dtype(Enum):

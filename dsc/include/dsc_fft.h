@@ -1,9 +1,19 @@
+// Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+// All rights reserved.
+//
+// This code is licensed under the terms of the 3-clause BSD license
+// (https://opensource.org/license/bsd-3-clause).
+
 #pragma once
 
 #include "dsc.h"
 #include "dsc_ops.h"
 #include <cmath>
 
+enum dsc_fft_type : u8 {
+    REAL,
+    COMPLEX
+};
 
 struct dsc_fft_plan {
     void *twiddles;
@@ -13,6 +23,9 @@ struct dsc_fft_plan {
     // of twiddles (hence the storage requirement is the same of an order N FFT).
     dsc_fft_type fft_type;
 };
+
+// ============================================================
+// Internal Private Interface
 
 namespace {
 template<typename T>
@@ -87,6 +100,9 @@ DSC_NOINLINE void dsc_fft_pass2(T *DSC_RESTRICT x,
 }
 }
 
+// ============================================================
+// Public Interface
+
 static DSC_STRICTLY_PURE int dsc_fft_best_n(const int n) noexcept {
     // Compute the best fitting N based on the available algorithms.
     // For now, return the power-of-2 closest to n.
@@ -155,9 +171,9 @@ static void dsc_complex_fft(dsc_fft_plan *plan,
     static_assert(dsc_is_complex<T>(), "T must be a complex type, use rfft for real-valued FFTs");
 
     dsc_fft_pass2<T, forward ? (real<T>) 1 : (real<T>) -1>(x,
-                                                                    work,
-                                                                    (real<T> *) plan->twiddles,
-                                                                    plan->n
+                                                           work,
+                                                           (real<T> *) plan->twiddles,
+                                                           plan->n
     );
 
     if constexpr (!forward) {

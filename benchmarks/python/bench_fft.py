@@ -1,3 +1,9 @@
+# Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+# All rights reserved.
+#
+# This code is licensed under the terms of the 3-clause BSD license
+# (https://opensource.org/license/bsd-3-clause).
+
 import os
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['GOTO_NUM_THREADS'] = '1'

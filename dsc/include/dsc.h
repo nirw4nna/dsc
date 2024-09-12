@@ -1,10 +1,15 @@
+// Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+// All rights reserved.
+//
+// This code is licensed under the terms of the 3-clause BSD license
+// (https://opensource.org/license/bsd-3-clause).
+
 #pragma once
 
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include "dsc_dtype.h"
-
 
 #define DSC_LOG_FATAL(format, ...)          \
     do {                                    \
@@ -53,7 +58,6 @@
 #   define DSC_PURE             __attribute_pure__
 #   define DSC_INLINE           inline __attribute__((always_inline))
 #   define DSC_NOINLINE         __attribute__((noinline))
-// Todo: check whether malloc actually does something
 #   define DSC_MALLOC           __attribute__((malloc))
 #else
 #   define DSC_STRICTLY_PURE
@@ -63,16 +67,11 @@
 #   define DSC_MALLOC
 #endif
 
-#define DSC_RESTRICT     __restrict
-// Todo: use INFINITY macro for both types?
-#define DSC_INF32        std::numeric_limits<f32>::max()
-#define DSC_INF64        std::numeric_limits<f64>::max()
+#define DSC_RESTRICT    __restrict
 
-#if !defined(DSC_PAGE_SIZE)
-#   define DSC_PAGE_SIZE ((usize) 4096)
+#if !defined(DSC_MAX_DIMS)
+#   define DSC_MAX_DIMS ((int) 4)
 #endif
-
-#define DSC_MAX_DIMS     ((int) 4)
 
 static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 
@@ -94,11 +93,7 @@ extern "C" {
 struct dsc_ctx;
 struct dsc_obj;
 struct dsc_fft_plan;
-
-enum dsc_fft_type : u8 {
-    REAL,
-    COMPLEX
-};
+enum dsc_fft_type : u8;
 
 struct dsc_tensor {
     // The shape of this tensor, right-aligned. For example a 1D tensor T of 4 elements
@@ -118,15 +113,24 @@ static DSC_INLINE f64 dsc_timer() noexcept {
     return (f64) ts.tv_sec + (f64) ts.tv_nsec * 1.e-9;
 }
 
+// ============================================================
+// Initialization
+
 extern dsc_ctx *dsc_ctx_init(usize nb) noexcept;
 
 extern dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, int n,
                                   dsc_fft_type fft_type,
                                   dsc_dtype dtype = dsc_dtype::F64) noexcept;
 
+// ============================================================
+// Cleanup/Teardown
+
 extern void dsc_ctx_free(dsc_ctx *ctx) noexcept;
 
 extern void dsc_ctx_clear(dsc_ctx *ctx) noexcept;
+
+// ============================================================
+// Tensor Creation
 
 extern DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                                              int n_dim,
@@ -160,37 +164,12 @@ extern dsc_tensor *dsc_randn(dsc_ctx *ctx,
                              const int *shape,
                              dsc_dtype dtype = DSC_DEFAULT_TYPE) noexcept;
 
-// Todo: if we decide to stick with this pattern for external function (c-like api + internal generic impl with templates)
-//  then it makes sense to use a more generic macro, similar to CONST_FUNC_DECL that can take care also of the arguments to declare all the functions.
-extern dsc_tensor *dsc_log_space_f32(dsc_ctx *ctx,
-                                     f32 start,
-                                     f32 stop,
-                                     int n,
-                                     f32 base = 10.f) noexcept;
-
-extern dsc_tensor *dsc_log_space_f64(dsc_ctx *ctx,
-                                     f64 start,
-                                     f64 stop,
-                                     int n,
-                                     f64 base = 10.) noexcept;
-
-extern dsc_tensor *dsc_interp1d_f32(dsc_ctx *ctx,
-                                    const dsc_tensor *x,
-                                    const dsc_tensor *y,
-                                    const dsc_tensor *xp,
-                                    f32 left = DSC_INF32,
-                                    f32 right = DSC_INF32) noexcept;
-
-extern dsc_tensor *dsc_interp1d_f64(dsc_ctx *ctx,
-                                    const dsc_tensor *x,
-                                    const dsc_tensor *y,
-                                    const dsc_tensor *xp,
-                                    f64 left = DSC_INF64,
-                                    f64 right = DSC_INF64) noexcept;
-
 extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
                             dsc_tensor *DSC_RESTRICT x,
                             dsc_dtype new_dtype) noexcept;
+
+// ============================================================
+// Binary Operations (Vector)
 
 extern dsc_tensor *dsc_add(dsc_ctx *ctx,
                            dsc_tensor *DSC_RESTRICT xa,
@@ -217,6 +196,9 @@ extern dsc_tensor *dsc_pow(dsc_ctx *ctx,
                            dsc_tensor *DSC_RESTRICT xb,
                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
 
+// ============================================================
+// Binary Operations (Scalar)
+
 CONST_FUNC_DECL(addc, f32)
 CONST_FUNC_DECL(addc, f64)
 CONST_FUNC_DECL(addc, c32)
@@ -241,6 +223,9 @@ CONST_FUNC_DECL(powc, f32)
 CONST_FUNC_DECL(powc, f64)
 CONST_FUNC_DECL(powc, c32)
 CONST_FUNC_DECL(powc, c64)
+
+// ============================================================
+// Unary Operations
 
 extern dsc_tensor *dsc_cos(dsc_ctx *ctx,
                            const dsc_tensor *DSC_RESTRICT x,
@@ -279,22 +264,30 @@ extern dsc_tensor *dsc_abs(dsc_ctx *ctx,
                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
 
 extern dsc_tensor *dsc_angle(dsc_ctx *ctx,
-                             const dsc_tensor *DSC_RESTRICT x,
-                             dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+                             const dsc_tensor *DSC_RESTRICT x) noexcept;
 
 // conj and real are NOP if the input is real meaning x will be returned as is.
 extern dsc_tensor *dsc_conj(dsc_ctx *ctx,
-                            dsc_tensor *DSC_RESTRICT x,
-                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+                            dsc_tensor *DSC_RESTRICT x) noexcept;
 
 extern dsc_tensor *dsc_real(dsc_ctx *ctx,
-                            dsc_tensor *DSC_RESTRICT x,
-                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+                            dsc_tensor *DSC_RESTRICT x) noexcept;
 
 extern dsc_tensor *dsc_imag(dsc_ctx *ctx,
-                            const dsc_tensor *DSC_RESTRICT x,
-                            dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+                            const dsc_tensor *DSC_RESTRICT x) noexcept;
 
+// ============================================================
+// Unary Operations Along Axis
+
+extern dsc_tensor *dsc_sum(dsc_ctx *ctx,
+                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT out = nullptr,
+                           int axis = -1,
+                           bool keep_dim = true) noexcept;
+
+// ============================================================
+// Fourier Transforms
+//
 // FFTs are always performed out-of-place. If the out param is provided then
 // it will be used to store the result otherwise a new tensor will be allocated.
 // The axis parameter specifies over which dimension the FFT must be performed,

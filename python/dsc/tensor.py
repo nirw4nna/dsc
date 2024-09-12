@@ -1,3 +1,9 @@
+# Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+# All rights reserved.
+#
+# This code is licensed under the terms of the 3-clause BSD license
+# (https://opensource.org/license/bsd-3-clause).
+
 from ._bindings import (
     _DscTensor_p, _DSC_MAX_DIMS, _dsc_add, _dsc_sub, _dsc_mul, _dsc_div, _dsc_pow, _dsc_cast,
     _dsc_addc_f32, _dsc_addc_f64, _dsc_addc_c32, _dsc_addc_c64,
@@ -17,6 +23,7 @@ from ctypes import (
     c_int
 )
 import sys
+from typing import Union
 
 
 def _c_ptr(x: 'Tensor') -> _DscTensor_p:
@@ -223,12 +230,12 @@ def absolute(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_abs(_get_ctx(), _c_ptr(x), _c_ptr(out)))
 
 
-def angle(x: Tensor, out: Tensor = None) -> Tensor:
-    return Tensor(_dsc_angle(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+def angle(x: Tensor) -> Tensor:
+    return Tensor(_dsc_angle(_get_ctx(), _c_ptr(x)))
 
 
-def conj(x: Tensor, out: Tensor = None) -> Tensor:
-    return Tensor(_dsc_conj(_get_ctx(), _c_ptr(x), _c_ptr(out)))
+def conj(x: Tensor) -> Tensor:
+    return Tensor(_dsc_conj(_get_ctx(), _c_ptr(x)))
 
 
 def real(x: Tensor) -> Tensor:
