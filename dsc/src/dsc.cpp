@@ -474,12 +474,11 @@ static bool DSC_INLINE DSC_PURE can_broadcast(const dsc_tensor *DSC_RESTRICT xa,
     return can_broadcast;
 }
 
-// Todo: evaluate inline vs no inline!
 template<typename T, typename Op>
-static void binary_op(const dsc_tensor *DSC_RESTRICT xa,
-                      const dsc_tensor *DSC_RESTRICT xb,
-                      dsc_tensor *DSC_RESTRICT out,
-                      Op op) noexcept {
+static DSC_INLINE void binary_op(const dsc_tensor *DSC_RESTRICT xa,
+                                 const dsc_tensor *DSC_RESTRICT xb,
+                                 dsc_tensor *DSC_RESTRICT out,
+                                 Op op) noexcept {
     DSC_TENSOR_DATA(T, xa);
     DSC_TENSOR_DATA(T, xb);
     DSC_TENSOR_DATA(T, out);
@@ -495,10 +494,10 @@ static void binary_op(const dsc_tensor *DSC_RESTRICT xa,
 }
 
 template<typename Op>
-static void binary_op(const dsc_tensor *DSC_RESTRICT xa,
-                      const dsc_tensor *DSC_RESTRICT xb,
-                      dsc_tensor *DSC_RESTRICT out,
-                      Op op) noexcept {
+static DSC_INLINE void binary_op(const dsc_tensor *DSC_RESTRICT xa,
+                                 const dsc_tensor *DSC_RESTRICT xb,
+                                 dsc_tensor *DSC_RESTRICT out,
+                                 Op op) noexcept {
     switch (out->dtype) {
         case dsc_dtype::F32:
             binary_op<f32>(xa, xb, out, op);
@@ -617,9 +616,9 @@ CONST_OP_IMPL(powc, c64, pow_op())
 // Unary Operations
 
 template<typename T, typename Op>
-static void unary_op(const dsc_tensor *DSC_RESTRICT x,
-                     dsc_tensor *DSC_RESTRICT out,
-                     Op op) noexcept {
+static DSC_INLINE void unary_op(const dsc_tensor *DSC_RESTRICT x,
+                                dsc_tensor *DSC_RESTRICT out,
+                                Op op) noexcept {
     DSC_TENSOR_DATA(T, x);
     DSC_TENSOR_DATA(T, out);
 
@@ -629,9 +628,9 @@ static void unary_op(const dsc_tensor *DSC_RESTRICT x,
 }
 
 template<typename Op>
-static void unary_op(const dsc_tensor *DSC_RESTRICT x,
-                     dsc_tensor *DSC_RESTRICT out,
-                     Op op) noexcept {
+static DSC_INLINE void unary_op(const dsc_tensor *DSC_RESTRICT x,
+                                dsc_tensor *DSC_RESTRICT out,
+                                Op op) noexcept {
     switch (x->dtype) {
         case dsc_dtype::F32:
             unary_op<f32>(x, out, op);
