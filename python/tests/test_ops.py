@@ -119,6 +119,7 @@ class TestOps:
     def test_unary_axis(self):
         ops = {
             'sum': (np.sum, dsc.sum),
+            'mean': (np.mean, dsc.mean),
         }
         for op_name in ops.keys():
             np_op, dsc_op = ops[op_name]

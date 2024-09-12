@@ -23,10 +23,10 @@
 #define DSC_SIMD_ALIGN ((int) 32)
 
 #define CONST_OP_IMPL(func, type, op) \
-    dsc_tensor *dsc_##func##_##type(dsc_ctx *ctx,                               \
-                                    dsc_tensor *DSC_RESTRICT x,                 \
-                                    const type val,                             \
-                                    dsc_tensor *DSC_RESTRICT out) noexcept {    \
+    dsc_tensor *dsc_##func##_##type(dsc_ctx *ctx,               \
+                                    dsc_tensor *x,              \
+                                    const type val,             \
+                                    dsc_tensor *out) noexcept { \
         validate_unary_params();    \
         scalar_op(x, out, val, op); \
         return out;                 \
@@ -574,13 +574,13 @@ dsc_tensor *dsc_pow(dsc_ctx *ctx,
 // Binary Operations (Scalar)
 
 template<typename T, typename Op>
-static DSC_INLINE void scalar_op(dsc_tensor *DSC_RESTRICT x,
-                                 dsc_tensor *DSC_RESTRICT out,
+static DSC_INLINE void scalar_op(dsc_tensor *x,
+                                 dsc_tensor *out,
                                  const T val,
                                  Op op) noexcept {
 
-    DSC_TENSOR_DATA(T, x);
-    DSC_TENSOR_DATA(T, out);
+    T *x_data = (T *) x->data;
+    T *out_data = (T *) out->data;
 
     dsc_for(i, out) {
         out_data[i] = op(x_data[i], val);
@@ -972,9 +972,47 @@ dsc_tensor *dsc_sum(dsc_ctx *ctx,
         case C64:
             reduce_op<c64>(x, out, axis_idx);
             break;
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
     }
 
     return out;
+}
+
+dsc_tensor *dsc_mean(dsc_ctx *ctx,
+                     const dsc_tensor *DSC_RESTRICT x,
+                     dsc_tensor *DSC_RESTRICT out,
+                     const int axis,
+                     const bool keep_dims) noexcept {
+    dsc_tensor *res = dsc_sum(ctx, x, out, axis, keep_dims);
+
+    const int axis_idx = dsc_tensor_dim(x, axis);
+    const int axis_n = x->shape[axis_idx];
+
+    switch (res->dtype) {
+        case F32: {
+            const f32 scale = 1.f / (f32) axis_n;
+            res = dsc_mulc_f32(ctx, res, scale, res);
+            break;
+        }
+        case F64: {
+            const f64 scale = 1. / (f64) axis_n;
+            res = dsc_mulc_f64(ctx, res, scale, res);
+            break;
+        }
+        case C32: {
+            const c32 scale = dsc_complex(c32, 1.f / (f32) axis_n, 0.f);
+            res = dsc_mulc_c32(ctx, res, scale, res);
+            break;
+        }
+        case C64: {
+            const c64 scale = dsc_complex(c64, 1. / (f64) axis_n, 0.);
+            res = dsc_mulc_c64(ctx, res, scale, res);
+            break;
+        }
+        DSC_INVALID_CASE("unknown dtype=%d", res->dtype);
+    }
+
+    return res;
 }
 
 // ============================================================

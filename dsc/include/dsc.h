@@ -76,10 +76,10 @@
 static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 
 #define CONST_FUNC_DECL(func, type) \
-    extern dsc_tensor *dsc_##func##_##type(dsc_ctx *ctx,                        \
-                                           dsc_tensor *DSC_RESTRICT x,          \
-                                           type val,                            \
-                                           dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+    extern dsc_tensor *dsc_##func##_##type(dsc_ctx *ctx,    \
+                                           dsc_tensor *x,   \
+                                           type val,        \
+                                           dsc_tensor *out = nullptr) noexcept;
 
 #define DSC_TENSOR_DATA(T, PTR) T *DSC_RESTRICT PTR##_data = (T *) (PTR)->data
 
@@ -284,6 +284,12 @@ extern dsc_tensor *dsc_sum(dsc_ctx *ctx,
                            dsc_tensor *DSC_RESTRICT out = nullptr,
                            int axis = -1,
                            bool keep_dims = true) noexcept;
+
+extern dsc_tensor *dsc_mean(dsc_ctx *ctx,
+                            const dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT out = nullptr,
+                            int axis = -1,
+                            bool keep_dims = true) noexcept;
 
 // ============================================================
 // Fourier Transforms
