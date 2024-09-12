@@ -168,6 +168,7 @@ def bench_unary_along_axis(show_plot: bool = True):
     ops = {
         'sum': (np.sum, dsc.sum),
         'mean': (np.mean, dsc.mean),
+        'max': (np.max, dsc.max),
     }
     np_latency = {}
     dsc_latency = {}

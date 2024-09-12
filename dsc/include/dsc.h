@@ -291,6 +291,12 @@ extern dsc_tensor *dsc_mean(dsc_ctx *ctx,
                             int axis = -1,
                             bool keep_dims = true) noexcept;
 
+extern dsc_tensor *dsc_max(dsc_ctx *ctx,
+                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT out = nullptr,
+                           int axis = -1,
+                           bool keep_dims = true) noexcept;
+
 // ============================================================
 // Fourier Transforms
 //

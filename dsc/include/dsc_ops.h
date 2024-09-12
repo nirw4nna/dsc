@@ -314,3 +314,15 @@ struct pow_op {
         }
     }
 };
+
+struct max_op {
+    template<typename T>
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T xa, const T xb) const noexcept {
+        if constexpr (dsc_is_real<T>()) {
+            return DSC_MAX(xa, xb);
+        } else {
+            // This is NumPy behaviour
+            return xa.real > xb.real ? xa : xb;
+        }
+    }
+};

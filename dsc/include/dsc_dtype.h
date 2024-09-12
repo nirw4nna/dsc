@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <type_traits>
+#include <limits>
 
 
 #define DSC_DTYPES       ((int) 4)
@@ -162,6 +163,22 @@ static consteval T dsc_zero() noexcept {
         return dsc_complex(c32, 0.f, 0.f);
     } else if constexpr (dsc_is_type<T, c64>()) {
         return dsc_complex(c64, 0., 0.);
+    } else {
+        static_assert("T is not supported");
+    }
+}
+
+template<typename T, bool positive = true>
+static consteval T dsc_inf() noexcept {
+    constexpr real<T> sign = positive ? 1 : -1;
+    if constexpr (dsc_is_type<T, f32>()) {
+        return sign * std::numeric_limits<f32>::infinity();
+    } else if constexpr (dsc_is_type<T, f64>()) {
+        return sign * std::numeric_limits<f64>::infinity();
+    } else if constexpr (dsc_is_type<T, c32>()) {
+        return dsc_complex(c32, sign * std::numeric_limits<f32>::infinity(), sign * std::numeric_limits<f32>::infinity());
+    } else if constexpr (dsc_is_type<T, c64>()) {
+        return dsc_complex(c64, sign * std::numeric_limits<f64>::infinity(), sign * std::numeric_limits<f64>::infinity());
     } else {
         static_assert("T is not supported");
     }

@@ -71,6 +71,40 @@
         }                                                                                           \
     } while(0)
 
+#define validate_reduce_params()    \
+    do {                            \
+        DSC_ASSERT(x != nullptr);   \
+\
+        const int axis_idx = dsc_tensor_dim(x, axis);   \
+        DSC_ASSERT(axis_idx < DSC_MAX_DIMS);            \
+\
+        int out_shape[DSC_MAX_DIMS];                    \
+        int out_ndim = x->n_dim;                        \
+        if (keep_dims) {                                \
+            memcpy(out_shape, x->shape, DSC_MAX_DIMS * sizeof(*out_shape));                         \
+            out_shape[axis_idx] = 1;                                                                \
+        } else {                                                                                    \
+            out_ndim--;                                                                             \
+            const int out_offset = DSC_MAX_DIMS - out_ndim;                                         \
+            memset(out_shape, 1, out_offset * sizeof(*out_shape));                                  \
+            for (int x_idx = DSC_MAX_DIMS - x->n_dim, out_idx = 0; x_idx < DSC_MAX_DIMS; ++x_idx) { \
+                if (x_idx == axis_idx)                              \
+                    continue;                                       \
+\
+                out_shape[out_offset + out_idx] = x->shape[x_idx];  \
+                out_idx++;                                          \
+            }                                                       \
+        }                                                           \
+\
+        if (out == nullptr) {                                                                   \
+            out = dsc_new_tensor(ctx, out_ndim, &out_shape[DSC_MAX_DIMS - out_ndim], x->dtype); \
+        } else {                                \
+            DSC_ASSERT(out->dtype == x->dtype); \
+            DSC_ASSERT(out->n_dim == out_ndim); \
+            DSC_ASSERT(memcmp(out->shape, out_shape, DSC_MAX_DIMS * sizeof(*out_shape)) == 0);  \
+        }                                                                                       \
+    } while(0)
+
 #define dsc_for(idx, X) for (int idx = 0; idx < (X)->ne; ++idx)
 
 #define DSC_CTX_PUSH(CTX) \
@@ -903,7 +937,7 @@ dsc_tensor *dsc_imag(dsc_ctx *ctx,
 // Unary Operations Along Axis
 
 template <typename T>
-static DSC_INLINE void reduce_op(const dsc_tensor *DSC_RESTRICT x,
+static DSC_INLINE void sum(const dsc_tensor *DSC_RESTRICT x,
                                  dsc_tensor *DSC_RESTRICT out,
                                  int axis_idx) noexcept {
     DSC_TENSOR_DATA(T, x);
@@ -921,6 +955,25 @@ static DSC_INLINE void reduce_op(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
+template <typename T>
+static DSC_INLINE void max(const dsc_tensor *DSC_RESTRICT x,
+                              dsc_tensor *DSC_RESTRICT out,
+                              int axis_idx) noexcept {
+    DSC_TENSOR_DATA(T, x);
+    DSC_TENSOR_DATA(T, out);
+
+    const int axis_n = x->shape[axis_idx];
+    dsc_axis_iterator x_it(x, axis_idx, axis_n);
+    dsc_for(i, out) {
+        T max = dsc_inf<T, false>();
+        for (int j = 0; j < axis_n; ++j) {
+            max = max_op()(max, x_data[x_it.index()]);
+            x_it.next();
+        }
+        out_data[i] = max;
+    }
+}
+
 dsc_tensor *dsc_sum(dsc_ctx *ctx,
                     const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out,
@@ -928,49 +981,23 @@ dsc_tensor *dsc_sum(dsc_ctx *ctx,
                     const bool keep_dims) noexcept {
     // Fixme: keepdims=false won't work if x->n_dim = 1 because a scalar cannot be returned
     //  from this function, for now probably it makes sense to emulate this in Python
-    DSC_ASSERT(x != nullptr);
+
+    validate_reduce_params();
 
     const int axis_idx = dsc_tensor_dim(x, axis);
-    DSC_ASSERT(axis_idx < DSC_MAX_DIMS);
-
-    int out_shape[DSC_MAX_DIMS];
-    int out_ndim = x->n_dim;
-    if (keep_dims) {
-        memcpy(out_shape, x->shape, DSC_MAX_DIMS * sizeof(*out_shape));
-        out_shape[axis_idx] = 1;
-    } else {
-        out_ndim--;
-        const int out_offset = DSC_MAX_DIMS - out_ndim;
-        memset(out_shape, 1, out_offset * sizeof(*out_shape));
-        for (int x_idx = DSC_MAX_DIMS - x->n_dim, out_idx = 0; x_idx < DSC_MAX_DIMS; ++x_idx) {
-            if (x_idx == axis_idx)
-                continue;
-
-            out_shape[out_offset + out_idx] = x->shape[x_idx];
-            out_idx++;
-        }
-    }
-
-    if (out == nullptr) {
-        out = dsc_new_tensor(ctx, out_ndim, &out_shape[DSC_MAX_DIMS - out_ndim], x->dtype);
-    } else {
-        DSC_ASSERT(out->dtype == x->dtype);
-        DSC_ASSERT(out->n_dim == out_ndim);
-        DSC_ASSERT(memcmp(out->shape, out_shape, DSC_MAX_DIMS * sizeof(*out_shape)) == 0);
-    }
 
     switch (out->dtype) {
         case F32:
-            reduce_op<f32>(x, out, axis_idx);
+            sum<f32>(x, out, axis_idx);
             break;
         case F64:
-            reduce_op<f64>(x, out, axis_idx);
+            sum<f64>(x, out, axis_idx);
             break;
         case C32:
-            reduce_op<c32>(x, out, axis_idx);
+            sum<c32>(x, out, axis_idx);
             break;
         case C64:
-            reduce_op<c64>(x, out, axis_idx);
+            sum<c64>(x, out, axis_idx);
             break;
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
     }
@@ -1013,6 +1040,35 @@ dsc_tensor *dsc_mean(dsc_ctx *ctx,
     }
 
     return res;
+}
+
+dsc_tensor *dsc_max(dsc_ctx *ctx,
+                     const dsc_tensor *DSC_RESTRICT x,
+                     dsc_tensor *DSC_RESTRICT out,
+                     const int axis,
+                     const bool keep_dims) noexcept {
+
+    validate_reduce_params();
+
+    const int axis_idx = dsc_tensor_dim(x, axis);
+
+    switch (out->dtype) {
+        case F32:
+            max<f32>(x, out, axis_idx);
+            break;
+        case F64:
+            max<f64>(x, out, axis_idx);
+            break;
+        case C32:
+            max<c32>(x, out, axis_idx);
+            break;
+        case C64:
+            max<c64>(x, out, axis_idx);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
+    }
+
+    return out;
 }
 
 // ============================================================

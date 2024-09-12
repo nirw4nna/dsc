@@ -597,6 +597,19 @@ _lib.dsc_mean.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_bool]
 _lib.dsc_mean.restype = _DscTensor_p
 
 
+# extern dsc_tensor *dsc_max(dsc_ctx *ctx,
+#                            const dsc_tensor *DSC_RESTRICT x,
+#                            dsc_tensor *DSC_RESTRICT out = nullptr,
+#                            int axis = -1,
+#                            bool keep_dims = true) noexcept;
+def _dsc_max(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p, axis: int = -1, keepdims: bool = True) -> _DscTensor_p:
+    return _lib.dsc_max(ctx, x, out, c_int(axis), c_bool(keepdims))
+
+
+_lib.dsc_max.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_bool]
+_lib.dsc_max.restype = _DscTensor_p
+
+
 # extern dsc_tensor *dsc_fft(dsc_ctx *ctx,
 #                            const dsc_tensor *DSC_RESTRICT x,
 #                            dsc_tensor *DSC_RESTRICT out,

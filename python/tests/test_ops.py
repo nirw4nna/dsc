@@ -120,6 +120,7 @@ class TestOps:
         ops = {
             'sum': (np.sum, dsc.sum),
             'mean': (np.mean, dsc.mean),
+            'max': (np.max, dsc.max),
         }
         for op_name in ops.keys():
             np_op, dsc_op = ops[op_name]
