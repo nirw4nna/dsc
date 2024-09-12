@@ -276,6 +276,10 @@ extern dsc_tensor *dsc_real(dsc_ctx *ctx,
 extern dsc_tensor *dsc_imag(dsc_ctx *ctx,
                             const dsc_tensor *DSC_RESTRICT x) noexcept;
 
+// Modified Bessel function of the first kind order 0
+extern dsc_tensor *dsc_i0(dsc_ctx *ctx,
+                          const dsc_tensor *DSC_RESTRICT x) noexcept;
+
 // ============================================================
 // Unary Operations Along Axis
 

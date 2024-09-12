@@ -55,8 +55,11 @@ def draw_table(np_latency, dsc_latency, unit: str):
 
 
 def bench(op, *args, **kwargs) -> float:
+    if 'out' in kwargs and kwargs['out'] is None:
+        del kwargs['out']
+
     def _call_op():
-        op(*args, **kwargs)
+       op(*args, **kwargs)
 
     for _ in range(WARMUP):
         _call_op()
@@ -135,6 +138,7 @@ def bench_unary(show_plot: bool = True):
         'log10': (np.log10, dsc.log10),
         'exp': (np.exp, dsc.exp),
         'sqrt': (np.sqrt, dsc.sqrt),
+        'i0': (np.i0, dsc.i0),
     }
     np_latency = {}
     dsc_latency = {}
@@ -142,15 +146,21 @@ def bench_unary(show_plot: bool = True):
     for op_name in ops.keys():
         np_op, dsc_op = ops[op_name]
         for dtype in DTYPES:
+            if op_name == 'i0' and (dtype == np.complex64 or dtype == np.complex128):
+                continue
+
             shape = [60, 60_000]
             a = random_nd(shape, dtype)
             out = np.empty_like(a)
             a_dsc = dsc.from_numpy(a)
             out_dsc = dsc.from_numpy(out)
 
-            if op_name == 'sinc':
-                # These functions don't support the out keyword parameter
+            if op_name in ['sinc', 'i0']:
+                # These NumPy functions don't support the out keyword parameter
                 out = None
+            if op_name in ['i0']:
+                # These DSC functions don't support the out keyword parameter
+                out_dsc = None
 
             np_latency[f'{op_name}_{dtype.__name__}'] = bench(np_op, a, out=out) * 1e3
             dsc_latency[f'{op_name}_{dtype.__name__}'] = bench(dsc_op, a_dsc, out=out_dsc) * 1e3
@@ -194,6 +204,6 @@ def bench_unary_along_axis(show_plot: bool = True):
 
 
 if __name__ == '__main__':
-    # bench_unary(False)
+    bench_unary(False)
     # bench_binary(False)
-    bench_unary_along_axis(False)
+    # bench_unary_along_axis(False)

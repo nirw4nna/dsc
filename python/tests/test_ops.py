@@ -103,10 +103,14 @@ class TestOps:
             'conj': (np.conj, dsc.conj),
             'real': (np.real, dsc.real),
             'imag': (np.imag, dsc.imag),
+            'i0': (np.i0, dsc.i0),
         }
         for op_name in ops.keys():
             np_op, dsc_op = ops[op_name]
             for dtype in DTYPES:
+                if op_name == 'i0' and (dtype == np.complex64 or dtype == np.complex128):
+                    continue
+
                 print(f'Testing {op_name} with {dtype.__name__}')
                 x = random_nd([random.randint(1, 10) for _ in range(4)], dtype=dtype)
                 x_dsc = dsc.from_numpy(x)

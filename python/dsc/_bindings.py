@@ -571,6 +571,16 @@ _lib.dsc_imag.argtypes = [_DscCtx, _DscTensor_p]
 _lib.dsc_imag.restype = _DscTensor_p
 
 
+# extern dsc_tensor *dsc_i0(dsc_ctx *,
+#                           const dsc_tensor *__restrict x) noexcept;
+def _dsc_i0(ctx: _DscCtx, x: _DscTensor_p) -> _DscTensor_p:
+    return _lib.dsc_i0(ctx, x)
+
+
+_lib.dsc_i0.argtypes = [_DscCtx, _DscTensor_p]
+_lib.dsc_i0.restype = _DscTensor_p
+
+
 # extern dsc_tensor *dsc_sum(dsc_ctx *ctx,
 #                            const dsc_tensor *DSC_RESTRICT x,
 #                            dsc_tensor *DSC_RESTRICT out = nullptr,

@@ -933,6 +933,103 @@ dsc_tensor *dsc_imag(dsc_ctx *ctx,
     return out;
 }
 
+template <typename T>
+static DSC_INLINE T i0(const T x) noexcept {
+    static_assert(dsc_is_real<T>(), "T must be real");
+
+    // Taken from Numerical Recipes
+    if constexpr (dsc_is_type<T, f32>()) {
+        f32 ax, y, res;
+        if ((ax = fabsf(x)) < 3.75f) {
+            y = x / 3.75f;
+            y *= y;
+            res = 1.f + y * (3.5156229f + y *
+                            (3.0899424f + y *
+                            (1.2067492f + y *
+                            (0.2659732f + y *
+                            (0.360768e-1f + y *
+                            (0.45813e-2f)))))
+            );
+        } else {
+            y = 3.75f / ax;
+            res = (expf(ax) / sqrtf(ax)) *
+                  (0.39894228f + y *
+                  (0.1328592e-1f + y *
+                  (0.225319e-2f + y *
+                  (-0.157565e-2f + y *
+                  (0.916281e-2f + y *
+                  (-0.2057706e-1f + y *
+                  (0.2635537e-1f + y *
+                  (-0.1647633e-1f + y *
+                  (0.392377e-2f))))))))
+            );
+        }
+
+        return res;
+    } else {
+        f64 ax, y, res;
+        if ((ax = fabs(x)) < 3.75) {
+            y = x / 3.75;
+            y *= y;
+            res = 1. + y * (3.5156229 + y *
+                           (3.0899424 + y *
+                           (1.2067492 + y *
+                           (0.2659732 + y *
+                           (0.360768e-1 + y *
+                           (0.45813e-2)))))
+            );
+        } else {
+            y = 3.75 / ax;
+            res = (exp(ax) / sqrt(ax)) *
+                  (0.39894228 + y *
+                  (0.1328592e-1 + y *
+                  (0.225319e-2 + y *
+                  (-0.157565e-2 + y *
+                  (0.916281e-2 + y *
+                  (-0.2057706e-1 + y *
+                  (0.2635537e-1 + y *
+                  (-0.1647633e-1 + y *
+                  (0.392377e-2))))))))
+            );
+        }
+
+        return res;
+    }
+}
+
+template <typename T>
+static DSC_INLINE void dsc_internal_i0(const dsc_tensor *DSC_RESTRICT x,
+                                       dsc_tensor *DSC_RESTRICT out) noexcept {
+    static_assert(dsc_is_real<T>(), "T must be real");
+
+    DSC_TENSOR_DATA(T, x);
+    DSC_TENSOR_DATA(T, out);
+
+    dsc_for(i, out) {
+        out_data[i] = i0(x_data[i]);
+    }
+}
+
+dsc_tensor *dsc_i0(dsc_ctx *ctx,
+                   const dsc_tensor *DSC_RESTRICT x) noexcept {
+    DSC_ASSERT(x != nullptr);
+    DSC_ASSERT(x->dtype == F32 || x->dtype == F64);
+
+    dsc_tensor *out = dsc_new_like(ctx, x);
+
+    switch (x->dtype) {
+        case F32:
+            dsc_internal_i0<f32>(x, out);
+            break;
+        case F64:
+            dsc_internal_i0<f64>(x, out);
+            break;
+        DSC_INVALID_CASE("dtype must be real");
+    }
+
+    return out;
+}
+
 // ============================================================
 // Unary Operations Along Axis
 
