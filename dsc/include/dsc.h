@@ -75,6 +75,8 @@
 
 static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 
+#define DSC_SLICE_NONE INT32_MAX
+
 #define CONST_FUNC_DECL(func, type) \
     extern dsc_tensor *dsc_##func##_##type(dsc_ctx *ctx,    \
                                            dsc_tensor *x,   \
@@ -105,6 +107,15 @@ struct dsc_tensor {
     int ne;
     int n_dim;
     dsc_dtype dtype;
+};
+
+struct dsc_slice {
+    union {
+        int d[3];
+        struct {
+            int start, stop, step;
+        };
+    };
 };
 
 static DSC_INLINE f64 dsc_timer() noexcept {
@@ -167,6 +178,21 @@ extern dsc_tensor *dsc_randn(dsc_ctx *ctx,
 extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
                             dsc_tensor *DSC_RESTRICT x,
                             dsc_dtype new_dtype) noexcept;
+
+// ============================================================
+// Indexing and Slicing
+//
+// All indexing and slicing operations will return a new tensor.
+// If the number of indexes passed to dsc_tensor_get is equal to the number of
+// dimensions of x then a new tensor will be allocated with a single element,
+// the caller must take care of unwrapping it if needed.
+extern dsc_tensor *dsc_tensor_get(dsc_ctx *ctx,
+                                  const dsc_tensor *DSC_RESTRICT x,
+                                  int indexes...) noexcept;
+
+extern dsc_tensor *dsc_tensor_slice(dsc_ctx *ctx,
+                                    const dsc_tensor *DSC_RESTRICT x,
+                                    int slices...) noexcept;
 
 // ============================================================
 // Binary Operations (Vector)

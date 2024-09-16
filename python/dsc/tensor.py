@@ -5,8 +5,8 @@
 # (https://opensource.org/license/bsd-3-clause).
 
 from ._bindings import (
-    _DscTensor_p, _DSC_MAX_DIMS, _dsc_add, _dsc_sub, _dsc_mul, _dsc_div, _dsc_pow, _dsc_cast, _dsc_sum, _dsc_mean,
-    _dsc_max, _dsc_i0,
+    _DscTensor_p, _DSC_MAX_DIMS, _DSC_SLICE_NONE, _DscSlice, _dsc_add, _dsc_sub, _dsc_mul, _dsc_div, _dsc_pow, _dsc_cast,
+    _dsc_sum, _dsc_mean, _dsc_max, _dsc_i0, _dsc_tensor_get, _dsc_tensor_slice,
     _dsc_addc_f32, _dsc_addc_f64, _dsc_addc_c32, _dsc_addc_c64,
     _dsc_subc_f32, _dsc_subc_f64, _dsc_subc_c32, _dsc_subc_c64,
     _dsc_mulc_f32, _dsc_mulc_f64, _dsc_mulc_c32, _dsc_mulc_c64,
@@ -24,12 +24,41 @@ from ctypes import (
     c_int
 )
 import sys
-from typing import Union
+from typing import Union, Tuple
 
 
 def _c_ptr(x: 'Tensor') -> _DscTensor_p:
     return x._c_ptr if x else None
 
+def _unwrap(x: 'Tensor') -> Union[float, complex, 'Tensor']:
+    # If x is not wrapping a single value return it
+    if x.n_dim != 1 or len(x) != 1:
+        return x
+
+    x_ptr = x._c_ptr.contents.data
+    if x.dtype == Dtype.F32 or x.dtype == Dtype.F64:
+        return ctypes.cast(x_ptr, DTYPE_TO_CTYPE[x.dtype]).contents.value
+    elif x.dtype == Dtype.C32 or x.dtype == Dtype.C64:
+        complex_arr = ctypes.cast(x_ptr, DTYPE_TO_CTYPE[x.dtype]).contents
+        return complex(complex_arr[0], complex_arr[1])
+    else:
+        raise RuntimeError(f'unknown dtype {x.dtype}')
+
+def _c_slice(x: Union[slice, int], x_dim: int) -> _DscSlice:
+    def _sanitize(i: Union[int, None]) -> int:
+        if i is None:
+            return _DSC_SLICE_NONE
+        return i
+    if isinstance(x, slice):
+        return _DscSlice(_sanitize(x.start), _sanitize(x.stop), _sanitize(x.step))
+    else:
+        # This is needed for when indexes and slices are mixed: suppose x[-1, ::-2] since we don't have a method that
+        # takes both indices and slices this will generate a new slice (-1) where start=dim-1 stop=dim step=1.
+        # Without the dim part if x < 0 the slice would be wrong since start=-1 stop=start+1=0 causing start+dim to be
+        # > stop.
+        return _DscSlice(x if x >= 0 else x + x_dim,
+                         x + 1 if x >= 0 else (x + x_dim + 1),
+                         1)
 
 class Tensor:
     def __init__(self, c_ptr: _DscTensor_p):
@@ -67,6 +96,23 @@ class Tensor:
 
     def __len__(self):
         return self.shape[0]
+
+    def __getitem__(self, item: Union[int, Tuple[int, ...], slice, Tuple[slice, ...]]) -> Union[float, complex, 'Tensor']:
+        if isinstance(item, int):
+            return _unwrap(Tensor(_dsc_tensor_get(_get_ctx(), _c_ptr(self), c_int(item))))
+        elif isinstance(item, Tuple) and all(isinstance(i, int) for i in item):
+            return _unwrap(Tensor(_dsc_tensor_get(_get_ctx(), _c_ptr(self), *tuple(c_int(i) for i in item))))
+        elif isinstance(item, slice):
+            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), _c_slice(item, self.shape[0])))
+        elif isinstance(item, Tuple) and all(isinstance(s, slice) for s in item):
+            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), *tuple(_c_slice(s, self.shape[idx]) for (idx, s) in enumerate(item))))
+        elif isinstance(item, Tuple) and all(isinstance(i, int) or isinstance(i, slice) for i in item):
+            # Note: when mixing indexes and slices there are instances where NumPy collapses a dimension while DSC
+            #       keeps it with value = 1. In those cases a reshape(-1) should be enough. We should keep this in mind
+            #       and at some point probably conform with NumPy.
+            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), *tuple(_c_slice(s, self.shape[idx]) for (idx, s) in enumerate(item))))
+        else:
+            raise RuntimeError(f'can\'t index Tensor with object {item}')
 
     def numpy(self) -> np.ndarray:
         raw_tensor = self._c_ptr.contents

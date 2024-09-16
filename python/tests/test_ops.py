@@ -175,6 +175,86 @@ class TestInit:
 
                 dsc.clear()
 
+class TestIndexing:
+    def test_get(self):
+        # The idea is to start with 1D tensors and then, for all dtypes, test with a growing number of indexes
+        # from 1 up to the number of dimensions (to select a scalar value). Given the number of indexes we generate
+        # a bunch of random pairs to try and cover most use cases.
+        for n_dim in range(4):
+            for dtype in DTYPES:
+                x = random_nd([10 for _ in range(n_dim + 1)], dtype=dtype)
+                x_dsc = dsc.from_numpy(x)
+
+                for indexes in range(n_dim + 1):
+                    for _ in range(10):
+                        idx = tuple(random.randint(-10, 9) for _ in range(indexes + 1))
+                        res = x[idx]
+                        res_dsc = x_dsc[idx]
+                        if isinstance(res_dsc, dsc.Tensor):
+                            assert all_close(res_dsc.numpy(), res)
+                        else:
+                            assert np.isclose(res, res_dsc)
+                dsc.clear()
+
+    def test_slice(self):
+        # Note: this should probably be more exhaustive
+        def _validate_slice(sl: slice, max_dim: int) -> bool:
+            s_start = sl.start
+            s_stop = sl.stop
+            s_step = sl.step
+            san_start = s_start if s_start >= 0 else s_start + max_dim
+            san_stop = s_stop if s_stop >= 0 else s_stop + max_dim
+            # Some of these checks should probably be handles gracefully by DSC
+            if s_step == 0 or san_start == san_stop:
+                return False
+            if (s_step > 0 and san_stop < san_start) or (s_step < 0 and san_stop > san_start):
+                return False
+            return True
+
+        x_1d = random_nd([10], np.float32)
+        x_1d_dsc = dsc.from_numpy(x_1d)
+
+        for start in range(-10, 10):
+            for stop in range(-10, 10):
+                for step in range(-10, 10):
+                    s = slice(start, stop, step)
+                    if not _validate_slice(s, 10):
+                        continue
+                    assert all_close(x_1d_dsc[s].numpy(), x_1d[s])
+
+        x_2d = random_nd([5, 5], np.float32)
+        x_2d_dsc = dsc.from_numpy(x_2d)
+
+        for start in range(-5, 5):
+            for stop in range(-5, 5):
+                for step in range(-5, 5):
+                    s = slice(start, stop, step)
+                    if not _validate_slice(s, 5):
+                        continue
+                    assert all_close(x_2d_dsc[(slice(None, None, None), s)].numpy(), x_2d[(slice(None, None, None), s)])
+
+        for extra_dim in range(-5, 5):
+            for start in range(-5, 5):
+                for stop in range(-5, 5):
+                    for step in range(-5, 5):
+                        s = slice(start, stop, step)
+                        if not _validate_slice(s, 5):
+                            continue
+
+                        x_dsc_1 = x_2d_dsc[(extra_dim, s)].numpy()
+                        x_np_1 = x_2d[(extra_dim, s)]
+                        if x_np_1.ndim != x_dsc_1.ndim:
+                            x_dsc_1 = x_dsc_1.reshape(-1)
+                        assert all_close(x_dsc_1, x_np_1)
+
+                        x_dsc_2 = x_2d_dsc[(s, extra_dim)].numpy()
+                        x_np_2 = x_2d[(s, extra_dim)]
+                        if x_np_2.ndim != x_dsc_2.ndim:
+                            x_dsc_2 = x_dsc_2.reshape(-1)
+                        assert all_close(x_dsc_2, x_np_2)
+
+        dsc.clear()
+
 def test_fft():
     ops = {
         'fft': ((np.fft.fft, np.fft.ifft), (dsc.fft, dsc.ifft)),

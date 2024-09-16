@@ -10,6 +10,8 @@
 #include "dsc_iter.h"
 #include <cstring>
 #include <random>
+#include <cstdarg> // va_xxx
+
 
 // How many independent FFT plans we support. This is completely arbitrary
 #if !defined(DSC_FFT_PLANS)
@@ -489,6 +491,151 @@ dsc_tensor *dsc_cast(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
 
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &x->shape[DSC_MAX_DIMS - x->n_dim], new_dtype);
     copy(x, out);
+
+    return out;
+}
+
+// ============================================================
+// Indexing and Slicing
+//
+
+dsc_tensor *dsc_tensor_get(dsc_ctx *ctx,
+                           const dsc_tensor *DSC_RESTRICT x,
+                           const int indexes...) noexcept {
+    DSC_ASSERT(x != nullptr);
+    DSC_ASSERT((unsigned) indexes <= DSC_MAX_DIMS);
+
+    if (indexes > x->n_dim) {
+        DSC_LOG_FATAL("too many indexes");
+    }
+
+    int el_idx[DSC_MAX_DIMS];
+
+    std::va_list args;
+    va_start(args, indexes);
+    for (int i = 0; i < indexes; ++i) {
+        int idx = va_arg(args, int);
+        const int x_dim_i = x->shape[dsc_tensor_dim(x, i)];
+        // Negative indexes mean accessing from the end
+        if (idx < 0) idx += x_dim_i;
+
+        DSC_ASSERT((unsigned) idx < (unsigned) x_dim_i);
+
+        el_idx[i] = idx;
+    }
+    va_end(args);
+
+    // Since we are wrapping scalars the resulting tensor will be always at least 1D
+    const int out_n_dim = x->n_dim == indexes ? 1 : x->n_dim - indexes;
+    // If we are indexing a single element then of course the output shape will be just 1
+    int out_shape[DSC_MAX_DIMS] = {1};
+    if (x->n_dim > indexes) {
+        memcpy(out_shape, &x->shape[DSC_MAX_DIMS - out_n_dim], out_n_dim * sizeof(*x->shape));
+    }
+
+    dsc_tensor *out = dsc_new_tensor(ctx, out_n_dim, out_shape, x->dtype);
+
+    int offset = 0;
+    for (int i = 0; i < indexes; ++i) {
+        offset += (x->stride[dsc_tensor_dim(x, i)] * el_idx[i]);
+    }
+    const int stride = x->stride[dsc_tensor_dim(x, (indexes - 1))];
+
+    memcpy(out->data, ((byte *) x->data) + (offset * DSC_DTYPE_SIZE[x->dtype]), stride * DSC_DTYPE_SIZE[x->dtype]);
+
+    return out;
+}
+
+template <typename T>
+static DSC_INLINE void copy_slice(const dsc_tensor *DSC_RESTRICT x,
+                                  dsc_tensor *DSC_RESTRICT out,
+                                  const int n_slices,
+                                  dsc_slice *slices) noexcept {
+    DSC_TENSOR_DATA(T, out);
+    DSC_TENSOR_DATA(T, x);
+    dsc_slice_iterator x_it(x, n_slices, slices);
+
+    dsc_for(i, out) {
+        out_data[i] = x_data[x_it.index()];
+
+        x_it.next();
+    }
+}
+
+dsc_tensor *dsc_tensor_slice(dsc_ctx *ctx,
+                             const dsc_tensor *DSC_RESTRICT x,
+                             const int slices...) noexcept {
+    DSC_ASSERT(x != nullptr);
+    DSC_ASSERT((unsigned) slices <= DSC_MAX_DIMS);
+
+    if (slices > x->n_dim) {
+        DSC_LOG_FATAL("too many slices");
+    }
+
+    dsc_slice el_slices[DSC_MAX_DIMS];
+
+    std::va_list args;
+    va_start(args, slices);
+    for (int i = 0; i < slices; ++i) {
+        dsc_slice slice = va_arg(args, dsc_slice);
+        const int x_dim_i = x->shape[dsc_tensor_dim(x, i)];
+
+        DSC_ASSERT(slice.step != 0);
+
+        // If a field is marked using DSC_SLICE_NONE then replace it with the 'default' behaviour.
+        // The default behaviour is controlled by step (see: https://numpy.org/doc/stable/user/basics.indexing.html)
+        if (slice.step == DSC_SLICE_NONE) slice.step = 1;
+        if (slice.start == DSC_SLICE_NONE) {
+            if (slice.step > 0) slice.start = 0;
+            else slice.start = x_dim_i - 1;
+        }
+        if (slice.stop == DSC_SLICE_NONE) {
+            if (slice.step > 0) slice.stop = x_dim_i;
+            else slice.stop = -x_dim_i - 1;
+        }
+
+        if (slice.start < 0) slice.start += x_dim_i;
+        if (slice.stop < 0) slice.stop += x_dim_i;
+
+        DSC_ASSERT(abs(slice.stop - slice.start) <= x_dim_i);
+        DSC_ASSERT((slice.step > 0 && slice.start < slice.stop) || (slice.step < 0 && slice.start > slice.stop));
+
+        DSC_ASSERT(abs(slice.step) <= x_dim_i);
+
+        el_slices[i] = slice;
+    }
+    va_end(args);
+
+    // The number of dimensions in the output tensor is the same as in the input
+    int out_shape[DSC_MAX_DIMS];
+    for (int i = 0; i < x->n_dim; ++i) {
+        if (i < slices) {
+            const dsc_slice slice_i = el_slices[i];
+            const int ne_i = abs(slice_i.stop - slice_i.start);
+            const int abs_step = abs(slice_i.step);
+            out_shape[i] = (ne_i + abs_step - 1) / abs_step;
+        } else {
+            out_shape[i] = x->shape[dsc_tensor_dim(x, i)];
+        }
+    }
+
+    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, out_shape, x->dtype);
+
+    switch (out->dtype) {
+        case F32:
+            copy_slice<f32>(x, out, slices, el_slices);
+            break;
+        case F64:
+            copy_slice<f64>(x, out, slices, el_slices);
+            break;
+        case C32:
+            copy_slice<c32>(x, out, slices, el_slices);
+            break;
+        case C64:
+            copy_slice<c64>(x, out, slices, el_slices);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
+    }
 
     return out;
 }
@@ -1035,8 +1182,8 @@ dsc_tensor *dsc_i0(dsc_ctx *ctx,
 
 template <typename T>
 static DSC_INLINE void sum(const dsc_tensor *DSC_RESTRICT x,
-                                 dsc_tensor *DSC_RESTRICT out,
-                                 int axis_idx) noexcept {
+                           dsc_tensor *DSC_RESTRICT out,
+                           int axis_idx) noexcept {
     DSC_TENSOR_DATA(T, x);
     DSC_TENSOR_DATA(T, out);
 
@@ -1054,8 +1201,8 @@ static DSC_INLINE void sum(const dsc_tensor *DSC_RESTRICT x,
 
 template <typename T>
 static DSC_INLINE void max(const dsc_tensor *DSC_RESTRICT x,
-                              dsc_tensor *DSC_RESTRICT out,
-                              int axis_idx) noexcept {
+                           dsc_tensor *DSC_RESTRICT out,
+                           int axis_idx) noexcept {
     DSC_TENSOR_DATA(T, x);
     DSC_TENSOR_DATA(T, out);
 

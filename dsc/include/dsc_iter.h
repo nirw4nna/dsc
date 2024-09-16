@@ -93,3 +93,57 @@ private:
     const int *x_shape_, *x_stride_, *out_shape_;
     int x_broadcast_stride_[DSC_MAX_DIMS]{}, x_idx_[DSC_MAX_DIMS]{};
 };
+
+struct dsc_slice_iterator {
+    dsc_slice_iterator(const dsc_tensor *x, const int n_slices, const dsc_slice *slices) noexcept :
+            shape_(x->shape), stride_(x->stride) {
+        for (int i = 0; i < x->n_dim; ++i) {
+            const int dim_idx = dsc_tensor_dim(x, i);
+            if (i < n_slices) {
+                start_[dim_idx] = slices[i].start;
+                stop_[dim_idx] = slices[i].stop;
+                step_[dim_idx] = slices[i].step;
+            } else {
+                start_[dim_idx] = 0;
+                stop_[dim_idx] = shape_[dim_idx];
+                step_[dim_idx] = 1;
+            }
+
+            idx_[dim_idx] = start_[dim_idx];
+        }
+    }
+
+    DSC_INLINE void next() noexcept {
+        for (int i = DSC_MAX_DIMS - 1; i >= 0; --i) {
+            idx_[i] += step_[i];
+            if ((step_[i] > 0 && idx_[i] < stop_[i]) ||
+                (step_[i] < 0 && idx_[i] > stop_[i])) [[likely]] {
+                return;
+            }
+            idx_[i] = start_[i];
+        }
+    }
+
+    DSC_INLINE int index() const noexcept {
+        return compute_index<DSC_MAX_DIMS, 0>();
+    }
+
+private:
+    template<int N, int Cur = 0>
+    constexpr int compute_index() const noexcept {
+        // Note: computing the index on the fly is way easier than keeping track of the current index
+        // and increasing/decreasing it after each step, but it requires some benchmarking!
+        if constexpr (Cur == N) {
+            return 0;
+        } else {
+            return idx_[Cur] * stride_[Cur] + compute_index<N, Cur + 1>();
+        }
+    }
+
+    const int *shape_;
+    const int *stride_;
+    int idx_[DSC_MAX_DIMS]{};
+    int start_[DSC_MAX_DIMS]{};
+    int stop_[DSC_MAX_DIMS]{};
+    int step_[DSC_MAX_DIMS]{};
+};
