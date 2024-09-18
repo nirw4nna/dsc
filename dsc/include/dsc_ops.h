@@ -326,3 +326,14 @@ struct max_op {
         }
     }
 };
+
+struct min_op {
+    template<typename T>
+    DSC_INLINE DSC_STRICTLY_PURE T operator()(const T xa, const T xb) const noexcept {
+        if constexpr (dsc_is_real<T>()) {
+            return DSC_MIN(xa, xb);
+        } else {
+            return xa.real > xb.real ? xb : xa;
+        }
+    }
+};

@@ -120,11 +120,23 @@ class TestOps:
                 assert all_close(res_dsc.numpy(), res_np)
                 dsc.clear()
 
+    def test_clip(self):
+        for dtype in DTYPES:
+            print(f'Testing clip with {dtype.__name__}')
+            x = np.arange(10).astype(dtype) - 5
+            x_dsc = dsc.from_numpy(x)
+
+            assert all_close(dsc.clip(x_dsc, -2, 2).numpy(), np.clip(x, -2, 2))
+            assert all_close(dsc.clip(x_dsc, -3).numpy(), np.clip(x, -3, None))
+            assert all_close(dsc.clip(x_dsc, None, 2).numpy(), np.clip(x, None, 2))
+            dsc.clear()
+
     def test_unary_axis(self):
         ops = {
             'sum': (np.sum, dsc.sum),
             'mean': (np.mean, dsc.mean),
             'max': (np.max, dsc.max),
+            'min': (np.min, dsc.min),
         }
         for op_name in ops.keys():
             np_op, dsc_op = ops[op_name]

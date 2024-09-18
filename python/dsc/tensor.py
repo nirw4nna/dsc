@@ -6,7 +6,7 @@
 
 from ._bindings import (
     _DscTensor_p, _DSC_MAX_DIMS, _DSC_SLICE_NONE, _DscSlice, _dsc_add, _dsc_sub, _dsc_mul, _dsc_div, _dsc_pow, _dsc_cast,
-    _dsc_sum, _dsc_mean, _dsc_max, _dsc_i0, _dsc_tensor_get, _dsc_tensor_slice,
+    _dsc_sum, _dsc_mean, _dsc_max, _dsc_min, _dsc_i0, _dsc_clip, _dsc_tensor_get, _dsc_tensor_slice,
     _dsc_addc_f32, _dsc_addc_f64, _dsc_addc_c32, _dsc_addc_c64,
     _dsc_subc_f32, _dsc_subc_f64, _dsc_subc_c32, _dsc_subc_c64,
     _dsc_mulc_f32, _dsc_mulc_f64, _dsc_mulc_c32, _dsc_mulc_c64,
@@ -146,21 +146,21 @@ def from_numpy(x: np.ndarray) -> Tensor:
         raise RuntimeError(f'can\'t create a Tensor with {n_dims} dimensions')
 
     if n_dims == 1:
-        res = Tensor(_dsc_tensor_1d(_get_ctx(), dtype, c_int(dims[0])))
+        out = Tensor(_dsc_tensor_1d(_get_ctx(), dtype, c_int(dims[0])))
     elif n_dims == 2:
-        res = Tensor(_dsc_tensor_2d(_get_ctx(), dtype,
+        out = Tensor(_dsc_tensor_2d(_get_ctx(), dtype,
                                     c_int(dims[0]), c_int(dims[1])))
     elif n_dims == 3:
-        res = Tensor(_dsc_tensor_3d(_get_ctx(), dtype,
+        out = Tensor(_dsc_tensor_3d(_get_ctx(), dtype,
                                     c_int(dims[0]), c_int(dims[1]),
                                     c_int(dims[2])))
     else:
-        res = Tensor(_dsc_tensor_4d(_get_ctx(), dtype,
+        out = Tensor(_dsc_tensor_4d(_get_ctx(), dtype,
                                     c_int(dims[0]), c_int(dims[1]),
                                     c_int(dims[2]), c_int(dims[3])))
 
-    ctypes.memmove(_c_ptr(res).contents.data, x.ctypes.data, x.nbytes)
-    return res
+    ctypes.memmove(_c_ptr(out).contents.data, x.ctypes.data, x.nbytes)
+    return out
 
 
 def _scalar_op(xa: Tensor, xb: Union[float, complex], out: Tensor, op_base_name: str) -> Tensor:
@@ -295,6 +295,11 @@ def imag(x: Tensor) -> Tensor:
 def i0(x: Tensor) -> Tensor:
     return Tensor(_dsc_i0(_get_ctx(), _c_ptr(x)))
 
+def clip(x: Tensor, x_min: float = None, x_max: float = None, out: Tensor = None) -> Tensor:
+    x_min = x_min if x_min is not None else float('-inf')
+    x_max = x_max if x_max is not None else float('+inf')
+    return Tensor(_dsc_clip(_get_ctx(), _c_ptr(x), _c_ptr(out), x_min, x_max))
+
 def sum(x: Tensor, out: Tensor = None, axis: int = -1, keepdims: bool = True) -> Tensor:
     return Tensor(_dsc_sum(_get_ctx(), _c_ptr(x), _c_ptr(out), axis, keepdims))
 
@@ -303,6 +308,9 @@ def mean(x: Tensor, out: Tensor = None, axis: int = -1, keepdims: bool = True) -
 
 def max(x: Tensor, out: Tensor = None, axis: int = -1, keepdims: bool = True) -> Tensor:
     return Tensor(_dsc_max(_get_ctx(), _c_ptr(x), _c_ptr(out), axis, keepdims))
+
+def min(x: Tensor, out: Tensor = None, axis: int = -1, keepdims: bool = True) -> Tensor:
+    return Tensor(_dsc_min(_get_ctx(), _c_ptr(x), _c_ptr(out), axis, keepdims))
 
 def arange(n: int, dtype: Dtype = Dtype.F32) -> Tensor:
     return Tensor(_dsc_arange(_get_ctx(), n, c_uint8(dtype.value)))

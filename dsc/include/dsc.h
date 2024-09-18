@@ -118,6 +118,7 @@ struct dsc_slice {
     };
 };
 
+
 static DSC_INLINE f64 dsc_timer() noexcept {
     timespec ts{};
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -306,6 +307,15 @@ extern dsc_tensor *dsc_imag(dsc_ctx *ctx,
 extern dsc_tensor *dsc_i0(dsc_ctx *ctx,
                           const dsc_tensor *DSC_RESTRICT x) noexcept;
 
+// Use a single function for all the dtypes since complex comparison is done by just checking
+// the real part. By setting min to -inf and max to +inf we can simply clip x with two comparisons:
+// out = min(max(x, x_min), x_max).
+extern dsc_tensor *dsc_clip(dsc_ctx *ctx,
+                            const dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT out = nullptr,
+                            f64 x_min = dsc_inf<f64, false>(),
+                            f64 x_max = dsc_inf<f64, true>()) noexcept;
+
 // ============================================================
 // Unary Operations Along Axis
 
@@ -322,6 +332,12 @@ extern dsc_tensor *dsc_mean(dsc_ctx *ctx,
                             bool keep_dims = true) noexcept;
 
 extern dsc_tensor *dsc_max(dsc_ctx *ctx,
+                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT out = nullptr,
+                           int axis = -1,
+                           bool keep_dims = true) noexcept;
+
+extern dsc_tensor *dsc_min(dsc_ctx *ctx,
                            const dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out = nullptr,
                            int axis = -1,

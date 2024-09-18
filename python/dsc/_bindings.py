@@ -575,6 +575,19 @@ _lib.dsc_i0.argtypes = [_DscCtx, _DscTensor_p]
 _lib.dsc_i0.restype = _DscTensor_p
 
 
+# extern dsc_tensor *dsc_clip(dsc_ctx *ctx,
+#                             const dsc_tensor *DSC_RESTRICT x,
+#                             dsc_tensor *DSC_RESTRICT out = nullptr,
+#                             f64 x_min = dsc_inf<f64, false>(),
+#                             f64 x_max = dsc_inf<f64, true>()) noexcept;
+def _dsc_clip(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p, x_min: float, x_max: float) -> _DscTensor_p:
+    return _lib.dsc_clip(ctx, x, out, c_double(x_min), c_double(x_max))
+
+
+_lib.dsc_clip.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_double, c_double]
+_lib.dsc_clip.restype = _DscTensor_p
+
+
 # extern dsc_tensor *dsc_sum(dsc_ctx *ctx,
 #                            const dsc_tensor *DSC_RESTRICT x,
 #                            dsc_tensor *DSC_RESTRICT out = nullptr,
@@ -612,6 +625,19 @@ def _dsc_max(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p, axis: int = -1, k
 
 _lib.dsc_max.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_bool]
 _lib.dsc_max.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_min(dsc_ctx *ctx,
+#                            const dsc_tensor *DSC_RESTRICT x,
+#                            dsc_tensor *DSC_RESTRICT out = nullptr,
+#                            int axis = -1,
+#                            bool keep_dims = true) noexcept;
+def _dsc_min(ctx: _DscCtx, x: _DscTensor_p, out: _DscTensor_p, axis: int = -1, keepdims: bool = True) -> _DscTensor_p:
+    return _lib.dsc_min(ctx, x, out, c_int(axis), c_bool(keepdims))
+
+
+_lib.dsc_min.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_bool]
+_lib.dsc_min.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_fft(dsc_ctx *ctx,
