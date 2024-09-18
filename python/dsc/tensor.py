@@ -5,8 +5,9 @@
 # (https://opensource.org/license/bsd-3-clause).
 
 from ._bindings import (
-    _DscTensor_p, _DSC_MAX_DIMS, _DSC_SLICE_NONE, _DscSlice, _dsc_add, _dsc_sub, _dsc_mul, _dsc_div, _dsc_pow, _dsc_cast,
+    _DscTensor_p, _DSC_MAX_DIMS, _DSC_SLICE_NONE, _DscSlice,  _dsc_cast,
     _dsc_sum, _dsc_mean, _dsc_max, _dsc_min, _dsc_i0, _dsc_clip, _dsc_tensor_get, _dsc_tensor_slice,
+    _dsc_add, _dsc_sub, _dsc_mul, _dsc_div, _dsc_pow,
     _dsc_addc_f32, _dsc_addc_f64, _dsc_addc_c32, _dsc_addc_c64,
     _dsc_subc_f32, _dsc_subc_f64, _dsc_subc_c32, _dsc_subc_c64,
     _dsc_mulc_f32, _dsc_mulc_f64, _dsc_mulc_c32, _dsc_mulc_c64,
@@ -44,7 +45,7 @@ def _unwrap(x: 'Tensor') -> Union[float, complex, 'Tensor']:
     else:
         raise RuntimeError(f'unknown dtype {x.dtype}')
 
-def _c_slice(x: Union[slice, int], x_dim: int) -> _DscSlice:
+def _c_slice(x: Union[slice, int]) -> _DscSlice:
     def _sanitize(i: Union[int, None]) -> int:
         if i is None:
             return _DSC_SLICE_NONE
@@ -53,12 +54,9 @@ def _c_slice(x: Union[slice, int], x_dim: int) -> _DscSlice:
         return _DscSlice(_sanitize(x.start), _sanitize(x.stop), _sanitize(x.step))
     else:
         # This is needed for when indexes and slices are mixed: suppose x[-1, ::-2] since we don't have a method that
-        # takes both indices and slices this will generate a new slice (-1) where start=dim-1 stop=dim step=1.
-        # Without the dim part if x < 0 the slice would be wrong since start=-1 stop=start+1=0 causing start+dim to be
-        # > stop.
-        return _DscSlice(x if x >= 0 else x + x_dim,
-                         x + 1 if x >= 0 else (x + x_dim + 1),
-                         1)
+        # takes both indexes and slices this will generate a new slice (-1) where start=dim stop=dim step=dim. All the
+        # handling will be done internally by the library.
+        return _DscSlice(x, x, x)
 
 class Tensor:
     def __init__(self, c_ptr: _DscTensor_p):
@@ -103,14 +101,14 @@ class Tensor:
         elif isinstance(item, Tuple) and all(isinstance(i, int) for i in item):
             return _unwrap(Tensor(_dsc_tensor_get(_get_ctx(), _c_ptr(self), *tuple(c_int(i) for i in item))))
         elif isinstance(item, slice):
-            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), _c_slice(item, self.shape[0])))
+            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), _c_slice(item)))
         elif isinstance(item, Tuple) and all(isinstance(s, slice) for s in item):
-            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), *tuple(_c_slice(s, self.shape[idx]) for (idx, s) in enumerate(item))))
+            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), *tuple(_c_slice(s) for (idx, s) in enumerate(item))))
         elif isinstance(item, Tuple) and all(isinstance(i, int) or isinstance(i, slice) for i in item):
             # Note: when mixing indexes and slices there are instances where NumPy collapses a dimension while DSC
             #       keeps it with value = 1. In those cases a reshape(-1) should be enough. We should keep this in mind
             #       and at some point probably conform with NumPy.
-            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), *tuple(_c_slice(s, self.shape[idx]) for (idx, s) in enumerate(item))))
+            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), *tuple(_c_slice(s) for (idx, s) in enumerate(item))))
         else:
             raise RuntimeError(f'can\'t index Tensor with object {item}')
 
@@ -132,7 +130,6 @@ class Tensor:
 
     def cast(self, dtype: Dtype) -> 'Tensor':
         return Tensor(_dsc_cast(_get_ctx(), self._c_ptr, c_uint8(dtype.value)))
-
 
 def from_numpy(x: np.ndarray) -> Tensor:
     if x.dtype not in NP_TO_DTYPE:
@@ -162,7 +159,6 @@ def from_numpy(x: np.ndarray) -> Tensor:
     ctypes.memmove(_c_ptr(out).contents.data, x.ctypes.data, x.nbytes)
     return out
 
-
 def _scalar_op(xa: Tensor, xb: Union[float, complex], out: Tensor, op_base_name: str) -> Tensor:
     op_dtype = xa.dtype
     if isinstance(xb, float):
@@ -182,7 +178,6 @@ def _scalar_op(xa: Tensor, xb: Union[float, complex], out: Tensor, op_base_name:
     else:
         raise RuntimeError(f'scalar operation "{op_name}" doesn\'t exist in module')
 
-
 def _tensor_op(xa: Tensor, xb: Union[Tensor, np.ndarray], out: Tensor, op_name: str) -> Tensor:
     if isinstance(xb, np.ndarray):
         # The conversion from (and to) NumPy is not free, so it's better to do that once and then work with DSC tensors.
@@ -195,7 +190,6 @@ def _tensor_op(xa: Tensor, xb: Union[Tensor, np.ndarray], out: Tensor, op_name: 
     else:
         raise RuntimeError(f'tensor operation "{op_name}" doesn\'t exist in module')
 
-
 def add(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
     if isinstance(xb, (float, complex)):
         return _scalar_op(xa, xb, out, op_base_name='_dsc_addc')
@@ -203,7 +197,6 @@ def add(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor =
         return _tensor_op(xa, xb, out, op_name='_dsc_add')
     else:
         raise RuntimeError(f'can\'t add Tensor with object of type {type(xb)}')
-
 
 def sub(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
     if isinstance(xb, (float, complex)):
@@ -213,7 +206,6 @@ def sub(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor =
     else:
         raise RuntimeError(f'can\'t subtract Tensor with object of type {type(xb)}')
 
-
 def mul(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
     if isinstance(xb, (float, complex)):
         return _scalar_op(xa, xb, out, op_base_name='_dsc_mulc')
@@ -221,7 +213,6 @@ def mul(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor =
         return _tensor_op(xa, xb, out, op_name='_dsc_mul')
     else:
         raise RuntimeError(f'can\'t multiply Tensor with object of type {type(xb)}')
-
 
 def true_div(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
     if isinstance(xb, (float, complex)):
@@ -231,7 +222,6 @@ def true_div(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Ten
     else:
         raise RuntimeError(f'can\'t divide Tensor with object of type {type(xb)}')
 
-
 def power(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
     if isinstance(xb, (float, complex)):
         return _scalar_op(xa, xb, out, op_base_name='_dsc_powc')
@@ -240,54 +230,41 @@ def power(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor
     else:
         raise RuntimeError(f'can\'t raise to the power Tensor with object of type {type(xb)}')
 
-
 def cos(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_cos(_get_ctx(), _c_ptr(x), _c_ptr(out)))
-
 
 def sin(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_sin(_get_ctx(), _c_ptr(x), _c_ptr(out)))
 
-
 def sinc(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_sinc(_get_ctx(), _c_ptr(x), _c_ptr(out)))
-
 
 def logn(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_logn(_get_ctx(), _c_ptr(x), _c_ptr(out)))
 
-
 def log2(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_log2(_get_ctx(), _c_ptr(x), _c_ptr(out)))
-
 
 def log10(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_log10(_get_ctx(), _c_ptr(x), _c_ptr(out)))
 
-
 def exp(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_exp(_get_ctx(), _c_ptr(x), _c_ptr(out)))
-
 
 def sqrt(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_sqrt(_get_ctx(), _c_ptr(x), _c_ptr(out)))
 
-
 def absolute(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_abs(_get_ctx(), _c_ptr(x), _c_ptr(out)))
-
 
 def angle(x: Tensor) -> Tensor:
     return Tensor(_dsc_angle(_get_ctx(), _c_ptr(x)))
 
-
 def conj(x: Tensor) -> Tensor:
     return Tensor(_dsc_conj(_get_ctx(), _c_ptr(x)))
 
-
 def real(x: Tensor) -> Tensor:
     return Tensor(_dsc_real(_get_ctx(), _c_ptr(x), ))
-
 
 def imag(x: Tensor) -> Tensor:
     return Tensor(_dsc_imag(_get_ctx(), _c_ptr(x)))
@@ -315,10 +292,8 @@ def min(x: Tensor, out: Tensor = None, axis: int = -1, keepdims: bool = True) ->
 def arange(n: int, dtype: Dtype = Dtype.F32) -> Tensor:
     return Tensor(_dsc_arange(_get_ctx(), n, c_uint8(dtype.value)))
 
-
 def randn(*shape: int, dtype: Dtype = Dtype.F32) -> Tensor:
     return Tensor(_dsc_randn(_get_ctx(), shape, c_uint8(dtype.value)))
-
 
 def plan_fft(n: int, dtype: Dtype = Dtype.F64):
     """
@@ -328,26 +303,20 @@ def plan_fft(n: int, dtype: Dtype = Dtype.F64):
     """
     return _dsc_plan_fft(_get_ctx(), n, c_uint8(dtype.value))
 
-
 def fft(x: Tensor, out: Tensor = None, n: int = -1, axis: int = -1) -> Tensor:
     return Tensor(_dsc_fft(_get_ctx(), _c_ptr(x), _c_ptr(out), n=c_int(n), axis=c_int(axis)))
-
 
 def ifft(x: Tensor, out: Tensor = None, n: int = -1, axis: int = -1) -> Tensor:
     return Tensor(_dsc_ifft(_get_ctx(), _c_ptr(x), _c_ptr(out), n=c_int(n), axis=c_int(axis)))
 
-
 def rfft(x: Tensor, out: Tensor = None, n: int = -1, axis: int = -1) -> Tensor:
     return Tensor(_dsc_rfft(_get_ctx(), _c_ptr(x), _c_ptr(out), n=c_int(n), axis=c_int(axis)))
-
 
 def irfft(x: Tensor, out: Tensor = None, n: int = -1, axis: int = -1) -> Tensor:
     return Tensor(_dsc_irfft(_get_ctx(), _c_ptr(x), _c_ptr(out), n=c_int(n), axis=c_int(axis)))
 
-
 def fftfreq(n: int, d: float = 1., dtype: Dtype = Dtype.F32) -> Tensor:
     return Tensor(_dsc_fftfreq(_get_ctx(), c_int(n), c_double(d), c_uint8(dtype.value)))
-
 
 def rfftfreq(n: int, d: float = 1., dtype: Dtype = Dtype.F32) -> Tensor:
     return Tensor(_dsc_rfftfreq(_get_ctx(), c_int(n), c_double(d), c_uint8(dtype.value)))

@@ -567,12 +567,29 @@ dsc_tensor *dsc_tensor_slice(dsc_ctx *ctx,
     }
 
     dsc_slice el_slices[DSC_MAX_DIMS];
+    bool collapse_dim[DSC_MAX_DIMS] = {false};
 
     std::va_list args;
     va_start(args, slices);
     for (int i = 0; i < slices; ++i) {
         dsc_slice slice = va_arg(args, dsc_slice);
         const int x_dim_i = x->shape[dsc_tensor_dim(x, i)];
+
+        // The user is trying to access a specific index rather than a slice, which means
+        // that this dimension must be collapsed. If the index is < 0 then also the proper
+        // handling must be performed
+        if (slice.start == slice.stop &&
+            slice.start == slice.step &&
+            slice.start != DSC_SLICE_NONE) {
+            collapse_dim[i] = true;
+            slice.step = 1;
+            if (slice.start < 0) {
+                slice.start += x_dim_i;
+                slice.stop += x_dim_i + 1;
+            } else {
+                slice.stop += 1;
+            }
+        }
 
         DSC_ASSERT(slice.step != 0);
 
@@ -600,20 +617,25 @@ dsc_tensor *dsc_tensor_slice(dsc_ctx *ctx,
     }
     va_end(args);
 
-    // The number of dimensions in the output tensor is the same as in the input
     int out_shape[DSC_MAX_DIMS];
-    for (int i = 0; i < x->n_dim; ++i) {
+    int out_n_dim = x->n_dim;
+    for (int i = 0, out_idx = 0; i < x->n_dim; ++i) {
         if (i < slices) {
+            if (collapse_dim[i]) {
+                out_n_dim -= 1;
+                continue;
+            }
             const dsc_slice slice_i = el_slices[i];
             const int ne_i = abs(slice_i.stop - slice_i.start);
             const int abs_step = abs(slice_i.step);
-            out_shape[i] = (ne_i + abs_step - 1) / abs_step;
+            out_shape[out_idx] = (ne_i + abs_step - 1) / abs_step;
         } else {
-            out_shape[i] = x->shape[dsc_tensor_dim(x, i)];
+            out_shape[out_idx] = x->shape[dsc_tensor_dim(x, i)];
         }
+        out_idx += 1;
     }
 
-    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, out_shape, x->dtype);
+    dsc_tensor *out = dsc_new_tensor(ctx, out_n_dim, out_shape, x->dtype);
 
     switch (out->dtype) {
         case F32:

@@ -255,14 +255,10 @@ class TestIndexing:
 
                         x_dsc_1 = x_2d_dsc[(extra_dim, s)].numpy()
                         x_np_1 = x_2d[(extra_dim, s)]
-                        if x_np_1.ndim != x_dsc_1.ndim:
-                            x_dsc_1 = x_dsc_1.reshape(-1)
                         assert all_close(x_dsc_1, x_np_1)
 
                         x_dsc_2 = x_2d_dsc[(s, extra_dim)].numpy()
                         x_np_2 = x_2d[(s, extra_dim)]
-                        if x_np_2.ndim != x_dsc_2.ndim:
-                            x_dsc_2 = x_dsc_2.reshape(-1)
                         assert all_close(x_dsc_2, x_np_2)
 
         dsc.clear()
