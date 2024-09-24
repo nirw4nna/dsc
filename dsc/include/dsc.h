@@ -167,6 +167,18 @@ extern dsc_tensor *dsc_tensor_4d(dsc_ctx *ctx,
                                  int dim1, int dim2,
                                  int dim3, int dim4) noexcept;
 
+extern dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx,
+                                f32 val) noexcept;
+
+extern dsc_tensor *dsc_wrap_f64(dsc_ctx *ctx,
+                                f64 val) noexcept;
+
+extern dsc_tensor *dsc_wrap_c32(dsc_ctx *ctx,
+                                c32 val) noexcept;
+
+extern dsc_tensor *dsc_wrap_c64(dsc_ctx *ctx,
+                                c64 val) noexcept;
+
 extern dsc_tensor *dsc_arange(dsc_ctx *ctx,
                               int n,
                               dsc_dtype dtype = DSC_DEFAULT_TYPE) noexcept;
@@ -184,16 +196,26 @@ extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
 // Indexing and Slicing
 //
 // All indexing and slicing operations will return a new tensor.
-// If the number of indexes passed to dsc_tensor_get is equal to the number of
+// If the number of indexes passed to dsc_tensor_get_idx is equal to the number of
 // dimensions of x then a new tensor will be allocated with a single element,
 // the caller must take care of unwrapping it if needed.
-extern dsc_tensor *dsc_tensor_get(dsc_ctx *ctx,
-                                  const dsc_tensor *DSC_RESTRICT x,
-                                  int indexes...) noexcept;
+extern dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
+                                      const dsc_tensor *DSC_RESTRICT x,
+                                      int indexes...) noexcept;
 
-extern dsc_tensor *dsc_tensor_slice(dsc_ctx *ctx,
-                                    const dsc_tensor *DSC_RESTRICT x,
-                                    int slices...) noexcept;
+extern dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
+                                        const dsc_tensor *DSC_RESTRICT x,
+                                        int slices...) noexcept;
+
+extern void dsc_tensor_set_idx(dsc_ctx *,
+                               dsc_tensor *DSC_RESTRICT xa,
+                               const dsc_tensor *DSC_RESTRICT xb,
+                               int indexes...) noexcept;
+
+extern void dsc_tensor_set_slice(dsc_ctx *,
+                                 dsc_tensor *DSC_RESTRICT xa,
+                                 const dsc_tensor *DSC_RESTRICT xb,
+                                 int slices...) noexcept;
 
 // ============================================================
 // Binary Operations (Vector)

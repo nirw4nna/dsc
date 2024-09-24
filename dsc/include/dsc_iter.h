@@ -96,7 +96,7 @@ private:
 
 struct dsc_slice_iterator {
     dsc_slice_iterator(const dsc_tensor *x, const int n_slices, const dsc_slice *slices) noexcept :
-            shape_(x->shape), stride_(x->stride) {
+            shape_(x->shape), stride_(x->stride), n_dim_(x->n_dim) {
         for (int i = 0; i < x->n_dim; ++i) {
             const int dim_idx = dsc_tensor_dim(x, i);
             if (i < n_slices) {
@@ -113,8 +113,12 @@ struct dsc_slice_iterator {
         }
     }
 
+    DSC_INLINE bool has_next() const noexcept {
+        return !end_;
+    }
+
     DSC_INLINE void next() noexcept {
-        for (int i = DSC_MAX_DIMS - 1; i >= 0; --i) {
+        for (int i = DSC_MAX_DIMS - 1; i >= (DSC_MAX_DIMS - n_dim_); --i) {
             idx_[i] += step_[i];
             if ((step_[i] > 0 && idx_[i] < stop_[i]) ||
                 (step_[i] < 0 && idx_[i] > stop_[i])) [[likely]] {
@@ -122,6 +126,7 @@ struct dsc_slice_iterator {
             }
             idx_[i] = start_[i];
         }
+        end_ = true;
     }
 
     DSC_INLINE int index() const noexcept {
@@ -146,4 +151,6 @@ private:
     int start_[DSC_MAX_DIMS]{};
     int stop_[DSC_MAX_DIMS]{};
     int step_[DSC_MAX_DIMS]{};
+    const int n_dim_;
+    bool end_ = false;
 };

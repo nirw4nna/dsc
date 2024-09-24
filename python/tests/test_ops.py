@@ -9,15 +9,19 @@ import numpy as np
 import random
 import pytest
 from typing import List
+import math
 
 
 @pytest.fixture(scope="session", autouse=True)
 def session_fixture():
+    # This is invoked once before starting the test session
     dsc.init(1024*1024*1024)
     yield
 
-
-def teardown_function():
+@pytest.fixture(autouse=True)
+def teardown_fixture():
+    # This is invoked automatically after each test
+    yield
     dsc.clear()
 
 
@@ -188,7 +192,7 @@ class TestInit:
                 dsc.clear()
 
 class TestIndexing:
-    def test_get(self):
+    def test_get_idx(self):
         # The idea is to start with 1D tensors and then, for all dtypes, test with a growing number of indexes
         # from 1 up to the number of dimensions (to select a scalar value). Given the number of indexes we generate
         # a bunch of random pairs to try and cover most use cases.
@@ -208,21 +212,22 @@ class TestIndexing:
                             assert np.isclose(res, res_dsc)
                 dsc.clear()
 
-    def test_slice(self):
-        # Note: this should probably be more exhaustive
-        def _validate_slice(sl: slice, max_dim: int) -> bool:
-            s_start = sl.start
-            s_stop = sl.stop
-            s_step = sl.step
-            san_start = s_start if s_start >= 0 else s_start + max_dim
-            san_stop = s_stop if s_stop >= 0 else s_stop + max_dim
-            # Some of these checks should probably be handles gracefully by DSC
-            if s_step == 0 or san_start == san_stop:
-                return False
-            if (s_step > 0 and san_stop < san_start) or (s_step < 0 and san_stop > san_start):
-                return False
-            return True
+    @staticmethod
+    def _validate_slice(sl: slice, max_dim: int) -> bool:
+        s_start = sl.start
+        s_stop = sl.stop
+        s_step = sl.step
+        san_start = s_start if s_start >= 0 else s_start + max_dim
+        san_stop = s_stop if s_stop >= 0 else s_stop + max_dim
+        # Some of these checks should probably be handles gracefully by DSC
+        if s_step == 0 or san_start == san_stop:
+            return False
+        if (s_step > 0 and san_stop < san_start) or (s_step < 0 and san_stop > san_start):
+            return False
+        return True
 
+    def test_get_slice(self):
+        # Note: this should probably be more exhaustive
         x_1d = random_nd([10], np.float32)
         x_1d_dsc = dsc.from_numpy(x_1d)
 
@@ -230,7 +235,7 @@ class TestIndexing:
             for stop in range(-10, 10):
                 for step in range(-10, 10):
                     s = slice(start, stop, step)
-                    if not _validate_slice(s, 10):
+                    if not TestIndexing._validate_slice(s, 10):
                         continue
                     assert all_close(x_1d_dsc[s].numpy(), x_1d[s])
 
@@ -241,7 +246,7 @@ class TestIndexing:
             for stop in range(-5, 5):
                 for step in range(-5, 5):
                     s = slice(start, stop, step)
-                    if not _validate_slice(s, 5):
+                    if not TestIndexing._validate_slice(s, 5):
                         continue
                     assert all_close(x_2d_dsc[(slice(None, None, None), s)].numpy(), x_2d[(slice(None, None, None), s)])
 
@@ -250,7 +255,7 @@ class TestIndexing:
                 for stop in range(-5, 5):
                     for step in range(-5, 5):
                         s = slice(start, stop, step)
-                        if not _validate_slice(s, 5):
+                        if not TestIndexing._validate_slice(s, 5):
                             continue
 
                         x_dsc_1 = x_2d_dsc[(extra_dim, s)].numpy()
@@ -261,7 +266,118 @@ class TestIndexing:
                         x_np_2 = x_2d[(s, extra_dim)]
                         assert all_close(x_dsc_2, x_np_2)
 
+    def test_set_idx(self):
+        for n_dim in range(1, 5):
+            for dtype in DTYPES:
+                x = random_nd([10 for _ in range(n_dim)], dtype=dtype)
+                x_dsc = dsc.from_numpy(x)
+
+                for indexes in range(1, n_dim):
+                    for _ in range(10):
+                        idx = tuple(random.randint(-10, 9) for _ in range(indexes))
+                        val = random.random() + 1 if indexes == n_dim else \
+                            random_nd([10 for _ in range(n_dim - indexes)], dtype=dtype)
+                        x[idx] = val
+                        x_dsc[idx] = val
+                        assert all_close(x_dsc.numpy(), x)
+
+    def test_set_slice(self):
+        def _shape_from_slice(sl: slice, max_dim: int) -> List[int]:
+            real_start = sl.start if sl.start >= 0 else sl.start + max_dim
+            real_stop = sl.stop if sl.stop >= 0 else sl.stop + max_dim
+            return [math.ceil(math.fabs(real_start - real_stop) / math.fabs(sl.step))]
+
+        # This is not exhaustive, but it's good enough for now
+        x_1d = random_nd([10], np.float32)
+        x_1d_dsc = dsc.from_numpy(x_1d)
+
+        x_1d[:] = np.ones(10, dtype=np.float32)
+        x_1d_dsc[:] = np.ones(10, dtype=np.float32)
+        assert all_close(x_1d_dsc.numpy(), x_1d)
+
+        for start in range(-10, 10):
+            for stop in range(-10, 10):
+                for step in range(-10, 10):
+                    s = slice(start, stop, step)
+                    if not TestIndexing._validate_slice(s, 10):
+                        continue
+                    x_1d[s] = 1516.
+                    x_1d_dsc[s] = 1516.
+                    assert all_close(x_1d_dsc.numpy(), x_1d)
+
+                    val_shape = _shape_from_slice(s, 10)
+                    val = random_nd(val_shape, dtype=np.float32)
+                    x_1d[s] = val
+                    x_1d_dsc[s] = val
+                    assert all_close(x_1d_dsc.numpy(), x_1d)
+
         dsc.clear()
+
+        x_2d = random_nd([5, 5], np.float32)
+        x_2d_dsc = dsc.from_numpy(x_2d)
+
+        for extra_dim in range(-5, 5):
+            for start in range(-5, 5):
+                for stop in range(-5, 5):
+                    for step in range(-5, 5):
+                        s = slice(start, stop, step)
+                        if not TestIndexing._validate_slice(s, 5):
+                            continue
+
+                        x_2d[(extra_dim, s)] = 12.
+                        x_2d_dsc[(extra_dim, s)] = 12.
+                        assert all_close(x_2d_dsc.numpy(), x_2d)
+
+                        x_2d[(s, extra_dim)] = -1.55
+                        x_2d_dsc[(s, extra_dim)] = -1.55
+                        assert all_close(x_2d_dsc.numpy(), x_2d)
+
+                        val_shape = _shape_from_slice(s, 5)
+                        val = random_nd(val_shape, np.float32)
+                        x_2d[(extra_dim, s)] = val
+                        x_2d_dsc[(extra_dim, s)] = val
+                        assert all_close(x_2d_dsc.numpy(), x_2d)
+
+                        val = random_nd(val_shape, np.float32)
+                        x_2d[(s, extra_dim)] = val
+                        x_2d_dsc[(s, extra_dim)] = val
+                        assert all_close(x_2d_dsc.numpy(), x_2d)
+
+def test_creation():
+    for n_dim in range(4):
+        for dtype in DTYPES:
+            shape = tuple(random.randint(1, 20) for _ in range(n_dim + 1))
+            fill = random.random()
+            if dtype == np.complex64 or dtype == np.complex128:
+                fill = complex(random.random(), random.random())
+            x = np.full(shape, fill_value=fill, dtype=dtype)
+            x_dsc = dsc.full(shape, fill_value=fill, dtype=DSC_DTYPES[dtype])
+            assert all_close(x_dsc.numpy(), x)
+
+            like = np.ones([random.randint(1, 10) for _ in range(n_dim + 1)])
+
+            x = np.full_like(like, fill_value=fill, dtype=dtype)
+            x_dsc = dsc.full_like(like, fill_value=fill, dtype=DSC_DTYPES[dtype])
+            assert all_close(x_dsc.numpy(), x)
+
+            x = np.ones(shape, dtype=dtype)
+            x_dsc = dsc.ones(shape, dtype=DSC_DTYPES[dtype])
+            assert all_close(x_dsc.numpy(), x)
+
+            x = np.ones_like(like, dtype=dtype)
+            x_dsc = dsc.ones_like(like, dtype=DSC_DTYPES[dtype])
+            assert all_close(x_dsc.numpy(), x)
+
+            x = np.zeros(shape, dtype=dtype)
+            x_dsc = dsc.zeros(shape, dtype=DSC_DTYPES[dtype])
+            assert all_close(x_dsc.numpy(), x)
+
+            x = np.zeros_like(like, dtype=dtype)
+            x_dsc = dsc.zeros_like(like, dtype=DSC_DTYPES[dtype])
+            assert all_close(x_dsc.numpy(), x)
+
+            dsc.clear()
+
 
 def test_fft():
     ops = {

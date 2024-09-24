@@ -6,7 +6,9 @@
 
 from ._bindings import (
     _DscTensor_p, _DSC_MAX_DIMS, _DSC_SLICE_NONE, _DscSlice,  _dsc_cast,
-    _dsc_sum, _dsc_mean, _dsc_max, _dsc_min, _dsc_i0, _dsc_clip, _dsc_tensor_get, _dsc_tensor_slice,
+    _dsc_sum, _dsc_mean, _dsc_max, _dsc_min, _dsc_i0, _dsc_clip, _dsc_tensor_get_idx, _dsc_tensor_get_slice,
+    _dsc_tensor_set_idx, _dsc_tensor_set_slice,
+    _dsc_wrap_f32, _dsc_wrap_f64, _dsc_wrap_c32, _dsc_wrap_c64,
     _dsc_add, _dsc_sub, _dsc_mul, _dsc_div, _dsc_pow,
     _dsc_addc_f32, _dsc_addc_f64, _dsc_addc_c32, _dsc_addc_c64,
     _dsc_subc_f32, _dsc_subc_f64, _dsc_subc_c32, _dsc_subc_c64,
@@ -25,7 +27,7 @@ from ctypes import (
     c_int
 )
 import sys
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 
 
 def _c_ptr(x: 'Tensor') -> _DscTensor_p:
@@ -57,6 +59,37 @@ def _c_slice(x: Union[slice, int]) -> _DscSlice:
         # takes both indexes and slices this will generate a new slice (-1) where start=dim stop=dim step=dim. All the
         # handling will be done internally by the library.
         return _DscSlice(x, x, x)
+
+def _wrap(x: Union[int, float, complex, 'Tensor', np.ndarray], dtype: Dtype) -> 'Tensor':
+    if isinstance(x, np.ndarray):
+        return from_numpy(x)
+    elif isinstance(x, Tensor):
+        return x
+    elif isinstance(x, float):
+        if dtype == Dtype.F32:
+            return Tensor(_dsc_wrap_f32(_get_ctx(), x))
+        elif dtype == Dtype.F64:
+            return Tensor(_dsc_wrap_f64(_get_ctx(), x))
+        else:
+            raise RuntimeError(f'cannot wrap {x} as {dtype}')
+    elif isinstance(x, complex):
+        if dtype == Dtype.C32:
+            return Tensor(_dsc_wrap_c32(_get_ctx(), x))
+        elif dtype == Dtype.C64:
+            return Tensor(_dsc_wrap_c64(_get_ctx(), x))
+        else:
+            raise RuntimeError(f'cannot wrap {x} as {dtype}')
+    else:
+        # Simply cast x to dtype
+        if dtype == Dtype.F32:
+            return Tensor(_dsc_wrap_f32(_get_ctx(), float(x)))
+        elif dtype == Dtype.F64:
+            return Tensor(_dsc_wrap_f64(_get_ctx(), float(x)))
+        elif dtype == Dtype.C32:
+            return Tensor(_dsc_wrap_c32(_get_ctx(), complex(x, 0)))
+        elif dtype == Dtype.C64:
+            return Tensor(_dsc_wrap_c64(_get_ctx(), complex(x, 0)))
+
 
 class Tensor:
     def __init__(self, c_ptr: _DscTensor_p):
@@ -95,22 +128,34 @@ class Tensor:
     def __len__(self):
         return self.shape[0]
 
-    def __getitem__(self, item: Union[int, Tuple[int, ...], slice, Tuple[slice, ...]]) -> Union[float, complex, 'Tensor']:
+    def __getitem__(self, item: Union[int, Tuple[int, ...], slice, Tuple[slice, ...], Tuple[Union[int, slice], ...]]) \
+            -> Union[float, complex, 'Tensor']:
         if isinstance(item, int):
-            return _unwrap(Tensor(_dsc_tensor_get(_get_ctx(), _c_ptr(self), c_int(item))))
+            return _unwrap(Tensor(_dsc_tensor_get_idx(_get_ctx(), _c_ptr(self), c_int(item))))
         elif isinstance(item, Tuple) and all(isinstance(i, int) for i in item):
-            return _unwrap(Tensor(_dsc_tensor_get(_get_ctx(), _c_ptr(self), *tuple(c_int(i) for i in item))))
+            return _unwrap(Tensor(_dsc_tensor_get_idx(_get_ctx(), _c_ptr(self), *tuple(c_int(i) for i in item))))
         elif isinstance(item, slice):
-            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), _c_slice(item)))
-        elif isinstance(item, Tuple) and all(isinstance(s, slice) for s in item):
-            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), *tuple(_c_slice(s) for (idx, s) in enumerate(item))))
-        elif isinstance(item, Tuple) and all(isinstance(i, int) or isinstance(i, slice) for i in item):
-            # Note: when mixing indexes and slices there are instances where NumPy collapses a dimension while DSC
-            #       keeps it with value = 1. In those cases a reshape(-1) should be enough. We should keep this in mind
-            #       and at some point probably conform with NumPy.
-            return Tensor(_dsc_tensor_slice(_get_ctx(), _c_ptr(self), *tuple(_c_slice(s) for (idx, s) in enumerate(item))))
+            return Tensor(_dsc_tensor_get_slice(_get_ctx(), _c_ptr(self), _c_slice(item)))
+        elif ((isinstance(item, Tuple) and all(isinstance(s, slice) for s in item)) or
+              (isinstance(item, Tuple) and all(isinstance(i, int) or isinstance(i, slice) for i in item))):
+            return Tensor(_dsc_tensor_get_slice(_get_ctx(), _c_ptr(self), *tuple(_c_slice(s) for s in item)))
         else:
-            raise RuntimeError(f'can\'t index Tensor with object {item}')
+            raise RuntimeError(f'cannot index Tensor with object {item}')
+
+    def __setitem__(self, key: Union[int, Tuple[int, ...], slice, Tuple[slice, ...], Tuple[Union[int, slice], ...]],
+                    value: Union[int, float, complex, 'Tensor', np.ndarray]):
+        wrapped_val = _wrap(value, self.dtype)
+        if isinstance(key, int):
+            _dsc_tensor_set_idx(_get_ctx(), _c_ptr(self), _c_ptr(wrapped_val), c_int(key))
+        elif isinstance(key, Tuple) and all(isinstance(i, int) for i in key):
+            _dsc_tensor_set_idx(_get_ctx(), _c_ptr(self), _c_ptr(wrapped_val), *tuple(c_int(i) for i in key))
+        elif isinstance(key, slice):
+            _dsc_tensor_set_slice(_get_ctx(), _c_ptr(self), _c_ptr(wrapped_val), _c_slice(key))
+        elif ((isinstance(key, Tuple) and all(isinstance(s, slice) for s in key)) or
+              (isinstance(key, Tuple) and all(isinstance(s, int) or isinstance(s, slice) for s in key))):
+            _dsc_tensor_set_slice(_get_ctx(), _c_ptr(self), _c_ptr(wrapped_val), *tuple(_c_slice(s) for s in key))
+        else:
+            raise RuntimeError(f'cannot set Tensor with index {key}')
 
     def numpy(self) -> np.ndarray:
         raw_tensor = self._c_ptr.contents
@@ -131,31 +176,32 @@ class Tensor:
     def cast(self, dtype: Dtype) -> 'Tensor':
         return Tensor(_dsc_cast(_get_ctx(), self._c_ptr, c_uint8(dtype.value)))
 
+def _create_tensor(dtype: Dtype, *dims: int) -> Tensor:
+    n_dims = len(dims)
+    if n_dims > _DSC_MAX_DIMS or n_dims < 1:
+        raise RuntimeError(f'cannot create a Tensor with {n_dims} dimensions, max is {_DSC_MAX_DIMS}')
+
+    dtype = c_uint8(dtype.value)
+
+    if n_dims == 1:
+        return Tensor(_dsc_tensor_1d(_get_ctx(), dtype, c_int(dims[0])))
+    elif n_dims == 2:
+        return Tensor(_dsc_tensor_2d(_get_ctx(), dtype,
+                                     c_int(dims[0]), c_int(dims[1])))
+    elif n_dims == 3:
+        return Tensor(_dsc_tensor_3d(_get_ctx(), dtype,
+                                     c_int(dims[0]), c_int(dims[1]),
+                                     c_int(dims[2])))
+    else:
+        return Tensor(_dsc_tensor_4d(_get_ctx(), dtype,
+                                     c_int(dims[0]), c_int(dims[1]),
+                                     c_int(dims[2]), c_int(dims[3])))
+
 def from_numpy(x: np.ndarray) -> Tensor:
     if x.dtype not in NP_TO_DTYPE:
         raise RuntimeError(f'NumPy dtype {x.dtype} is not supported')
 
-    dtype = c_uint8(NP_TO_DTYPE[x.dtype].value)
-
-    dims = list(x.shape)
-    n_dims = len(dims)
-    if n_dims > _DSC_MAX_DIMS or n_dims < 1:
-        raise RuntimeError(f'can\'t create a Tensor with {n_dims} dimensions')
-
-    if n_dims == 1:
-        out = Tensor(_dsc_tensor_1d(_get_ctx(), dtype, c_int(dims[0])))
-    elif n_dims == 2:
-        out = Tensor(_dsc_tensor_2d(_get_ctx(), dtype,
-                                    c_int(dims[0]), c_int(dims[1])))
-    elif n_dims == 3:
-        out = Tensor(_dsc_tensor_3d(_get_ctx(), dtype,
-                                    c_int(dims[0]), c_int(dims[1]),
-                                    c_int(dims[2])))
-    else:
-        out = Tensor(_dsc_tensor_4d(_get_ctx(), dtype,
-                                    c_int(dims[0]), c_int(dims[1]),
-                                    c_int(dims[2]), c_int(dims[3])))
-
+    out = _create_tensor(NP_TO_DTYPE[x.dtype], *x.shape)
     ctypes.memmove(_c_ptr(out).contents.data, x.ctypes.data, x.nbytes)
     return out
 
@@ -294,6 +340,30 @@ def arange(n: int, dtype: Dtype = Dtype.F32) -> Tensor:
 
 def randn(*shape: int, dtype: Dtype = Dtype.F32) -> Tensor:
     return Tensor(_dsc_randn(_get_ctx(), shape, c_uint8(dtype.value)))
+
+# In the xx_like methods if dtype is not specified it will be the same as x
+def ones(shape: Union[int, Tuple[int, ...], List[int]], dtype: Dtype = Dtype.F32) -> Tensor:
+    return full(shape, fill_value=1, dtype=dtype)
+
+def ones_like(x: Union[Tensor, np.ndarray], dtype: Dtype = None) -> Tensor:
+    return full_like(x, 1, dtype)
+
+def zeros(shape: Union[int, Tuple[int, ...], List[int]], dtype: Dtype = Dtype.F32) -> Tensor:
+    return full(shape, fill_value=0, dtype=dtype)
+
+def zeros_like(x: Union[Tensor, np.ndarray], dtype: Dtype = None) -> Tensor:
+    return full_like(x, fill_value=0, dtype=dtype)
+
+def full(shape: Union[int, Tuple[int, ...], List[int]], fill_value: Union[int, complex, float], dtype: Dtype = Dtype.F32) -> Tensor:
+    shape = (shape,) if isinstance(shape, int) else tuple(i for i in shape)
+    out = _create_tensor(dtype, *shape)
+    out[:] = fill_value
+    return out
+
+def full_like(x: Union[Tensor, np.ndarray], fill_value: Union[int, complex, float], dtype: Dtype = None) -> Tensor:
+    shape = x.shape
+    dtype = dtype if dtype is not None else (x.dtype if isinstance(x, Tensor) else NP_TO_DTYPE[x.dtype])
+    return full(shape, fill_value=fill_value, dtype=dtype)
 
 def plan_fft(n: int, dtype: Dtype = Dtype.F64):
     """

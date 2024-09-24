@@ -150,6 +150,45 @@ _lib.dsc_tensor_4d.argtypes = [_DscCtx, c_uint8, c_int, c_int, c_int, c_int]
 _lib.dsc_tensor_4d.restype = _DscTensor_p
 
 
+# extern dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx,
+#                                 f32 val) noexcept;
+def _dsc_wrap_f32(ctx: _DscCtx, val: float) -> _DscTensor_p:
+    return _lib.dsc_wrap_f32(ctx, c_float(val))
+
+
+_lib.dsc_wrap_f32.argtypes = [_DscCtx, c_float]
+_lib.dsc_wrap_f32.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx,
+#                                 f64 val) noexcept;
+def _dsc_wrap_f64(ctx: _DscCtx, val: float) -> _DscTensor_p:
+    return _lib.dsc_wrap_f64(ctx, c_double(val))
+
+
+_lib.dsc_wrap_f64.argtypes = [_DscCtx, c_double]
+_lib.dsc_wrap_f64.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx,
+#                                 c32 val) noexcept;
+def _dsc_wrap_c32(ctx: _DscCtx, val: complex) -> _DscTensor_p:
+    return _lib.dsc_wrap_c32(ctx, _C32(c_float(val.real), c_float(val.imag)))
+
+
+_lib.dsc_wrap_c32.argtypes = [_DscCtx, _C32]
+_lib.dsc_wrap_c32.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_wrap_c64(dsc_ctx *ctx,
+#                                 c64 val) noexcept;
+def _dsc_wrap_c64(ctx: _DscCtx, val: complex) -> _DscTensor_p:
+    return _lib.dsc_wrap_c64(ctx, _C64(c_double(val.real), c_double(val.imag)))
+
+
+_lib.dsc_wrap_c64.argtypes = [_DscCtx, _C64]
+_lib.dsc_wrap_c64.restype = _DscTensor_p
+
 # extern dsc_tensor *dsc_arange(dsc_ctx *ctx,
 #                               int n,
 #                               dsc_dtype dtype = DSC_DEFAULT_TYPE) noexcept;
@@ -405,26 +444,51 @@ _lib.dsc_cast.argtypes = [_DscCtx, _DscTensor_p, c_uint8]
 _lib.dsc_cast.restype = _DscTensor_p
 
 
-# extern dsc_tensor *dsc_tensor_get(dsc_ctx *ctx,
-#                            const dsc_tensor *DSC_RESTRICT x,
-#                            int indexes...) noexcept;
-def _dsc_tensor_get(ctx: _DscCtx, x: _DscTensor_p, *indexes: c_int) -> _DscTensor_p:
-    return _lib.dsc_tensor_get(ctx, x, len(indexes), *indexes)
+# extern dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
+#                                       const dsc_tensor *DSC_RESTRICT x,
+#                                       int indexes...) noexcept;
+def _dsc_tensor_get_idx(ctx: _DscCtx, x: _DscTensor_p, *indexes: c_int) -> _DscTensor_p:
+    return _lib.dsc_tensor_get_idx(ctx, x, len(indexes), *indexes)
 
 
-_lib.dsc_tensor_get.argtypes = [_DscCtx, _DscTensor_p, c_int]
-_lib.dsc_tensor_get.restype = _DscTensor_p
+_lib.dsc_tensor_get_idx.argtypes = [_DscCtx, _DscTensor_p, c_int]
+_lib.dsc_tensor_get_idx.restype = _DscTensor_p
 
 
-# extern dsc_tensor *dsc_tensor_slice(dsc_ctx *ctx,
-#                                     const dsc_tensor *DSC_RESTRICT x,
-#                                     int slices...) noexcept;
-def _dsc_tensor_slice(ctx: _DscCtx, x: _DscTensor_p, *slices: _DscSlice) -> _DscTensor_p:
-    return _lib.dsc_tensor_slice(ctx, x, len(slices), *slices)
+# extern dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
+#                                         const dsc_tensor *DSC_RESTRICT x,
+#                                         int slices...) noexcept;
+def _dsc_tensor_get_slice(ctx: _DscCtx, x: _DscTensor_p, *slices: _DscSlice) -> _DscTensor_p:
+    return _lib.dsc_tensor_get_slice(ctx, x, len(slices), *slices)
 
 
-_lib.dsc_tensor_slice.argtypes = [_DscCtx, _DscTensor_p, c_int]
-_lib.dsc_tensor_slice.restype = _DscTensor_p
+_lib.dsc_tensor_get_slice.argtypes = [_DscCtx, _DscTensor_p, c_int]
+_lib.dsc_tensor_get_slice.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_tensor_set_idx(dsc_ctx *,
+#                                       dsc_tensor *DSC_RESTRICT xa,
+#                                       const dsc_tensor *DSC_RESTRICT xb,
+#                                       int indexes...) noexcept;
+def _dsc_tensor_set_idx(ctx: _DscCtx, xa: _DscTensor_p, xb: _DscTensor_p, *indexes: c_int) -> _DscTensor_p:
+    return _lib.dsc_tensor_set_idx(ctx, xa, xb, len(indexes), *indexes)
+
+
+_lib.dsc_tensor_set_idx.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int]
+_lib.dsc_tensor_set_idx.restype = None
+
+
+# extern dsc_tensor *dsc_tensor_set_slice(dsc_ctx *,
+#                                         dsc_tensor *DSC_RESTRICT xa,
+#                                         const dsc_tensor *DSC_RESTRICT xb,
+#                                         int slices...) noexcept;
+def _dsc_tensor_set_slice(ctx: _DscCtx, xa: _DscTensor_p, xb: _DscTensor_p, *slices: _DscSlice) -> _DscTensor_p:
+    return _lib.dsc_tensor_set_slice(ctx, xa, xb, len(slices), *slices)
+
+
+_lib.dsc_tensor_set_slice.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int]
+_lib.dsc_tensor_set_slice.restype = None
+
 
 # extern dsc_tensor *dsc_cos(dsc_ctx *,
 #                            const dsc_tensor *__restrict x,
