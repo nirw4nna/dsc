@@ -12,7 +12,6 @@
 #include <random>
 #include <cstdarg> // va_xxx
 
-
 // How many independent FFT plans we support. This is completely arbitrary
 #if !defined(DSC_FFT_PLANS)
 #   define DSC_FFT_PLANS ((int) 16)
@@ -23,16 +22,6 @@
 #endif
 
 #define DSC_SIMD_ALIGN ((int) 32)
-
-#define CONST_OP_IMPL(func, type, op) \
-    dsc_tensor *dsc_##func##_##type(dsc_ctx *ctx,               \
-                                    dsc_tensor *x,              \
-                                    const type val,             \
-                                    dsc_tensor *out) noexcept { \
-        validate_unary_params();    \
-        scalar_op(x, out, val, op); \
-        return out;                 \
-}
 
 // This needs to be a macro otherwise the pointer assignments to out, xa and xb
 // would not work unless I pass them as pointers to pointers which is very ugly.
@@ -106,6 +95,23 @@
             DSC_ASSERT(memcmp(out->shape, out_shape, DSC_MAX_DIMS * sizeof(*out_shape)) == 0);  \
         }                                                                                       \
     } while(0)
+
+// Wrap a scalar value as a dsc_tensor allocated on the stack, this way we don't risk polluting the heap buffer
+// with tons of small tensors that are only used once.
+#define DSC_WRAP_VALUE(PTR, T, val) \
+    PTR = (dsc_tensor *) alloca(sizeof(dsc_tensor) + DSC_DTYPE_SIZE[dsc_type_mapping<T>::value]); \
+    do { \
+        PTR->dtype = dsc_type_mapping<T>::value;    \
+        PTR->n_dim = 1;                             \
+        PTR->ne = 1;                                \
+        PTR->data = (PTR + 1);                      \
+        for (int i = 0; i < DSC_MAX_DIMS; ++i) {    \
+            PTR->shape[i] = 1;                      \
+            PTR->stride[i] = 1;                     \
+        }                                           \
+        DSC_TENSOR_DATA(T, PTR);                    \
+        PTR##_data[0] = val;                        \
+    } while (0)
 
 #define dsc_for(idx, X) for (int idx = 0; idx < (X)->ne; ++idx)
 
@@ -440,8 +446,9 @@ static DSC_INLINE void dsc_fill_randn(dsc_tensor *x) noexcept {
     std::mt19937 rng;
     std::normal_distribution<T> dist;
 
-    for (int i = 0; i < x->ne; ++i)
+    dsc_for(i, x) {
         x_data[i] = dist(rng);
+    }
 }
 
 dsc_tensor *dsc_randn(dsc_ctx *ctx,
@@ -476,8 +483,8 @@ static DSC_INLINE void copy_op(const dsc_tensor *DSC_RESTRICT x,
 }
 
 template<typename Tx>
-static DSC_INLINE void copy_op(const dsc_tensor *DSC_RESTRICT x,
-                               dsc_tensor *DSC_RESTRICT out) noexcept {
+static void copy_op(const dsc_tensor *DSC_RESTRICT x,
+                    dsc_tensor *DSC_RESTRICT out) noexcept {
     switch (out->dtype) {
         case dsc_dtype::F32:
             copy_op<Tx, f32>(x, out);
@@ -495,8 +502,8 @@ static DSC_INLINE void copy_op(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-static DSC_INLINE void copy(const dsc_tensor *DSC_RESTRICT x,
-                            dsc_tensor *DSC_RESTRICT out) noexcept {
+static void copy(const dsc_tensor *DSC_RESTRICT x,
+                 dsc_tensor *DSC_RESTRICT out) noexcept {
     switch (x->dtype) {
         case dsc_dtype::F32:
             copy_op<f32>(x, out);
@@ -860,7 +867,7 @@ void dsc_tensor_set_slice(dsc_ctx *,
 }
 
 // ============================================================
-// Binary Operations (Vector)
+// Binary Operations
 
 static bool DSC_INLINE DSC_PURE can_broadcast(const dsc_tensor *DSC_RESTRICT xa,
                                               const dsc_tensor *DSC_RESTRICT xb) noexcept {
@@ -875,29 +882,41 @@ static bool DSC_INLINE DSC_PURE can_broadcast(const dsc_tensor *DSC_RESTRICT xa,
 }
 
 template<typename T, typename Op>
-static DSC_INLINE void binary_op(const dsc_tensor *DSC_RESTRICT xa,
-                                 const dsc_tensor *DSC_RESTRICT xb,
-                                 dsc_tensor *DSC_RESTRICT out,
+static DSC_INLINE void binary_op(const dsc_tensor *xa,
+                                 const dsc_tensor *xb,
+                                 dsc_tensor *out,
                                  Op op) noexcept {
-    DSC_TENSOR_DATA(T, xa);
-    DSC_TENSOR_DATA(T, xb);
-    DSC_TENSOR_DATA(T, out);
+    T *xa_data = (T *) xa->data;
+    T *xb_data = (T *) xb->data;
+    T *out_data = (T *) out->data;
+    const bool xb_scalar = xb->n_dim == 1 && xb->shape[dsc_tensor_dim(xb, -1)] == 1;
 
-    dsc_broadcast_iterator xa_it(xa, out->shape), xb_it(xb, out->shape);
-    dsc_for(i, out) {
-        out_data[i] = op(
-                xa_data[xa_it.index()],
-                xb_data[xb_it.index()]
-        );
-        xa_it.next(), xb_it.next();
+    if (xb_scalar) {
+        const T val = xb_data[0];
+        dsc_for(i, out) {
+            out_data[i] = op(
+                    xa_data[i],
+                    val
+            );
+        }
+    } else {
+        dsc_broadcast_iterator xa_it(xa, out->shape), xb_it(xb, out->shape);
+        dsc_for(i, out) {
+            out_data[i] = op(
+                    xa_data[xa_it.index()],
+                    xb_data[xb_it.index()]
+            );
+            xa_it.next(), xb_it.next();
+        }
     }
+
 }
 
 template<typename Op>
-static DSC_INLINE void binary_op(const dsc_tensor *DSC_RESTRICT xa,
-                                 const dsc_tensor *DSC_RESTRICT xb,
-                                 dsc_tensor *DSC_RESTRICT out,
-                                 Op op) noexcept {
+static  void binary_op(const dsc_tensor *xa,
+                       const dsc_tensor *xb,
+                       dsc_tensor *out,
+                       Op op) noexcept {
     switch (out->dtype) {
         case dsc_dtype::F32:
             binary_op<f32>(xa, xb, out, op);
@@ -916,9 +935,9 @@ static DSC_INLINE void binary_op(const dsc_tensor *DSC_RESTRICT xa,
 }
 
 dsc_tensor *dsc_add(dsc_ctx *ctx,
-                    dsc_tensor *DSC_RESTRICT xa,
-                    dsc_tensor *DSC_RESTRICT xb,
-                    dsc_tensor *DSC_RESTRICT out) noexcept {
+                    dsc_tensor *xa,
+                    dsc_tensor *xb,
+                    dsc_tensor *out) noexcept {
     validate_binary_params();
 
     binary_op(xa, xb, out, add_op());
@@ -927,9 +946,9 @@ dsc_tensor *dsc_add(dsc_ctx *ctx,
 }
 
 dsc_tensor *dsc_sub(dsc_ctx *ctx,
-                    dsc_tensor *DSC_RESTRICT xa,
-                    dsc_tensor *DSC_RESTRICT xb,
-                    dsc_tensor *DSC_RESTRICT out) noexcept {
+                    dsc_tensor *xa,
+                    dsc_tensor *xb,
+                    dsc_tensor *out) noexcept {
     validate_binary_params();
 
     binary_op(xa, xb, out, sub_op());
@@ -938,9 +957,9 @@ dsc_tensor *dsc_sub(dsc_ctx *ctx,
 }
 
 dsc_tensor *dsc_mul(dsc_ctx *ctx,
-                    dsc_tensor *DSC_RESTRICT xa,
-                    dsc_tensor *DSC_RESTRICT xb,
-                    dsc_tensor *DSC_RESTRICT out) noexcept {
+                    dsc_tensor *xa,
+                    dsc_tensor *xb,
+                    dsc_tensor *out) noexcept {
     validate_binary_params();
 
     binary_op(xa, xb, out, mul_op());
@@ -949,9 +968,9 @@ dsc_tensor *dsc_mul(dsc_ctx *ctx,
 }
 
 dsc_tensor *dsc_div(dsc_ctx *ctx,
-                    dsc_tensor *DSC_RESTRICT xa,
-                    dsc_tensor *DSC_RESTRICT xb,
-                    dsc_tensor *DSC_RESTRICT out) noexcept {
+                    dsc_tensor *xa,
+                    dsc_tensor *xb,
+                    dsc_tensor *out) noexcept {
     validate_binary_params();
 
     binary_op(xa, xb, out, div_op());
@@ -960,57 +979,15 @@ dsc_tensor *dsc_div(dsc_ctx *ctx,
 }
 
 dsc_tensor *dsc_pow(dsc_ctx *ctx,
-                    dsc_tensor *DSC_RESTRICT xa,
-                    dsc_tensor *DSC_RESTRICT xb,
-                    dsc_tensor *DSC_RESTRICT out) noexcept {
+                    dsc_tensor *xa,
+                    dsc_tensor *xb,
+                    dsc_tensor *out) noexcept {
     validate_binary_params();
 
     binary_op(xa, xb, out, pow_op());
 
     return out;
 }
-
-// ============================================================
-// Binary Operations (Scalar)
-
-template<typename T, typename Op>
-static DSC_INLINE void scalar_op(dsc_tensor *x,
-                                 dsc_tensor *out,
-                                 const T val,
-                                 Op op) noexcept {
-
-    T *x_data = (T *) x->data;
-    T *out_data = (T *) out->data;
-
-    dsc_for(i, out) {
-        out_data[i] = op(x_data[i], val);
-    }
-}
-
-CONST_OP_IMPL(addc, f32, add_op())
-CONST_OP_IMPL(addc, f64, add_op())
-CONST_OP_IMPL(addc, c32, add_op())
-CONST_OP_IMPL(addc, c64, add_op())
-
-CONST_OP_IMPL(subc, f32, sub_op())
-CONST_OP_IMPL(subc, f64, sub_op())
-CONST_OP_IMPL(subc, c32, sub_op())
-CONST_OP_IMPL(subc, c64, sub_op())
-
-CONST_OP_IMPL(mulc, f32, mul_op())
-CONST_OP_IMPL(mulc, f64, mul_op())
-CONST_OP_IMPL(mulc, c32, mul_op())
-CONST_OP_IMPL(mulc, c64, mul_op())
-
-CONST_OP_IMPL(divc, f32, div_op())
-CONST_OP_IMPL(divc, f64, div_op())
-CONST_OP_IMPL(divc, c32, div_op())
-CONST_OP_IMPL(divc, c64, div_op())
-
-CONST_OP_IMPL(powc, f32, pow_op())
-CONST_OP_IMPL(powc, f64, pow_op())
-CONST_OP_IMPL(powc, c32, pow_op())
-CONST_OP_IMPL(powc, c64, pow_op())
 
 // ============================================================
 // Unary Operations
@@ -1028,9 +1005,9 @@ static DSC_INLINE void unary_op(const dsc_tensor *DSC_RESTRICT x,
 }
 
 template<typename Op>
-static DSC_INLINE void unary_op(const dsc_tensor *DSC_RESTRICT x,
-                                dsc_tensor *DSC_RESTRICT out,
-                                Op op) noexcept {
+static void unary_op(const dsc_tensor *DSC_RESTRICT x,
+                     dsc_tensor *DSC_RESTRICT out,
+                     Op op) noexcept {
     switch (x->dtype) {
         case dsc_dtype::F32:
             unary_op<f32>(x, out, op);
@@ -1504,30 +1481,23 @@ dsc_tensor *dsc_mean(dsc_ctx *ctx,
     const int axis_idx = dsc_tensor_dim(x, axis);
     const int axis_n = x->shape[axis_idx];
 
+    dsc_tensor *scale;
     switch (out->dtype) {
-        case F32: {
-            const f32 scale = 1.f / (f32) axis_n;
-            out = dsc_mulc_f32(ctx, out, scale, out);
+        case F32:
+            DSC_WRAP_VALUE(scale, f32, 1.f / (f32) axis_n);
             break;
-        }
-        case F64: {
-            const f64 scale = 1. / (f64) axis_n;
-            out = dsc_mulc_f64(ctx, out, scale, out);
+        case F64:
+            DSC_WRAP_VALUE(scale, f64, 1. / (f64) axis_n);
             break;
-        }
-        case C32: {
-            const c32 scale = dsc_complex(c32, 1.f / (f32) axis_n, 0.f);
-            out = dsc_mulc_c32(ctx, out, scale, out);
+        case C32:
+            DSC_WRAP_VALUE(scale, c32, dsc_complex(c32, 1.f / (f32) axis_n, 0.f));
             break;
-        }
-        case C64: {
-            const c64 scale = dsc_complex(c64, 1. / (f64) axis_n, 0.);
-            out = dsc_mulc_c64(ctx, out, scale, out);
+        case C64:
+            DSC_WRAP_VALUE(scale, c64, dsc_complex(c64, 1. / (f64) axis_n, 0.));
             break;
-        }
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
     }
-
+    out = dsc_mul(ctx, out, scale, out);
     return out;
 }
 
@@ -1840,7 +1810,6 @@ static DSC_INLINE void exec_rfft(dsc_ctx *ctx,
         }
     }
 
-
     DSC_CTX_POP(ctx);
 }
 
@@ -1948,7 +1917,6 @@ static DSC_INLINE void dsc_internal_fftfreq(dsc_tensor *x,
 
     for (int i = 0; i < n2; ++i)
         x_data[(n2 + odd) + i] = (-n2 + i) * factor;
-
 }
 
 dsc_tensor *dsc_fftfreq(dsc_ctx *ctx,

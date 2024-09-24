@@ -75,14 +75,7 @@
 
 static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 
-#define DSC_SLICE_NONE INT32_MAX
-
-#define CONST_FUNC_DECL(func, type) \
-    extern dsc_tensor *dsc_##func##_##type(dsc_ctx *ctx,    \
-                                           dsc_tensor *x,   \
-                                           type val,        \
-                                           dsc_tensor *out = nullptr) noexcept;
-
+#define DSC_SLICE_NONE          INT32_MAX
 #define DSC_TENSOR_DATA(T, PTR) T *DSC_RESTRICT PTR##_data = (T *) (PTR)->data
 
 #define dsc_new_like(CTX, PTR)      (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[DSC_MAX_DIMS - (PTR)->n_dim], (PTR)->dtype))
@@ -218,60 +211,32 @@ extern void dsc_tensor_set_slice(dsc_ctx *,
                                  int slices...) noexcept;
 
 // ============================================================
-// Binary Operations (Vector)
+// Binary Operations
 
 extern dsc_tensor *dsc_add(dsc_ctx *ctx,
-                           dsc_tensor *DSC_RESTRICT xa,
-                           dsc_tensor *DSC_RESTRICT xb,
-                           dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+                           dsc_tensor *xa,
+                           dsc_tensor *xb,
+                           dsc_tensor *out = nullptr) noexcept;
 
 extern dsc_tensor *dsc_sub(dsc_ctx *ctx,
-                           dsc_tensor *DSC_RESTRICT xa,
-                           dsc_tensor *DSC_RESTRICT xb,
-                           dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+                           dsc_tensor *xa,
+                           dsc_tensor *xb,
+                           dsc_tensor *out = nullptr) noexcept;
 
 extern dsc_tensor *dsc_mul(dsc_ctx *ctx,
-                           dsc_tensor *DSC_RESTRICT xa,
-                           dsc_tensor *DSC_RESTRICT xb,
-                           dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+                           dsc_tensor *xa,
+                           dsc_tensor *xb,
+                           dsc_tensor *out = nullptr) noexcept;
 
 extern dsc_tensor *dsc_div(dsc_ctx *ctx,
-                           dsc_tensor *DSC_RESTRICT xa,
-                           dsc_tensor *DSC_RESTRICT xb,
-                           dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
+                           dsc_tensor *xa,
+                           dsc_tensor *xb,
+                           dsc_tensor *out = nullptr) noexcept;
 
 extern dsc_tensor *dsc_pow(dsc_ctx *ctx,
-                           dsc_tensor *DSC_RESTRICT xa,
-                           dsc_tensor *DSC_RESTRICT xb,
-                           dsc_tensor *DSC_RESTRICT out = nullptr) noexcept;
-
-// ============================================================
-// Binary Operations (Scalar)
-
-CONST_FUNC_DECL(addc, f32)
-CONST_FUNC_DECL(addc, f64)
-CONST_FUNC_DECL(addc, c32)
-CONST_FUNC_DECL(addc, c64)
-
-CONST_FUNC_DECL(subc, f32)
-CONST_FUNC_DECL(subc, f64)
-CONST_FUNC_DECL(subc, c32)
-CONST_FUNC_DECL(subc, c64)
-
-CONST_FUNC_DECL(mulc, f32)
-CONST_FUNC_DECL(mulc, f64)
-CONST_FUNC_DECL(mulc, c32)
-CONST_FUNC_DECL(mulc, c64)
-
-CONST_FUNC_DECL(divc, f32)
-CONST_FUNC_DECL(divc, f64)
-CONST_FUNC_DECL(divc, c32)
-CONST_FUNC_DECL(divc, c64)
-
-CONST_FUNC_DECL(powc, f32)
-CONST_FUNC_DECL(powc, f64)
-CONST_FUNC_DECL(powc, c32)
-CONST_FUNC_DECL(powc, c64)
+                           dsc_tensor *xa,
+                           dsc_tensor *xb,
+                           dsc_tensor *out = nullptr) noexcept;
 
 // ============================================================
 // Unary Operations

@@ -10,11 +10,6 @@ from ._bindings import (
     _dsc_tensor_set_idx, _dsc_tensor_set_slice,
     _dsc_wrap_f32, _dsc_wrap_f64, _dsc_wrap_c32, _dsc_wrap_c64,
     _dsc_add, _dsc_sub, _dsc_mul, _dsc_div, _dsc_pow,
-    _dsc_addc_f32, _dsc_addc_f64, _dsc_addc_c32, _dsc_addc_c64,
-    _dsc_subc_f32, _dsc_subc_f64, _dsc_subc_c32, _dsc_subc_c64,
-    _dsc_mulc_f32, _dsc_mulc_f64, _dsc_mulc_c32, _dsc_mulc_c64,
-    _dsc_divc_f32, _dsc_divc_f64, _dsc_divc_c32, _dsc_divc_c64,
-    _dsc_powc_f32, _dsc_powc_f64, _dsc_powc_c32, _dsc_powc_c64,
     _dsc_plan_fft, _dsc_fft, _dsc_ifft, _dsc_rfft, _dsc_irfft, _dsc_fftfreq, _dsc_rfftfreq, _dsc_arange, _dsc_randn,
     _dsc_cos, _dsc_sin, _dsc_sinc, _dsc_logn, _dsc_log2, _dsc_log10, _dsc_exp, _dsc_sqrt, _dsc_abs, _dsc_angle,
     _dsc_conj, _dsc_real, _dsc_imag, _dsc_tensor_1d, _dsc_tensor_2d, _dsc_tensor_3d, _dsc_tensor_4d,
@@ -205,25 +200,6 @@ def from_numpy(x: np.ndarray) -> Tensor:
     ctypes.memmove(_c_ptr(out).contents.data, x.ctypes.data, x.nbytes)
     return out
 
-def _scalar_op(xa: Tensor, xb: Union[float, complex], out: Tensor, op_base_name: str) -> Tensor:
-    op_dtype = xa.dtype
-    if isinstance(xb, float):
-        if xa.dtype == Dtype.C32 or xa.dtype == Dtype.C64:
-            xb = complex(xb, 0)
-    else:
-        # The cast op is handled by the C library
-        if xa.dtype == Dtype.F32:
-            op_dtype = Dtype.C32
-        elif xa.dtype == Dtype.F64:
-            op_dtype = Dtype.C64
-
-    op_name = f'{op_base_name}_{op_dtype}'
-    if hasattr(sys.modules[__name__], op_name):
-        op = getattr(sys.modules[__name__], op_name)
-        return Tensor(op(_get_ctx(), _c_ptr(xa), xb, _c_ptr(out)))
-    else:
-        raise RuntimeError(f'scalar operation "{op_name}" doesn\'t exist in module')
-
 def _tensor_op(xa: Tensor, xb: Union[Tensor, np.ndarray], out: Tensor, op_name: str) -> Tensor:
     if isinstance(xb, np.ndarray):
         # The conversion from (and to) NumPy is not free, so it's better to do that once and then work with DSC tensors.
@@ -237,44 +213,24 @@ def _tensor_op(xa: Tensor, xb: Union[Tensor, np.ndarray], out: Tensor, op_name: 
         raise RuntimeError(f'tensor operation "{op_name}" doesn\'t exist in module')
 
 def add(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
-    if isinstance(xb, (float, complex)):
-        return _scalar_op(xa, xb, out, op_base_name='_dsc_addc')
-    elif isinstance(xb, (np.ndarray, Tensor)):
-        return _tensor_op(xa, xb, out, op_name='_dsc_add')
-    else:
-        raise RuntimeError(f'can\'t add Tensor with object of type {type(xb)}')
+    xb = _wrap(xb, xa.dtype)
+    return _tensor_op(xa, xb, out, op_name='_dsc_add')
 
 def sub(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
-    if isinstance(xb, (float, complex)):
-        return _scalar_op(xa, xb, out, op_base_name='_dsc_subc')
-    elif isinstance(xb, (np.ndarray, Tensor)):
-        return _tensor_op(xa, xb, out, op_name='_dsc_sub')
-    else:
-        raise RuntimeError(f'can\'t subtract Tensor with object of type {type(xb)}')
+    xb = _wrap(xb, xa.dtype)
+    return _tensor_op(xa, xb, out, op_name='_dsc_sub')
 
 def mul(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
-    if isinstance(xb, (float, complex)):
-        return _scalar_op(xa, xb, out, op_base_name='_dsc_mulc')
-    elif isinstance(xb, (np.ndarray, Tensor)):
-        return _tensor_op(xa, xb, out, op_name='_dsc_mul')
-    else:
-        raise RuntimeError(f'can\'t multiply Tensor with object of type {type(xb)}')
+    xb = _wrap(xb, xa.dtype)
+    return _tensor_op(xa, xb, out, op_name='_dsc_mul')
 
 def true_div(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
-    if isinstance(xb, (float, complex)):
-        return _scalar_op(xa, xb, out, op_base_name='_dsc_divc')
-    elif isinstance(xb, (np.ndarray, Tensor)):
-        return _tensor_op(xa, xb, out, op_name='_dsc_div')
-    else:
-        raise RuntimeError(f'can\'t divide Tensor with object of type {type(xb)}')
+    xb = _wrap(xb, xa.dtype)
+    return _tensor_op(xa, xb, out, op_name='_dsc_div')
 
 def power(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
-    if isinstance(xb, (float, complex)):
-        return _scalar_op(xa, xb, out, op_base_name='_dsc_powc')
-    elif isinstance(xb, (np.ndarray, Tensor)):
-        return _tensor_op(xa, xb, out, op_name='_dsc_pow')
-    else:
-        raise RuntimeError(f'can\'t raise to the power Tensor with object of type {type(xb)}')
+    xb = _wrap(xb, xa.dtype)
+    return _tensor_op(xa, xb, out, op_name='_dsc_pow')
 
 def cos(x: Tensor, out: Tensor = None) -> Tensor:
     return Tensor(_dsc_cos(_get_ctx(), _c_ptr(x), _c_ptr(out)))

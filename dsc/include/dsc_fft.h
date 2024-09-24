@@ -165,9 +165,9 @@ static void dsc_init_plan(dsc_fft_plan *plan, int n,
 }
 
 template<typename T, bool forward>
-static void dsc_complex_fft(dsc_fft_plan *plan,
-                            T *DSC_RESTRICT x,
-                            T *DSC_RESTRICT work) noexcept {
+static DSC_INLINE void dsc_complex_fft(dsc_fft_plan *plan,
+                                       T *DSC_RESTRICT x,
+                                       T *DSC_RESTRICT work) noexcept {
     static_assert(dsc_is_complex<T>(), "T must be a complex type, use rfft for real-valued FFTs");
 
     dsc_fft_pass2<T, forward ? (real<T>) 1 : (real<T>) -1>(x,
@@ -187,9 +187,9 @@ static void dsc_complex_fft(dsc_fft_plan *plan,
 }
 
 template<typename T, bool forward>
-static void dsc_real_fft(dsc_fft_plan *plan,
-                         T *DSC_RESTRICT x,
-                         T *DSC_RESTRICT work) noexcept {
+static DSC_INLINE void dsc_real_fft(dsc_fft_plan *plan,
+                                    T *DSC_RESTRICT x,
+                                    T *DSC_RESTRICT work) noexcept {
     static_assert(dsc_is_complex<T>(), "T must be a complex type, use rfft for real-valued FFTs");
 
     const real<T> *twiddles = (real<T> *) plan->twiddles;
