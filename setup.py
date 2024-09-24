@@ -32,7 +32,7 @@ class BuildCmd(install):
 if __name__ == '__main__':
     packages = find_packages('python')
     package_dir = {'': 'python'}
-    package_data = {'': 'Makefile', 'dsc': ['include/*', 'src/*']}
+    package_data = {'': ['Makefile'], 'dsc': ['include/*', 'src/*']}
     setup(
         name='dsc',
         version='0.1',
