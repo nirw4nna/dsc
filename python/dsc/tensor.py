@@ -321,6 +321,15 @@ def full_like(x: Union[Tensor, np.ndarray], fill_value: Union[int, complex, floa
     dtype = dtype if dtype is not None else (x.dtype if isinstance(x, Tensor) else NP_TO_DTYPE[x.dtype])
     return full(shape, fill_value=fill_value, dtype=dtype)
 
+def empty(shape: Union[int, Tuple[int, ...], List[int]], dtype: Dtype = Dtype.F32) -> Tensor:
+    shape = (shape,) if isinstance(shape, int) else tuple(i for i in shape)
+    return _create_tensor(dtype, *shape)
+
+def empty_like(x: Union[Tensor, np.ndarray], dtype: Dtype = None) -> Tensor:
+    shape = x.shape
+    dtype = dtype if dtype is not None else (x.dtype if isinstance(x, Tensor) else NP_TO_DTYPE[x.dtype])
+    return empty(shape, dtype=dtype)
+
 def plan_fft(n: int, dtype: Dtype = Dtype.F64):
     """
     Create the plan for a one-dimensional FFT/IFFT of size N using dtype for the twiddle factors.
