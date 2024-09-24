@@ -14,7 +14,9 @@ import os
 class BuildCmd(install):
     @staticmethod
     def _compile():
-        print(f'About to compile Cpp...')
+        cwd = os.path.dirname(os.path.abspath(__file__))
+        print(f'About to compile Cpp cwd={cwd}')
+        print(f'files={os.listdir(cwd)}')
         try:
             subprocess.check_call(
                 ['make shared DSC_FAST=1'],
@@ -30,7 +32,7 @@ class BuildCmd(install):
 if __name__ == '__main__':
     packages = find_packages('python')
     package_dir = {'': 'python'}
-
+    package_data = {'': 'Makefile', 'dsc': ['include/*', 'src/*']}
     setup(
         name='dsc',
         version='0.1',
@@ -54,8 +56,6 @@ if __name__ == '__main__':
             'install': BuildCmd,
         },
         include_package_data=True,
-        package_data={
-            'dsc': ['*.so'],
-        },
+        package_data=package_data,
         python_requires='>=3.9'
     )
