@@ -105,23 +105,11 @@ class Tensor:
     def n_dim(self) -> int:
         return self._n_dim
 
-    def __add__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
-        return add(self, other)
-
-    def __sub__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
-        return sub(self, other)
-
-    def __mul__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
-        return mul(self, other)
-
-    def __truediv__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
-        return true_div(self, other)
-
-    def __pow__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
-        return power(self, other)
-
     def __len__(self):
         return self.shape[0]
+
+    def __str__(self) -> str:
+        return str(self.numpy())
 
     def __getitem__(self, item: Union[int, Tuple[int, ...], slice, Tuple[slice, ...], Tuple[Union[int, slice], ...]]) \
             -> Union[float, complex, 'Tensor']:
@@ -151,6 +139,21 @@ class Tensor:
             _dsc_tensor_set_slice(_get_ctx(), _c_ptr(self), _c_ptr(wrapped_val), *tuple(_c_slice(s) for s in key))
         else:
             raise RuntimeError(f'cannot set Tensor with index {key}')
+
+    def __add__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+        return add(self, other)
+
+    def __sub__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+        return sub(self, other)
+
+    def __mul__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+        return mul(self, other)
+
+    def __truediv__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+        return true_div(self, other)
+
+    def __pow__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+        return power(self, other)
 
     def numpy(self) -> np.ndarray:
         raw_tensor = self._c_ptr.contents
