@@ -4,13 +4,25 @@
 #  This code is licensed under the terms of the 3-clause BSD license
 #  (https://opensource.org/license/bsd-3-clause).
 
-from setuptools import setup, find_namespace_packages
+from setuptools import setup, find_packages
+from setuptools.command.install import install
+import subprocess
+import os
 
+
+class BuildCmd(install):
+    @staticmethod
+    def _compile():
+        subprocess.check_call(
+            ['make shared DSC_FAST=1'],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+        )
+    def run(self):
+        BuildCmd._compile()
+        install.run(self)
 
 if __name__ == '__main__':
-    packages = find_namespace_packages(
-        where='python', exclude=['tests', 'benchmarks']
-    )
+    packages = find_packages('python')
     package_dir = {'': 'python'}
 
     setup(
@@ -31,6 +43,12 @@ if __name__ == '__main__':
                 'pytest',
                 'tabulate'
             ]
+        },
+        cmdclass={
+            'install': BuildCmd,
+        },
+        package_data={
+            'dsc': ['*.so'],
         },
         python_requires='>=3.9'
     )
