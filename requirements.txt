@@ -1,5 +1,6 @@
 # Required by the dsc python library
 numpy
+psutil
 
 # Only used for testing and benchmarking
 matplotlib

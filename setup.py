@@ -43,6 +43,7 @@ if __name__ == '__main__':
         package_dir=package_dir,
         install_requires=[
             'numpy',
+            'psutil',
         ],
         extras_require={
             'dev': [
