@@ -7,29 +7,25 @@
 from setuptools import setup, find_packages
 from setuptools.command.install import install
 import subprocess
-from subprocess import CalledProcessError
 import os
+from pathlib import Path
 
+
+def _compile_cpp():
+    subprocess.check_call(
+        ['make', 'shared', 'DSC_FAST=1'],
+        cwd=os.path.dirname(os.path.abspath(__file__))
+    )
 
 class BuildCmd(install):
-    @staticmethod
-    def _compile():
-        cwd = os.path.dirname(os.path.abspath(__file__))
-        print(f'About to compile Cpp cwd={cwd}')
-        print(f'files={os.listdir(cwd)}')
-        try:
-            subprocess.check_call(
-                ['make shared DSC_FAST=1'],
-                cwd=os.path.dirname(os.path.abspath(__file__)),
-            )
-        except CalledProcessError:
-            print('failed to compile cpp')
-
     def run(self):
-        BuildCmd._compile()
+        _compile_cpp()
         install.run(self)
 
 if __name__ == '__main__':
+    with open(Path(__file__).parent / 'README.md', 'r', encoding='utf-8') as f:
+        long_description = f.read()
+
     packages = find_packages('python')
     package_dir = {'': 'python'}
     package_data = {'': ['Makefile'], 'dsc': ['include/*', 'src/*']}
@@ -38,7 +34,10 @@ if __name__ == '__main__':
         version='0.1',
         author='Christian Gilli',
         author_email='christian.gilli@dspcraft.com',
-        description='',
+        license='BSD-3-Clause',
+        description='DSPCraft tensor processing library.',
+        long_description=long_description,
+        long_description_content_type='text/markdown',
         url='https://github.com/dspcraft/dsc',
         packages=packages,
         package_dir=package_dir,
