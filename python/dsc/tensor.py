@@ -140,19 +140,19 @@ class Tensor:
         else:
             raise RuntimeError(f'cannot set Tensor with index {key}')
 
-    def __add__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+    def __add__(self, other: Union[int, float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
         return add(self, other)
 
-    def __sub__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+    def __sub__(self, other: Union[int, float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
         return sub(self, other)
 
-    def __mul__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+    def __mul__(self, other: Union[int, float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
         return mul(self, other)
 
-    def __truediv__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+    def __truediv__(self, other: Union[int, float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
         return true_div(self, other)
 
-    def __pow__(self, other: Union[float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+    def __pow__(self, other: Union[int, float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
         return power(self, other)
 
     def numpy(self) -> np.ndarray:
@@ -215,23 +215,23 @@ def _tensor_op(xa: Tensor, xb: Union[Tensor, np.ndarray], out: Tensor, op_name: 
     else:
         raise RuntimeError(f'tensor operation "{op_name}" doesn\'t exist in module')
 
-def add(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
+def add(xa: Tensor, xb: Union[int, float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
     xb = _wrap(xb, xa.dtype)
     return _tensor_op(xa, xb, out, op_name='_dsc_add')
 
-def sub(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
+def sub(xa: Tensor, xb: Union[int, float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
     xb = _wrap(xb, xa.dtype)
     return _tensor_op(xa, xb, out, op_name='_dsc_sub')
 
-def mul(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
+def mul(xa: Tensor, xb: Union[int, float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
     xb = _wrap(xb, xa.dtype)
     return _tensor_op(xa, xb, out, op_name='_dsc_mul')
 
-def true_div(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
+def true_div(xa: Tensor, xb: Union[int, float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
     xb = _wrap(xb, xa.dtype)
     return _tensor_op(xa, xb, out, op_name='_dsc_div')
 
-def power(xa: Tensor, xb: Union[float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
+def power(xa: Tensor, xb: Union[int, float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
     xb = _wrap(xb, xa.dtype)
     return _tensor_op(xa, xb, out, op_name='_dsc_pow')
 
@@ -274,7 +274,8 @@ def real(x: Tensor) -> Tensor:
 def imag(x: Tensor) -> Tensor:
     return Tensor(_dsc_imag(_get_ctx(), _c_ptr(x)))
 
-def i0(x: Tensor) -> Tensor:
+def i0(x: Union[int, float, Tensor], dtype: Dtype = Dtype.F32) -> Tensor:
+    x = _wrap(x, dtype)
     return Tensor(_dsc_i0(_get_ctx(), _c_ptr(x)))
 
 def clip(x: Tensor, x_min: float = None, x_max: float = None, out: Tensor = None) -> Tensor:
