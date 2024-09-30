@@ -55,28 +55,27 @@ def _c_slice(x: Union[slice, int]) -> _DscSlice:
         # handling will be done internally by the library.
         return _DscSlice(x, x, x)
 
-def _wrap(x: Union[int, float, complex, 'Tensor', np.ndarray], dtype: Dtype) -> 'Tensor':
+def _wrap(x: Union[ScalarType, 'Tensor', np.ndarray], dtype: Dtype = None) -> 'Tensor':
+    # Default dtype is f32 or c32, depending on float or complex
     if isinstance(x, np.ndarray):
+        # The conversion from (and to) NumPy is not free, so it's better to do that once and then work with DSC tensors.
+        # This is here just for convenience not because it's a best practice.
         return from_numpy(x)
     elif isinstance(x, Tensor):
         return x
     elif isinstance(x, float):
-        if dtype == Dtype.F32:
-            return Tensor(_dsc_wrap_f32(_get_ctx(), x))
-        elif dtype == Dtype.F64:
+        if dtype == Dtype.F64:
             return Tensor(_dsc_wrap_f64(_get_ctx(), x))
         else:
-            raise RuntimeError(f'cannot wrap {x} as {dtype}')
+            return Tensor(_dsc_wrap_f32(_get_ctx(), x))
     elif isinstance(x, complex):
-        if dtype == Dtype.C32:
-            return Tensor(_dsc_wrap_c32(_get_ctx(), x))
-        elif dtype == Dtype.C64:
+        if dtype == Dtype.C64:
             return Tensor(_dsc_wrap_c64(_get_ctx(), x))
         else:
-            raise RuntimeError(f'cannot wrap {x} as {dtype}')
+            return Tensor(_dsc_wrap_c32(_get_ctx(), x))
     else:
-        # Simply cast x to dtype
-        if dtype == Dtype.F32:
+        # Simply cast x to dtype, if any
+        if dtype == Dtype.F32 or dtype is None:
             return Tensor(_dsc_wrap_f32(_get_ctx(), float(x)))
         elif dtype == Dtype.F64:
             return Tensor(_dsc_wrap_f64(_get_ctx(), float(x)))
@@ -126,7 +125,7 @@ class Tensor:
             raise RuntimeError(f'cannot index Tensor with object {item}')
 
     def __setitem__(self, key: Union[int, Tuple[int, ...], slice, Tuple[slice, ...], Tuple[Union[int, slice], ...]],
-                    value: Union[int, float, complex, 'Tensor', np.ndarray]):
+                    value: Union[ScalarType, 'Tensor', np.ndarray]):
         wrapped_val = _wrap(value, self.dtype)
         if isinstance(key, int):
             _dsc_tensor_set_idx(_get_ctx(), _c_ptr(self), _c_ptr(wrapped_val), c_int(key))
@@ -140,20 +139,35 @@ class Tensor:
         else:
             raise RuntimeError(f'cannot set Tensor with index {key}')
 
-    def __add__(self, other: Union[int, float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+    def __add__(self, other: Union[ScalarType, 'Tensor', np.ndarray]) -> 'Tensor':
         return add(self, other)
 
-    def __sub__(self, other: Union[int, float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+    def __radd__(self, other: Union[ScalarType, 'Tensor', np.ndarray]) -> 'Tensor':
+        return add(other, self)
+
+    def __sub__(self, other: Union[ScalarType, 'Tensor', np.ndarray]) -> 'Tensor':
         return sub(self, other)
 
-    def __mul__(self, other: Union[int, float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+    def __rsub__(self, other: Union[ScalarType, 'Tensor', np.ndarray]) -> 'Tensor':
+        return sub(other, self)
+
+    def __mul__(self, other: Union[ScalarType, 'Tensor', np.ndarray]) -> 'Tensor':
         return mul(self, other)
 
-    def __truediv__(self, other: Union[int, float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+    def __rmul__(self, other: Union[ScalarType, 'Tensor', np.ndarray]) -> 'Tensor':
+        return mul(other, self)
+
+    def __truediv__(self, other: Union[ScalarType, 'Tensor', np.ndarray]) -> 'Tensor':
         return true_div(self, other)
 
-    def __pow__(self, other: Union[int, float, complex, 'Tensor', np.ndarray]) -> 'Tensor':
+    def __rtruediv__(self, other: Union[ScalarType, 'Tensor', np.ndarray]) -> 'Tensor':
+        return true_div(other, self)
+
+    def __pow__(self, other: Union[ScalarType, 'Tensor', np.ndarray]) -> 'Tensor':
         return power(self, other)
+
+    def __rpow__(self, other: Union[ScalarType, 'Tensor', np.ndarray]) -> 'Tensor':
+        return power(other, self)
 
     def numpy(self) -> np.ndarray:
         raw_tensor = self._c_ptr.contents
@@ -203,36 +217,62 @@ def from_numpy(x: np.ndarray) -> Tensor:
     ctypes.memmove(_c_ptr(out).contents.data, x.ctypes.data, x.nbytes)
     return out
 
-def _tensor_op(xa: Tensor, xb: Union[Tensor, np.ndarray], out: Tensor, op_name: str) -> Tensor:
-    if isinstance(xb, np.ndarray):
-        # The conversion from (and to) NumPy is not free, so it's better to do that once and then work with DSC tensors.
-        # This is here just for convenience not because it's a best practice.
-        xb = from_numpy(xb)
-
+def _tensor_op(xa: Tensor, xb: Tensor, out: Tensor, op_name: str) -> Tensor:
     if hasattr(sys.modules[__name__], op_name):
         op = getattr(sys.modules[__name__], op_name)
         return Tensor(op(_get_ctx(), _c_ptr(xa), _c_ptr(xb), _c_ptr(out)))
     else:
         raise RuntimeError(f'tensor operation "{op_name}" doesn\'t exist in module')
 
-def add(xa: Tensor, xb: Union[int, float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
-    xb = _wrap(xb, xa.dtype)
+def _wrap_operands(xa: Union[ScalarType, Tensor, np.ndarray],
+                   xb: Union[ScalarType, Tensor, np.ndarray]) -> Tuple[Tensor, Tensor]:
+    def _dtype(x: Union[ScalarType, Tensor, np.ndarray]) -> Dtype:
+        if isinstance(x, Tensor):
+            return x.dtype
+        elif isinstance(x, np.ndarray):
+            return NP_TO_DTYPE[x.dtype]
+        elif isinstance(x, int) or isinstance(x, float):
+            return Dtype.F32
+        else:
+            return Dtype.C32
+
+    if (isinstance(xa, Tensor) and isinstance(xb, Tensor)) or \
+       (isinstance(xa, np.ndarray) and isinstance(xb, np.ndarray)):
+        return _wrap(xa), _wrap(xb)
+
+    xa_dtype = _dtype(xa)
+    xb_dtype = _dtype(xb)
+    wrap_dtype = DTYPE_CONVERSION_TABLES[xa_dtype.value][xb_dtype.value]
+    return _wrap(xa, wrap_dtype), _wrap(xb, wrap_dtype)
+
+def add(xa: Union[ScalarType, Tensor, np.ndarray],
+        xb: Union[ScalarType, Tensor, np.ndarray],
+        out: Tensor = None) -> Tensor:
+    xa, xb = _wrap_operands(xa, xb)
     return _tensor_op(xa, xb, out, op_name='_dsc_add')
 
-def sub(xa: Tensor, xb: Union[int, float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
-    xb = _wrap(xb, xa.dtype)
+def sub(xa: Union[ScalarType, Tensor, np.ndarray],
+        xb: Union[ScalarType, Tensor, np.ndarray],
+        out: Tensor = None) -> Tensor:
+    xa, xb = _wrap_operands(xa, xb)
     return _tensor_op(xa, xb, out, op_name='_dsc_sub')
 
-def mul(xa: Tensor, xb: Union[int, float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
-    xb = _wrap(xb, xa.dtype)
+def mul(xa: Union[ScalarType, Tensor, np.ndarray],
+        xb: Union[ScalarType, Tensor, np.ndarray],
+        out: Tensor = None) -> Tensor:
+    xa, xb = _wrap_operands(xa, xb)
     return _tensor_op(xa, xb, out, op_name='_dsc_mul')
 
-def true_div(xa: Tensor, xb: Union[int, float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
-    xb = _wrap(xb, xa.dtype)
+def true_div(xa: Union[ScalarType, Tensor, np.ndarray],
+             xb: Union[ScalarType, Tensor, np.ndarray],
+             out: Tensor = None) -> Tensor:
+    xa, xb = _wrap_operands(xa, xb)
     return _tensor_op(xa, xb, out, op_name='_dsc_div')
 
-def power(xa: Tensor, xb: Union[int, float, complex, Tensor, np.ndarray], out: Tensor = None) -> Tensor:
-    xb = _wrap(xb, xa.dtype)
+def power(xa: Union[ScalarType, Tensor, np.ndarray],
+          xb: Union[ScalarType, Tensor, np.ndarray],
+          out: Tensor = None) -> Tensor:
+    xa, xb = _wrap_operands(xa, xb)
     return _tensor_op(xa, xb, out, op_name='_dsc_pow')
 
 def cos(x: Tensor, out: Tensor = None) -> Tensor:

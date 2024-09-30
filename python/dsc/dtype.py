@@ -11,6 +11,9 @@ from ctypes import (
     c_float,
     c_double
 )
+from typing import Union
+
+ScalarType = Union[int, float, complex]
 
 
 class Dtype(Enum):
@@ -50,3 +53,10 @@ NP_TO_DTYPE = {
     np.dtype(np.complex64): Dtype.C32,
     np.dtype(np.complex128): Dtype.C64,
 }
+
+DTYPE_CONVERSION_TABLES = [
+    [Dtype.F32, Dtype.F64, Dtype.C32, Dtype.C64],
+    [Dtype.F64, Dtype.F64, Dtype.C32, Dtype.C64],
+    [Dtype.C32, Dtype.C32, Dtype.C32, Dtype.C64],
+    [Dtype.C64, Dtype.C64, Dtype.C64, Dtype.C64],
+]

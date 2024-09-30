@@ -46,14 +46,14 @@ DSC_DTYPES = {
 class TestOps:
     def test_binary(self):
         ops = {
-            'add': (np.add, dsc.add),
-            'sub': (np.subtract, dsc.sub),
-            'mul': (np.multiply, dsc.mul),
-            'div': (np.true_divide, dsc.true_div),
-            'power': (np.power, dsc.power),
+            'add': (np.add, dsc.add, '+'),
+            'sub': (np.subtract, dsc.sub, '-'),
+            'mul': (np.multiply, dsc.mul, '*'),
+            'div': (np.true_divide, dsc.true_div, '/'),
+            'power': (np.power, dsc.power, '**'),
         }
         for op_name in ops.keys():
-            np_op, dsc_op = ops[op_name]
+            np_op, dsc_op, symbol = ops[op_name]
             for dtype in DTYPES:
                 print(f'Testing operator {op_name} with {dtype.__name__}')
                 shape = [random.randint(2, 10) for _ in range(4)]
@@ -67,7 +67,10 @@ class TestOps:
 
                 res_np = np_op(x, y)
                 res_dsc = dsc_op(x_dsc, y_dsc)
+                r_res_np = eval(f'y {symbol} x')
+                r_res_dsc = eval(f'y_dsc {symbol} x_dsc')
                 assert all_close(res_dsc.numpy(), res_np)
+                assert all_close(r_res_dsc.numpy(), r_res_np)
 
                 # Broadcasting
                 collapse_idx = random.randint(0, 3)
@@ -78,7 +81,10 @@ class TestOps:
 
                 res_np_b = np_op(x, y_b)
                 res_dsc_b = dsc_op(x_dsc, y_dsc_b)
+                r_res_np_b = eval(f'y_b {symbol} x')
+                r_res_dsc_b = eval(f'y_dsc_b {symbol} x_dsc')
                 assert all_close(res_dsc_b.numpy(), res_np_b)
+                assert all_close(r_res_dsc_b.numpy(), r_res_np_b)
 
                 # Scalar
                 if dtype == np.complex64 or dtype == np.complex128:
@@ -88,7 +94,11 @@ class TestOps:
 
                 res_np_s = np_op(x, y_s)
                 res_dsc_s = dsc_op(x_dsc, y_s)
+                r_res_np_s = eval(f'y_s {symbol} x')
+                r_res_dsc_s = eval(f'y_s {symbol} x_dsc')
+
                 assert all_close(res_dsc_s.numpy(), res_np_s)
+                assert all_close(r_res_dsc_s.numpy(), r_res_np_s)
 
                 dsc.clear()
 
