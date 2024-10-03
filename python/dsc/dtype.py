@@ -47,6 +47,13 @@ DTYPE_TO_CTYPE = {
     Dtype.C64: POINTER(c_double * 2),
 }
 
+DTYPE_SIZE = {
+    Dtype.F32: 4,
+    Dtype.F64: 8,
+    Dtype.C32: 8,
+    Dtype.C64: 16,
+}
+
 NP_TO_DTYPE = {
     np.dtype(np.float32): Dtype.F32,
     np.dtype(np.float64): Dtype.F64,

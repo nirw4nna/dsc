@@ -3,6 +3,7 @@
 
 venv/
 
+*.egg-info*
 __pycache__/
 
 *.o

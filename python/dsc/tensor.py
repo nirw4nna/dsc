@@ -90,6 +90,7 @@ class Tensor:
         self._dtype = Dtype(c_ptr.contents.dtype)
         self._shape = c_ptr.contents.shape
         self._n_dim = c_ptr.contents.n_dim
+        self._ne = c_ptr.contents.ne
         self._c_ptr = c_ptr
 
     @property
@@ -103,6 +104,10 @@ class Tensor:
     @property
     def n_dim(self) -> int:
         return self._n_dim
+    
+    @property
+    def ne(self) -> int:
+        return self._ne
 
     def __len__(self):
         return self.shape[0]
@@ -169,6 +174,10 @@ class Tensor:
     def __rpow__(self, other: Union[ScalarType, 'Tensor', np.ndarray]) -> 'Tensor':
         return power(other, self)
 
+    def __bytes__(self) -> bytes:
+        byte_array = (ctypes.c_byte * self.ne * DTYPE_SIZE[self.dtype]).from_address(self._c_ptr.contents.data)
+        return bytes(byte_array)
+
     def numpy(self) -> np.ndarray:
         raw_tensor = self._c_ptr.contents
 
@@ -187,6 +196,9 @@ class Tensor:
 
     def cast(self, dtype: Dtype) -> 'Tensor':
         return Tensor(_dsc_cast(_get_ctx(), self._c_ptr, c_uint8(dtype.value)))
+    
+    def tobytes(self) -> bytes:
+        return bytes(self)
 
 def _create_tensor(dtype: Dtype, *dims: int) -> Tensor:
     n_dims = len(dims)
