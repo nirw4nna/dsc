@@ -46,6 +46,7 @@ class _DscTensor(Structure):
         ('ne', c_int),
         ('n_dim', c_int),
         ('dtype', c_uint8),
+        ('backend', c_uint8),
     ]
 
 
@@ -100,6 +101,15 @@ def _dsc_ctx_clear(ctx: _DscCtx):
 
 _lib.dsc_ctx_clear.argtypes = [_DscCtx]
 _lib.dsc_ctx_clear.restype = None
+
+
+# extern void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) noexcept;
+def _dsc_tensor_free(ctx: _DscCtx, x: _DscTensor_p):
+    return _lib.dsc_tensor_free(ctx, x)
+
+
+_lib.dsc_tensor_free.argtypes = [_DscCtx, _DscTensor_p]
+_lib.dsc_tensor_free.restype = None
 
 
 # extern dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx,

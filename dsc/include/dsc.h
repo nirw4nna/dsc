@@ -86,9 +86,9 @@ extern "C" {
 #endif
 
 struct dsc_ctx;
-struct dsc_obj;
 struct dsc_fft_plan;
 enum dsc_fft_type : u8;
+enum dsc_backend_type : u8;
 
 struct dsc_tensor {
     // The shape of this tensor, right-aligned. For example a 1D tensor T of 4 elements
@@ -100,6 +100,7 @@ struct dsc_tensor {
     int ne;
     int n_dim;
     dsc_dtype dtype;
+    dsc_backend_type backend;
 };
 
 struct dsc_slice {
@@ -110,7 +111,6 @@ struct dsc_slice {
         };
     };
 };
-
 
 static DSC_INLINE f64 dsc_timer() noexcept {
     timespec ts{};
@@ -133,6 +133,8 @@ extern dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, int n,
 extern void dsc_ctx_free(dsc_ctx *ctx) noexcept;
 
 extern void dsc_ctx_clear(dsc_ctx *ctx) noexcept;
+
+extern void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) noexcept;
 
 // ============================================================
 // Tensor Creation

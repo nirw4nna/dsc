@@ -22,6 +22,8 @@ def session_fixture():
 def teardown_fixture():
     # This is invoked automatically after each test
     yield
+    # With the generic allocator in place this is not useful but we'll
+    # keep it here just in case
     dsc.clear()
 
 
@@ -100,8 +102,6 @@ class TestOps:
                 assert all_close(res_dsc_s.numpy(), res_np_s)
                 assert all_close(r_res_dsc_s.numpy(), r_res_np_s)
 
-                dsc.clear()
-
     def test_unary(self):
         ops = {
             'sin': (np.sin, dsc.sin),
@@ -132,7 +132,6 @@ class TestOps:
                 res_np = np_op(x)
                 res_dsc = dsc_op(x_dsc)
                 assert all_close(res_dsc.numpy(), res_np)
-                dsc.clear()
 
     def test_clip(self):
         for dtype in DTYPES:
@@ -143,7 +142,6 @@ class TestOps:
             assert all_close(dsc.clip(x_dsc, -2, 2).numpy(), np.clip(x, -2, 2))
             assert all_close(dsc.clip(x_dsc, -3).numpy(), np.clip(x, -3, None))
             assert all_close(dsc.clip(x_dsc, None, 2).numpy(), np.clip(x, None, 2))
-            dsc.clear()
 
     def test_unary_axis(self):
         ops = {
@@ -168,8 +166,6 @@ class TestOps:
                     res_dsc_2 = dsc_op(x_dsc, axis=axis, keepdims=False)
                     assert all_close(res_dsc_2.numpy(), res_np_2)
 
-                    dsc.clear()
-
 class TestInit:
     def test_arange(self):
         for _ in range(10):
@@ -180,9 +176,6 @@ class TestInit:
                 res_np = np.arange(n, dtype=dtype)
                 res_dsc = dsc.arange(n, dtype=DSC_DTYPES[dtype])
                 assert all_close(res_dsc.numpy(), res_np)
-
-                dsc.clear()
-
 
     def test_random(self):
         for _ in range(10):
@@ -198,8 +191,6 @@ class TestInit:
 
                 assert res_dsc_np.dtype == res_np.dtype
                 assert res_dsc_np.shape == res_np.shape
-
-                dsc.clear()
 
 class TestIndexing:
     def test_get_idx(self):
@@ -220,7 +211,6 @@ class TestIndexing:
                             assert all_close(res_dsc.numpy(), res)
                         else:
                             assert np.isclose(res, res_dsc)
-                dsc.clear()
 
     @staticmethod
     def _validate_slice(sl: slice, max_dim: int) -> bool:
@@ -321,8 +311,6 @@ class TestIndexing:
                     x_1d_dsc[s] = val
                     assert all_close(x_1d_dsc.numpy(), x_1d)
 
-        dsc.clear()
-
         x_2d = random_nd([5, 5], np.float32)
         x_2d_dsc = dsc.from_numpy(x_2d)
 
@@ -386,9 +374,6 @@ def test_creation():
             x_dsc = dsc.zeros_like(like, dtype=DSC_DTYPES[dtype])
             assert all_close(x_dsc.numpy(), x)
 
-            dsc.clear()
-
-
 def test_fft():
     ops = {
         'fft': ((np.fft.fft, np.fft.ifft), (dsc.fft, dsc.ifft)),
@@ -422,8 +407,6 @@ def test_fft():
 
                 assert all_close(x_dsc_ifft.numpy(), x_np_ifft)
 
-                dsc.clear()
-
 def test_fftfreq():
     for _ in range(10):
         n = random.randint(1, 10_000)
@@ -456,5 +439,3 @@ def test_fftfreq():
             res_np_d = np.fft.fftfreq(n, d).astype(dtype)
             res_dsc_d = dsc.fftfreq(n, d, dtype=DSC_DTYPES[dtype])
             assert all_close(res_np_d, res_dsc_d.numpy())
-
-            dsc.clear()

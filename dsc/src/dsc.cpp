@@ -8,17 +8,15 @@
 #include "dsc_ops.h"
 #include "dsc_fft.h"
 #include "dsc_iter.h"
+#include "dsc_backend.h"
+#include "dsc_allocator.h"
 #include <cstring>
 #include <random>
 #include <cstdarg> // va_xxx
 
 // How many independent FFT plans we support. This is completely arbitrary
-#if !defined(DSC_FFT_PLANS)
-#   define DSC_FFT_PLANS ((int) 16)
-#endif
-
-#if !defined(DSC_PAGE_SIZE)
-#   define DSC_PAGE_SIZE ((usize) 4096)
+#if !defined(DSC_MAX_FFT_PLANS)
+#   define DSC_MAX_FFT_PLANS ((int) 16)
 #endif
 
 #define DSC_SIMD_ALIGN ((int) 32)
@@ -116,58 +114,46 @@
 #define dsc_for(idx, X) for (int idx = 0; idx < (X)->ne; ++idx)
 
 #define DSC_CTX_PUSH(CTX) \
-    dsc_obj *checkpointed_last_ = (CTX)->buffer->last;      \
-    const int checkpointed_n_objs_ = (CTX)->buffer->n_objs
+    (CTX)->default_allocator = (CTX)->scratch_allocator
 
 #define DSC_CTX_POP(CTX) \
-    (CTX)->buffer->last = checkpointed_last_;     \
-    (CTX)->buffer->n_objs = checkpointed_n_objs_
-
-struct dsc_obj {
-    usize offset;
-    usize nb;
-};
-
-struct dsc_buffer {
-    dsc_fft_plan *plans[DSC_FFT_PLANS];
-    dsc_obj *last;
-    usize nb;
-    int n_objs;
-    int n_plans;
-};
+    dsc_clear_buffer(CTX->default_allocator);      \
+    (CTX)->default_allocator = (CTX)->main_allocator
 
 struct dsc_ctx {
-    dsc_buffer *buffer;
+    dsc_backend *default_backend;
+    dsc_buffer *main_buf, *scratch_buf;
+    dsc_allocator *main_allocator, *scratch_allocator, *default_allocator;
+    dsc_fft_plan *fft_plans[DSC_MAX_FFT_PLANS];
 };
 
 // ============================================================
 // Initialization
 
-static DSC_MALLOC dsc_buffer *dsc_buffer_alloc(const usize nb) noexcept {
-    const usize buff_size = DSC_ALIGN(nb + sizeof(dsc_buffer), DSC_PAGE_SIZE);
-
-    dsc_buffer *buff = (dsc_buffer *) aligned_alloc(DSC_PAGE_SIZE, buff_size);
-    DSC_ASSERT(buff != nullptr);
-
-    buff->nb = buff_size - sizeof(dsc_buffer);
-    buff->n_objs = 0;
-    buff->n_plans = 0;
-    buff->last = nullptr;
-
-    return buff;
-}
-
 dsc_ctx *dsc_ctx_init(const usize nb) noexcept {
     DSC_ASSERT(nb > 0);
 
-    dsc_ctx *ctx = (dsc_ctx *) malloc(sizeof(dsc_ctx));
+    dsc_ctx *ctx = (dsc_ctx *) calloc(1, sizeof(dsc_ctx));
     DSC_ASSERT(ctx != nullptr);
 
-    ctx->buffer = dsc_buffer_alloc(nb);
+    // Set the default backend to CPU
+    dsc_backend *backend = dsc_cpu_backend();
+    ctx->default_backend = backend;
 
-    DSC_LOG_INFO("created new context %p of %ldMB",
+    // Reserve 10% of the total memory storage for the scratch buffer
+    ctx->main_buf = dsc_backend_buf_alloc(backend, (usize) (0.9 * (f64) nb));
+    ctx->scratch_buf = dsc_backend_buf_alloc(backend, (usize) (0.1 * (f64) nb));
+
+    // Configure the allocator for each buffer
+    ctx->main_allocator = dsc_generic_allocator(ctx->main_buf);
+    ctx->scratch_allocator = dsc_linear_allocator(ctx->scratch_buf);
+    ctx->default_allocator = ctx->main_allocator;
+
+    DSC_LOG_INFO("created new context %p with %ldMB for main and %ldMB for scratch memory on %s",
                  (void *) ctx,
-                 (usize) DSC_B_TO_MB(ctx->buffer->nb)
+                 (usize) DSC_B_TO_MB(ctx->main_buf->size),
+                 (usize) DSC_B_TO_MB(ctx->scratch_buf->size),
+                 DSC_BACKED_TYPE[dsc_get_backend_type(backend)]
     );
 
     return ctx;
@@ -189,45 +175,24 @@ static dsc_fft_plan *dsc_get_plan(dsc_ctx *ctx, const int n,
         DSC_INVALID_CASE("unknown dtype=%d", dtype);
     }
 
-    const dsc_buffer *buffer = ctx->buffer;
     dsc_fft_plan *plan = nullptr;
-    for (int i = 0; i < buffer->n_plans; ++i) {
-        dsc_fft_plan *cached_plan = buffer->plans[i];
-        if ((cached_plan != nullptr) &&
-            (cached_plan->n == n) &&
-            // Note: technically we could support complex FFTs of order N from real FFTs plans
-            // but not the other way around because we need an extra set of twiddles in the RFFT.
-            (cached_plan->fft_type == fft_type) &&
-            (cached_plan->dtype == twd_dtype)) {
-            plan = cached_plan;
-            break;
+    for (int i = 0; i < DSC_MAX_FFT_PLANS; ++i) {
+        dsc_fft_plan *cached_plan = ctx->fft_plans[i];
+        if ((cached_plan != nullptr)) {
+            if ((cached_plan->n == n) &&
+                // Note: technically we could support complex FFTs of order N from real FFTs plans
+                // but not the other way around because we need an extra set of twiddles in the RFFT.
+                (cached_plan->fft_type == fft_type) &&
+                (cached_plan->dtype == twd_dtype)) {
+                plan = cached_plan;
+                plan->last_used = 0;
+            } else {
+                cached_plan->last_used++;
+            }
         }
     }
 
     return plan;
-}
-
-template<typename T>
-static DSC_MALLOC DSC_INLINE T *dsc_obj_alloc(dsc_buffer *buff, const usize nb) noexcept {
-    const usize last_offset = buff->last == nullptr ? 0 : buff->last->offset;
-    const usize last_size = buff->last == nullptr ? 0 : buff->last->nb;
-    const usize last_end = last_offset + last_size;
-
-    if (nb + sizeof(dsc_obj) + last_end > buff->nb) {
-        DSC_LOG_FATAL("can't allocate %.2fKB", DSC_B_TO_KB(nb));
-    }
-
-    // The actual buffer starts after the 'header' of the arena struct.
-    dsc_obj *new_obj = (dsc_obj *) ((byte *) buff + last_end + sizeof(dsc_buffer));
-    // The offset refers to the actual offset of the "contained" object which comes after
-    // the dsc_object "header".
-    new_obj->offset = last_end + sizeof(dsc_obj);
-    new_obj->nb = nb;
-
-    buff->n_objs++;
-    buff->last = new_obj;
-
-    return (T *) ((byte *) buff + sizeof(dsc_buffer) + buff->last->offset);
 }
 
 dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, const int n,
@@ -238,22 +203,38 @@ dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, const int n,
     dsc_fft_plan *plan = dsc_get_plan(ctx, fft_n, fft_type, dtype);
 
     if (plan == nullptr) {
-        dsc_buffer *buffer = ctx->buffer;
-        if (buffer->n_plans <= DSC_FFT_PLANS) {
-            const usize storage = sizeof(dsc_fft_plan) + dsc_fft_storage(fft_n, dtype, fft_type);
-
-            DSC_LOG_DEBUG("allocating new %s plan with N=%d dtype=%s",
-                          fft_type == REAL ? "RFFT" : "FFT",
-                          fft_n, DSC_DTYPE_NAMES[dtype]);
-
-            plan = dsc_obj_alloc<dsc_fft_plan>(buffer, storage);
-            plan->twiddles = (plan + 1);
-            dsc_init_plan(plan, fft_n, dtype, fft_type);
-
-            buffer->plans[buffer->n_plans++] = plan;
-        } else {
-            DSC_LOG_FATAL("too many plans in context");
+        int free_slot = -1;
+        for (int i = 0; i < DSC_MAX_FFT_PLANS; ++i) {
+            if (ctx->fft_plans[i] == nullptr) {
+                free_slot = i;
+                break;
+            }
         }
+
+        if (free_slot < 0) {
+            // Find the 'oldest' FFT plan and evict it
+            int max = -1;
+            for (int i = 0; i < DSC_MAX_FFT_PLANS; ++i) {
+                dsc_fft_plan *tmp = ctx->fft_plans[i];
+                if (tmp->last_used > max) {
+                    max = tmp->last_used;
+                    free_slot = i;
+                }
+            }
+            dsc_obj_free(ctx->default_allocator, ctx->fft_plans[free_slot]);
+        }
+
+        const usize storage = sizeof(dsc_fft_plan) + dsc_fft_storage(fft_n, dtype, fft_type);
+
+        DSC_LOG_DEBUG("allocating new %s plan with N=%d dtype=%s",
+                      fft_type == REAL ? "RFFT" : "FFT",
+                      fft_n, DSC_DTYPE_NAMES[dtype]);
+
+        plan = (dsc_fft_plan *) dsc_obj_alloc(ctx->default_allocator, storage);
+        plan->twiddles = (plan + 1);
+        dsc_init_plan(plan, fft_n, dtype, fft_type);
+
+        ctx->fft_plans[free_slot] = plan;
     } else {
         DSC_LOG_DEBUG("found cached %s plan with N=%d dtype=%s",
                       fft_type == REAL ? "RFFT" : "FFT",
@@ -267,29 +248,27 @@ dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, const int n,
 // Cleanup/Teardown
 
 void dsc_ctx_free(dsc_ctx *ctx) noexcept {
-    DSC_LOG_INFO("freeing context %p of %ldMB",
+    DSC_LOG_INFO("freeing context %p: main mem %ldMB, scratch mem %ldMB",
                  (void *) ctx,
-                 (usize) DSC_B_TO_MB(ctx->buffer->nb)
+                 (usize) DSC_B_TO_MB(ctx->main_buf->size),
+                 (usize) DSC_B_TO_MB(ctx->scratch_buf->size)
     );
 
-    free(ctx->buffer);
+    dsc_backend_buf_free(ctx->default_backend, ctx->main_buf);
+    dsc_backend_buf_free(ctx->default_backend, ctx->scratch_buf);
     free(ctx);
 }
 
 void dsc_ctx_clear(dsc_ctx *ctx) noexcept {
-    DSC_LOG_DEBUG("clearing context %p: mem_size=%ldMB n_objs=%d fft_plans=%d",
-                  (void *)ctx,
-                  (usize) DSC_B_TO_MB(ctx->buffer->nb),
-                  ctx->buffer->n_objs,
-                  ctx->buffer->n_plans
-    );
-    ctx->buffer->last = nullptr;
-    ctx->buffer->n_objs = 0;
-    // Set all the current plans to nullptr
-    for (int i = 0; i < ctx->buffer->n_plans; ++i)
-        ctx->buffer->plans[i] = nullptr;
+    // Todo: are we going to clear everything or just the scratch?
+    dsc_clear_buffer(ctx->main_allocator);
+    dsc_clear_buffer(ctx->scratch_allocator);
+}
 
-    ctx->buffer->n_plans = 0;
+void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) noexcept {
+    if (x == nullptr) return;
+    // Tensors that are explicitly freed are allocated on the main memory
+    dsc_obj_free(ctx->main_allocator, x);
 }
 
 // ============================================================
@@ -304,17 +283,19 @@ DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
     int ne = 1;
     for (int i = 0; i < n_dim; ++i) ne *= shape[i];
 
-    const usize mem_needed = sizeof(dsc_tensor) + ne * DSC_DTYPE_SIZE[dtype] + DSC_SIMD_ALIGN;
-
-    dsc_buffer *buff = ctx->buffer;
-
+    const usize mem_needed = sizeof(dsc_tensor) + ne * DSC_DTYPE_SIZE[dtype];
     // Allocate the actual tensor
-    dsc_tensor *new_tensor = dsc_obj_alloc<dsc_tensor>(buff, mem_needed);
+    //
+    // Note: don't use the alignment offered by dsc_obj_alloc instead allocate DSC_SIMD_ALIGN more bytes
+    // and just handle the alignment of data manually
+    dsc_tensor *new_tensor = (dsc_tensor *) dsc_obj_alloc(ctx->default_allocator,
+                                                          mem_needed + DSC_SIMD_ALIGN
+    );
 
     new_tensor->dtype = dtype;
-
     new_tensor->ne = ne;
     new_tensor->n_dim = n_dim;
+    new_tensor->backend = dsc_get_backend_type(ctx->default_backend);
 
     // If n_dim is lower than DSC_MAX_DIM then we need to pre-fill the beginning of the array with 1
     for (int i = 0; i < DSC_MAX_DIMS; ++i) {
@@ -333,9 +314,10 @@ DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
     new_tensor->data = (void *) (DSC_ALIGN(unaligned_offset, DSC_SIMD_ALIGN));
 
     DSC_LOG_DEBUG("n_dim=%d shape=[%d, %d, %d, %d] stride=[%d, %d, %d, %d] dtype=%s",
-                  n_dim, new_tensor->shape[0], new_tensor->shape[1], new_tensor->shape[2],
-                  new_tensor->shape[3], new_tensor->stride[0], new_tensor->stride[1], new_tensor->stride[2],
-                  new_tensor->stride[3], DSC_DTYPE_NAMES[dtype]
+                  n_dim,
+                  new_tensor->shape[0], new_tensor->shape[1], new_tensor->shape[2], new_tensor->shape[3],
+                  new_tensor->stride[0], new_tensor->stride[1], new_tensor->stride[2], new_tensor->stride[3],
+                  DSC_DTYPE_NAMES[dtype]
     );
 
     return new_tensor;
@@ -889,9 +871,18 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
     T *xa_data = (T *) xa->data;
     T *xb_data = (T *) xb->data;
     T *out_data = (T *) out->data;
+    const bool xa_scalar = xa->n_dim == 1 && xa->shape[dsc_tensor_dim(xa, -1)] == 1;
     const bool xb_scalar = xb->n_dim == 1 && xb->shape[dsc_tensor_dim(xb, -1)] == 1;
 
-    if (xb_scalar) {
+    if (xa_scalar) {
+        const T val = xa_data[0];
+        dsc_for(i, out) {
+            out_data[i] = op(
+                    val,
+                    xb_data[i]
+            );
+        }
+    } else if (xb_scalar) {
         const T val = xb_data[0];
         dsc_for(i, out) {
             out_data[i] = op(
@@ -913,10 +904,10 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
 }
 
 template<typename Op>
-static  void binary_op(const dsc_tensor *xa,
-                       const dsc_tensor *xb,
-                       dsc_tensor *out,
-                       Op op) noexcept {
+static void binary_op(const dsc_tensor *xa,
+                      const dsc_tensor *xb,
+                      dsc_tensor *out,
+                      Op op) noexcept {
     switch (out->dtype) {
         case dsc_dtype::F32:
             binary_op<f32>(xa, xb, out, op);
@@ -1118,11 +1109,23 @@ static DSC_INLINE DSC_STRICTLY_PURE dsc_dtype as_real(const dsc_dtype dtype) noe
 }
 
 template <typename Tx, typename To, typename Op>
-static DSC_INLINE void complex_binary(const dsc_tensor *DSC_RESTRICT x,
+static DSC_INLINE void complex_unary(const dsc_tensor *DSC_RESTRICT x,
                                       dsc_tensor *DSC_RESTRICT out,
                                       Op op) noexcept {
     DSC_TENSOR_DATA(Tx, x);
     DSC_TENSOR_DATA(To, out);
+
+    dsc_for(i, x) {
+        out_data[i] = op(x_data[i]);
+    }
+}
+
+template <typename T, typename Op>
+static DSC_INLINE void complex_unary(const dsc_tensor *DSC_RESTRICT x,
+                                     dsc_tensor *DSC_RESTRICT out,
+                                     Op op) noexcept {
+    DSC_TENSOR_DATA(T, x);
+    DSC_TENSOR_DATA(T, out);
 
     dsc_for(i, x) {
         out_data[i] = op(x_data[i]);
@@ -1145,16 +1148,16 @@ dsc_tensor *dsc_abs(dsc_ctx *ctx,
 
     switch (x->dtype) {
         case F32:
-            complex_binary<f32, f32>(x, out, abs_op());
+            complex_unary<f32, f32>(x, out, abs_op());
             break;
         case F64:
-            complex_binary<f64, f64>(x, out, abs_op());
+            complex_unary<f64, f64>(x, out, abs_op());
             break;
         case C32:
-            complex_binary<c32, f32>(x, out, abs_op());
+            complex_unary<c32, f32>(x, out, abs_op());
             break;
         case C64:
-            complex_binary<c64, f64>(x, out, abs_op());
+            complex_unary<c64, f64>(x, out, abs_op());
             break;
         DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
@@ -1171,33 +1174,21 @@ dsc_tensor *dsc_angle(dsc_ctx *ctx,
 
     switch (x->dtype) {
         case F32:
-            complex_binary<f32, f32>(x, out, atan2_op());
+            complex_unary<f32, f32>(x, out, atan2_op());
             break;
         case F64:
-            complex_binary<f64, f64>(x, out, atan2_op());
+            complex_unary<f64, f64>(x, out, atan2_op());
             break;
         case C32:
-            complex_binary<c32, f32>(x, out, atan2_op());
+            complex_unary<c32, f32>(x, out, atan2_op());
             break;
         case C64:
-            complex_binary<c64, f64>(x, out, atan2_op());
+            complex_unary<c64, f64>(x, out, atan2_op());
             break;
         DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
 
     return out;
-}
-
-template <typename T, typename Op>
-static DSC_INLINE void complex_unary(const dsc_tensor *DSC_RESTRICT x,
-                                     dsc_tensor *DSC_RESTRICT out,
-                                     Op op) noexcept {
-    DSC_TENSOR_DATA(T, x);
-    DSC_TENSOR_DATA(T, out);
-
-    dsc_for(i, x) {
-        out_data[i] = op(x_data[i]);
-    }
 }
 
 dsc_tensor *dsc_conj(dsc_ctx *ctx,
@@ -1238,10 +1229,10 @@ dsc_tensor *dsc_real(dsc_ctx *ctx,
 
     switch (x->dtype) {
         case C32:
-            complex_binary<c32, f32>(x, out, real_op());
+            complex_unary<c32, f32>(x, out, real_op());
             break;
         case C64:
-            complex_binary<c64, f64>(x, out, real_op());
+            complex_unary<c64, f64>(x, out, real_op());
             break;
         DSC_INVALID_CASE("dtype must be complex");
     }
@@ -1258,16 +1249,16 @@ dsc_tensor *dsc_imag(dsc_ctx *ctx,
 
     switch (x->dtype) {
         case F32:
-            complex_binary<f32, f32>(x, out, imag_op());
+            complex_unary<f32, f32>(x, out, imag_op());
             break;
         case F64:
-            complex_binary<f64, f64>(x, out, imag_op());
+            complex_unary<f64, f64>(x, out, imag_op());
             break;
         case C32:
-            complex_binary<c32, f32>(x, out, imag_op());
+            complex_unary<c32, f32>(x, out, imag_op());
             break;
         case C64:
-            complex_binary<c64, f64>(x, out, imag_op());
+            complex_unary<c64, f64>(x, out, imag_op());
             break;
         DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
@@ -1525,7 +1516,6 @@ dsc_tensor *dsc_max(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT out,
                      const int axis,
                      const bool keep_dims) noexcept {
-
     validate_reduce_params();
 
     const int axis_idx = dsc_tensor_dim(x, axis);
@@ -1573,7 +1563,6 @@ dsc_tensor *dsc_min(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT out,
                      const int axis,
                      const bool keep_dims) noexcept {
-
     validate_reduce_params();
 
     const int axis_idx = dsc_tensor_dim(x, axis);

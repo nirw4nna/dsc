@@ -18,6 +18,8 @@ enum dsc_fft_type : u8 {
 struct dsc_fft_plan {
     void *twiddles;
     int n;
+    // Set to 0 when the plan is used, increment by one each time we go through the plans
+    int last_used;
     dsc_dtype dtype;
     // An RFFT plan is equal to an FFT plan with N = N/2 but with an extra set
     // of twiddles (hence the storage requirement is the same of an order N FFT).
@@ -49,6 +51,7 @@ void dsc_init_plan(dsc_fft_plan *plan, const int n,
     plan->n = n;
     plan->dtype = dtype;
     plan->fft_type = fft_type;
+    plan->last_used = 0;
 }
 
 template<typename T, real<T> sign>

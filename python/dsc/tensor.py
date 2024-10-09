@@ -5,7 +5,7 @@
 # (https://opensource.org/license/bsd-3-clause).
 
 from ._bindings import (
-    _DscTensor_p, _DSC_MAX_DIMS, _DSC_SLICE_NONE, _DscSlice,  _dsc_cast,
+    _DscTensor_p, _DSC_MAX_DIMS, _DSC_SLICE_NONE, _DscSlice,  _dsc_cast, _dsc_tensor_free,
     _dsc_sum, _dsc_mean, _dsc_max, _dsc_min, _dsc_i0, _dsc_clip, _dsc_tensor_get_idx, _dsc_tensor_get_slice,
     _dsc_tensor_set_idx, _dsc_tensor_set_slice,
     _dsc_wrap_f32, _dsc_wrap_f64, _dsc_wrap_c32, _dsc_wrap_c64,
@@ -92,6 +92,8 @@ class Tensor:
         self._n_dim = c_ptr.contents.n_dim
         self._ne = c_ptr.contents.ne
         self._c_ptr = c_ptr
+    def __del__(self):
+        _dsc_tensor_free(_get_ctx(), _c_ptr(self))
 
     @property
     def dtype(self) -> Dtype:
