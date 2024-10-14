@@ -5,6 +5,7 @@
 // (https://opensource.org/license/bsd-3-clause).
 
 #include "dsc_allocator.h"
+#include "dsc_tracing.h"
 
 // ============================================================
 // Utilities
@@ -12,15 +13,21 @@
 DSC_MALLOC void *dsc_obj_alloc(dsc_allocator *allocator,
                                const usize nb,
                                const usize alignment) noexcept {
+    DSC_TRACE_OBJ_ALLOC(nb, allocator->type);
     return allocator->alloc(allocator->buf, nb, alignment);
+}
+
+void dsc_obj_free(dsc_allocator *allocator, void *ptr) noexcept {
+    DSC_TRACE_OBJ_FREE(allocator->type, (uintptr_t) ptr);
+    allocator->free(allocator->buf, ptr);
 }
 
 void dsc_clear_buffer(dsc_allocator *allocator) noexcept {
     allocator->clear_buffer(allocator->buf);
 }
 
-void dsc_obj_free(dsc_allocator *allocator, void *ptr) noexcept {
-    allocator->free(allocator->buf, ptr);
+usize dsc_buffer_used_mem(dsc_allocator *allocator) noexcept {
+    return allocator->used_memory(allocator->buf);
 }
 
 // ============================================================
@@ -38,7 +45,6 @@ struct dsc_generic_free_node {
 };
 
 struct dsc_generic_buf {
-    // used_mem can probably be removed
     usize used_mem;
     dsc_generic_free_node *head;
 };
@@ -189,6 +195,11 @@ static void generic_free(dsc_buffer *buf, void *ptr) noexcept {
     }
 }
 
+static usize generic_used_memory(dsc_buffer *buf) noexcept {
+    dsc_generic_buf *gb = dsc_generic_buffer(buf);
+    return gb->used_mem;
+}
+
 dsc_allocator *dsc_generic_allocator(dsc_buffer *buf) noexcept {
     // Initialize the general purpose allocator
     dsc_generic_buf *gb = dsc_generic_buffer(buf);
@@ -199,9 +210,11 @@ dsc_allocator *dsc_generic_allocator(dsc_buffer *buf) noexcept {
     gb->head = first;
     static dsc_allocator generic = {
         /* .buf             = */ buf,
+        /* .type            = */ dsc_allocator_type::GENERAL_PURPOSE,
         /* .alloc           = */ generic_alloc,
         /* .clear_buffer    = */ generic_clear,
         /* .free            = */ generic_free,
+        /* .used_memory     = */ generic_used_memory,
     };
     return &generic;
 }
@@ -268,6 +281,11 @@ static void linear_free(dsc_buffer *buf,
     DSC_UNUSED(ptr);
 }
 
+static usize linear_used_memory(dsc_buffer *buf) noexcept {
+    dsc_linear_buf *lb = dsc_linear_buffer(buf);
+    return lb->last == nullptr ? 0 : lb->last->offset + lb->last->size;
+}
+
 dsc_allocator *dsc_linear_allocator(dsc_buffer *buf) noexcept {
     // Initialize the linear buffer
     dsc_linear_buf *lb = dsc_linear_buffer(buf);
@@ -275,9 +293,11 @@ dsc_allocator *dsc_linear_allocator(dsc_buffer *buf) noexcept {
     lb->last = nullptr;
     static dsc_allocator linear = {
         /* .buf             = */ buf,
+        /* .type            = */ dsc_allocator_type::LINEAR,
         /* .alloc           = */ linear_alloc,
         /* .clear_buffer    = */ linear_clear,
         /* .free            = */ linear_free,
+        /* .used_memory     = */ linear_used_memory,
     };
     return &linear;
 }

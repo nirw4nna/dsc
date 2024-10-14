@@ -24,6 +24,11 @@ else
 	CFLAGS		+= -DDSC_DEBUG -O0 -fno-omit-frame-pointer -g
 endif
 
+ifdef DSC_ENABLE_TRACING
+	CXXFLAGS	+= -DSC_ENABLE_TRACING
+	CFLAGS		+= -DSC_ENABLE_TRACING
+endif
+
 # If we are not compiling the shared object and are in debug mode then run in ASAN mode
 ifeq ($(MAKECMDGOALS),shared)
 	CXXFLAGS	+= -fPIC

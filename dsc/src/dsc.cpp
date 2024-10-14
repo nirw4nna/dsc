@@ -10,9 +10,11 @@
 #include "dsc_iter.h"
 #include "dsc_backend.h"
 #include "dsc_allocator.h"
+#include "dsc_tracing.h"
 #include <cstring>
 #include <random>
-#include <cstdarg> // va_xxx
+#include <cstdarg>      // va_xxx
+#include <cinttypes>    // PRIxPTR (traces-only)
 
 // How many independent FFT plans we support. This is completely arbitrary
 #if !defined(DSC_MAX_FFT_PLANS)
@@ -144,6 +146,9 @@ dsc_ctx *dsc_ctx_init(const usize nb) noexcept {
     ctx->main_buf = dsc_backend_buf_alloc(backend, (usize) (0.9 * (f64) nb));
     ctx->scratch_buf = dsc_backend_buf_alloc(backend, (usize) (0.1 * (f64) nb));
 
+    // Fixme: this must be tuned or configured in some way
+    dsc_init_traces(1024 * 1024 * 1024L);
+
     // Configure the allocator for each buffer
     ctx->main_allocator = dsc_generic_allocator(ctx->main_buf);
     ctx->scratch_allocator = dsc_linear_allocator(ctx->scratch_buf);
@@ -153,7 +158,7 @@ dsc_ctx *dsc_ctx_init(const usize nb) noexcept {
                  (void *) ctx,
                  (usize) DSC_B_TO_MB(ctx->main_buf->size),
                  (usize) DSC_B_TO_MB(ctx->scratch_buf->size),
-                 DSC_BACKED_TYPE[dsc_get_backend_type(backend)]
+                 DSC_BACKED_NAMES[dsc_get_backend_type(backend)]
     );
 
     return ctx;
@@ -199,6 +204,8 @@ dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, const int n,
                            const dsc_fft_type fft_type,
                            const dsc_dtype dtype) noexcept {
     const int fft_n = dsc_fft_best_n(n);
+
+    DSC_TRACE_PLAN_FFT(n, fft_n, fft_type, dtype);
 
     dsc_fft_plan *plan = dsc_get_plan(ctx, fft_n, fft_type, dtype);
 
@@ -256,6 +263,9 @@ void dsc_ctx_free(dsc_ctx *ctx) noexcept {
 
     dsc_backend_buf_free(ctx->default_backend, ctx->main_buf);
     dsc_backend_buf_free(ctx->default_backend, ctx->scratch_buf);
+
+    dsc_free_traces();
+
     free(ctx);
 }
 
@@ -267,8 +277,247 @@ void dsc_ctx_clear(dsc_ctx *ctx) noexcept {
 
 void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) noexcept {
     if (x == nullptr) return;
+    DSC_TRACE_TENSOR_FREE(x);
     // Tensors that are explicitly freed are allocated on the main memory
     dsc_obj_free(ctx->main_allocator, x);
+}
+
+// ============================================================
+// Tracing
+
+void dsc_traces_record(dsc_ctx *, const bool record) noexcept {
+#if defined(DSC_ENABLE_TRACING)
+    g_trace_ctx->record = record;
+#else
+    DSC_UNUSED(record);
+#endif
+}
+
+#if defined(DSC_ENABLE_TRACING)
+static DSC_INLINE void dump_indexes(FILE *f, const int *indexes,
+                                    const int n_indexes) noexcept {
+    if (n_indexes > 1) {
+        fprintf(f, "\"[");
+        for (int i = 0; i < n_indexes; ++i) {
+            fprintf(f, "%d", indexes[i]);
+            if (i < n_indexes - 1) fprintf(f, ", ");
+        }
+        fprintf(f, "]\"");
+    } else {
+        fprintf(f, "%d", indexes[0]);
+    }
+}
+
+static DSC_INLINE void dump_slices(FILE *f, const dsc_slice *slices,
+                                   const int n_slices) noexcept {
+    if (n_slices > 1) {
+        fprintf(f, "\"[");
+        for (int i = 0; i < n_slices; ++i) {
+            fprintf(f, "%d:%d:%d",
+                slices[i].start,
+                slices[i].stop,
+                slices[i].step
+            );
+            if (i < n_slices - 1) fprintf(f, ", ");
+        }
+        fprintf(f, "]\"");
+    } else {
+        fprintf(f, "\"%d:%d:%d\"",
+                slices[0].start,
+                slices[0].stop,
+                slices[0].step
+        );
+    }
+}
+
+static DSC_INLINE void dump_tensor_args(FILE *f, const dsc_tensor_args *t) noexcept {
+    fprintf(f, R"({"shape": )");
+    dump_indexes(f, t->shape, t->n_dim);
+    fprintf(f, R"(, "dtype": "%s", "backend": "%s")",
+            DSC_DTYPE_NAMES[t->dtype],
+            DSC_BACKED_NAMES[t->backend]
+    );
+    if (t->addr != 0) fprintf(f, ", \"addr\": \"0x%" PRIxPTR "\"", t->addr);
+    fprintf(f, "}");
+}
+
+static DSC_INLINE void dump_trace_args(FILE *f, const dsc_trace *t) noexcept {
+    switch (t->type) {
+        case DSC_OBJ_ALLOC:
+        case DSC_OBJ_FREE: {
+            const dsc_obj_alloc_args args = t->obj_alloc;
+            fprintf(f, R"(, "args": {)");
+            if (args.mem_size != 0) fprintf(f, R"("mem_size": %ld, )", args.mem_size);
+            if (args.addr != 0) fprintf(f, "\"addr\": \"0x%" PRIxPTR "\", ", args.addr);
+            
+            fprintf(f, R"("allocator": "%s"})", DSC_ALLOCATOR_NAMES[args.allocator]);
+            break;
+        }
+        case DSC_TENSOR_ALLOC:
+        case DSC_TENSOR_FREE: {
+            fprintf(f, R"(, "args": )");
+            dump_tensor_args(f, &t->tensor_alloc.x);
+            break;
+        }
+        case DSC_BINARY_OP: {
+            const dsc_binary_args *args = &t->binary;
+            fprintf(f, R"(, "args": {"xa": )");
+            dump_tensor_args(f, &args->xa);
+            fprintf(f, R"(, "xb": )");
+            dump_tensor_args(f, &args->xb);
+            if (args->with_out) {
+                fprintf(f, R"(, "out": )");
+                dump_tensor_args(f, &args->out);
+            }
+            fprintf(f, "}");
+            break;
+        }
+        case DSC_UNARY_OP: {
+            const dsc_unary_args *args = &t->unary;
+            fprintf(f, R"(, "args": {"x": )");
+            dump_tensor_args(f, &args->x);
+            if (args->with_out) {
+                fprintf(f, R"(, "out": )");
+                dump_tensor_args(f, &args->out);
+            }
+            fprintf(f, "}");
+            break;
+        }
+        case DSC_UNARY_NO_OUT_OP: {
+            const dsc_unary_no_out_args *args = &t->unary_no_out;
+            fprintf(f, R"(, "args": {"x": )");
+            dump_tensor_args(f, &args->x);
+            fprintf(f, "}");
+            break;
+        }
+        case DSC_UNARY_AXIS_OP: {
+            const dsc_unary_axis_args *args = &t->unary_axis;
+            fprintf(f, R"(, "args": {"axis": %d, "keepdims": "%s", "x": )",
+                    args->axis, args->keep_dims ? "True" : "False");
+            dump_tensor_args(f, &args->x);
+            if (args->with_out) {
+                fprintf(f, R"(, "out": )");
+                dump_tensor_args(f, &args->out);
+            }
+            fprintf(f, "}");
+            break;
+        }
+        case DSC_FFT_OP: {
+            const dsc_fft_args *args = &t->fft;
+            fprintf(f, R"(, "args": {"type": "%s", "order": %d, "axis": %d, "x": )",
+                    args->type == dsc_fft_type::COMPLEX ? (args->forward ? "FFT" : "IFFT") :
+                                                        (args->forward ? "RFFT" : "IRFFT"),
+                    args->n, args->axis);
+            dump_tensor_args(f, &args->x);
+            if (args->with_out) {
+                fprintf(f, R"(, "out": )");
+                dump_tensor_args(f, &args->out);
+            }
+            fprintf(f, "}");
+            break;
+        }
+        case DSC_PLAN_FFT: {
+            const dsc_plan_fft_args *args = &t->plan_fft;
+            fprintf(f, R"(, "args": {"type": "%s", "n": %d, "order": %d, "dtype": "%s"})",
+                    args->type == dsc_fft_type::COMPLEX ? "FFT" : "RFFT",
+                    args->requested_n, args->fft_n,
+                    DSC_DTYPE_NAMES[args->dtype]);
+            break;
+        }
+        case DSC_GET_IDX: {
+            const dsc_get_idx_args *args = &t->get_idx;
+            fprintf(f, R"(, "args": {"x": )");
+            dump_tensor_args(f, &args->x);
+            fprintf(f, R"(, "idx": )");
+            dump_indexes(f, args->indexes, args->n_indexes);
+            fprintf(f, "}");
+            break;
+        }
+        case DSC_GET_SLICE: {
+            const dsc_get_slice_args *args = &t->get_slice;
+            fprintf(f, R"(, "args": {"x": )");
+            dump_tensor_args(f, &args->x);
+            fprintf(f, R"(, "idx": )");
+            dump_slices(f, args->slices, args->n_slices);
+            fprintf(f, "}");
+            break;
+        }
+        case DSC_SET_IDX: {
+            const dsc_set_idx_args *args = &t->set_idx;
+            fprintf(f, R"(, "args": {"xa": )");
+            dump_tensor_args(f, &args->xa);
+            fprintf(f, R"(, "xb": )");
+            dump_tensor_args(f, &args->xb);
+            fprintf(f, R"(, "idx": )");
+            dump_slices(f, args->indexes, args->n_indexes);
+            fprintf(f, "}");
+            break;
+        }
+        case DSC_SET_SLICE: {
+            const dsc_set_slice_args *args = &t->set_slice;
+            fprintf(f, R"(, "args": {"xa": )");
+            dump_tensor_args(f, &args->xa);
+            fprintf(f, R"(, "xb": )");
+            dump_tensor_args(f, &args->xb);
+            fprintf(f, R"(, "idx": )");
+            dump_slices(f, args->slices, args->n_slices);
+            fprintf(f, "}");
+            break;
+        }
+        case DSC_CAST_OP: {
+            const dsc_cast_args *args = &t->cast;
+            fprintf(f, R"(, "args": {"x": )");
+            dump_tensor_args(f, &args->x);
+            fprintf(f, R"(, "new_dtype": "%s"})",
+                    DSC_DTYPE_NAMES[args->new_dtype]);
+            break;
+        }
+        case DSC_RANDN_OP: {
+            const dsc_randn_args *args = &t->randn;
+            fprintf(f, R"(, "args": {"shape": )");
+            dump_indexes(f, args->shape, args->n_dim);
+            fprintf(f, R"(, "dtype": "%s"})",
+                    DSC_DTYPE_NAMES[args->dtype]);
+            break;
+        }
+        case DSC_ARANGE_OP: {
+            const dsc_arange_args *args = &t->arange;
+            fprintf(f, R"(, "args": {"n": %d, "dtype": "%s"})",
+                    args->n, DSC_DTYPE_NAMES[args->dtype]);
+            break;
+        }
+        DSC_INVALID_CASE("unknown trace type %d", t->type);
+    }
+}
+#endif // DSC_ENABLE_TRACING
+
+void dsc_dump_traces(dsc_ctx *, const char *filename) noexcept {
+#if defined(DSC_ENABLE_TRACING)
+    FILE *f = fopen(filename, "wt");
+    DSC_ASSERT(f != nullptr);
+    fprintf(f, "[\n");
+    for (u64 i = 0; i < g_trace_ctx->n_traces; ++i) {
+        dsc_trace *trace = &g_trace_ctx->traces[i];
+        fprintf(f, "\t" R"({"name": "%s", "cat": "%s", "ph": "%c", "ts": %ld, "pid": %d, "tid": %ld)",
+                trace->name, trace->cat, trace->phase, trace->ts, trace->pid, trace->tid);
+
+        dump_trace_args(f, trace);
+
+        fprintf(f, "}");
+        if (i < g_trace_ctx->n_traces - 1) fprintf(f, ",");
+        fprintf(f, "\n");
+    }
+    fprintf(f, "]");
+    fclose(f);
+#else
+    DSC_UNUSED(filename);
+#endif
+}
+
+void dsc_clear_traces(dsc_ctx *) noexcept {
+#if defined(DSC_ENABLE_TRACING)
+    g_trace_ctx->n_traces = 0;
+#endif
 }
 
 // ============================================================
@@ -279,6 +528,10 @@ DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                                       const int *shape,
                                       const dsc_dtype dtype) noexcept {
     DSC_ASSERT((unsigned) n_dim <= DSC_MAX_DIMS);
+
+    const dsc_backend_type backend = dsc_get_backend_type(ctx->default_backend);
+
+    DSC_TRACE_TENSOR_NEW(shape, n_dim, dtype, backend);
 
     int ne = 1;
     for (int i = 0; i < n_dim; ++i) ne *= shape[i];
@@ -295,7 +548,7 @@ DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
     new_tensor->dtype = dtype;
     new_tensor->ne = ne;
     new_tensor->n_dim = n_dim;
-    new_tensor->backend = dsc_get_backend_type(ctx->default_backend);
+    new_tensor->backend = backend;
 
     // If n_dim is lower than DSC_MAX_DIM then we need to pre-fill the beginning of the array with 1
     for (int i = 0; i < DSC_MAX_DIMS; ++i) {
@@ -400,6 +653,8 @@ dsc_tensor *dsc_wrap_c64(dsc_ctx *ctx, const c64 val) noexcept {
 dsc_tensor *dsc_arange(dsc_ctx *ctx,
                        const int n,
                        const dsc_dtype dtype) noexcept {
+    DSC_TRACE_ARANGE_OP(n, dtype);
+
     dsc_tensor *out = dsc_tensor_1d(ctx, dtype, n);
     switch (dtype) {
         case dsc_dtype::F32:
@@ -437,6 +692,8 @@ dsc_tensor *dsc_randn(dsc_ctx *ctx,
                       const int n_dim,
                       const int *shape,
                       const dsc_dtype dtype) noexcept {
+    DSC_TRACE_RANDN_OP(shape, n_dim, dtype);
+
     dsc_tensor *out = dsc_new_tensor(ctx, n_dim, shape, dtype);
 
     switch (out->dtype) {
@@ -505,6 +762,8 @@ static void copy(const dsc_tensor *DSC_RESTRICT x,
 
 dsc_tensor *dsc_cast(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
                      const dsc_dtype new_dtype) noexcept {
+    DSC_TRACE_CAST_OP(x, new_dtype);
+
     if (x->dtype == new_dtype)
         return x;
 
@@ -543,6 +802,8 @@ dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
         el_idx[i] = idx;
     }
     va_end(args);
+
+    DSC_TRACE_GET_IDX(x, el_idx, indexes);
 
     // Since we are wrapping scalars the resulting tensor will be always at least 1D
     const int out_n_dim = x->n_dim == indexes ? 1 : x->n_dim - indexes;
@@ -650,6 +911,8 @@ dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
     va_start(args, slices);
     parse_slices(x, el_slices, collapse_dim, slices, args);
     va_end(args);
+    
+    DSC_TRACE_GET_SLICE(x, el_slices, slices);
 
     int out_shape[DSC_MAX_DIMS];
     int out_n_dim = x->n_dim;
@@ -698,7 +961,7 @@ static DSC_INLINE void tensor_set(dsc_tensor *DSC_RESTRICT xa,
                                   const dsc_slice *slices) noexcept {
     DSC_TENSOR_DATA(T, xa);
     DSC_TENSOR_DATA(T, xb);
-
+    // Todo: macro is_scalar
     if (xa_scalar) {
         int offset = 0;
         for (int i = 0; i < n_slices; ++i)
@@ -753,12 +1016,14 @@ void dsc_tensor_set_idx(dsc_ctx *,
     }
     va_end(args);
 
+    DSC_TRACE_SET_IDX(xa, xb, el_slices, indexes);
+
     // If we do something like xa[2] and xa has more than one dimension then, the remaining
     // dimensions of xa and xb must be broadcastable together
     int xa_sub_shape[DSC_MAX_DIMS];
     for (int i = indexes; i < xa->n_dim; ++i)
         xa_sub_shape[i - indexes] = xa->shape[dsc_tensor_dim(xa, i - indexes)];
-
+    
     const bool xb_scalar = xb->n_dim == 1 && xb->shape[dsc_tensor_dim(xb, -1)] == 1;
     const int xa_sub_ndim = xa->n_dim - indexes;
 
@@ -802,6 +1067,8 @@ void dsc_tensor_set_slice(dsc_ctx *,
     va_start(args, slices);
     parse_slices(xa, el_slices, nullptr, slices, args);
     va_end(args);
+    
+    DSC_TRACE_SET_SLICE(xa, xb, el_slices, slices);
 
     int xa_slice_shape[DSC_MAX_DIMS];
     for (int i = 0; i < xa->n_dim; ++i) {
@@ -900,7 +1167,6 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
             xa_it.next(), xb_it.next();
         }
     }
-
 }
 
 template<typename Op>
@@ -929,6 +1195,8 @@ dsc_tensor *dsc_add(dsc_ctx *ctx,
                     dsc_tensor *xa,
                     dsc_tensor *xb,
                     dsc_tensor *out) noexcept {
+    DSC_TRACE_BINARY_OP(xa, xb, out);
+
     validate_binary_params();
 
     binary_op(xa, xb, out, add_op());
@@ -940,6 +1208,8 @@ dsc_tensor *dsc_sub(dsc_ctx *ctx,
                     dsc_tensor *xa,
                     dsc_tensor *xb,
                     dsc_tensor *out) noexcept {
+    DSC_TRACE_BINARY_OP(xa, xb, out);
+
     validate_binary_params();
 
     binary_op(xa, xb, out, sub_op());
@@ -951,6 +1221,8 @@ dsc_tensor *dsc_mul(dsc_ctx *ctx,
                     dsc_tensor *xa,
                     dsc_tensor *xb,
                     dsc_tensor *out) noexcept {
+    DSC_TRACE_BINARY_OP(xa, xb, out);
+
     validate_binary_params();
 
     binary_op(xa, xb, out, mul_op());
@@ -962,6 +1234,8 @@ dsc_tensor *dsc_div(dsc_ctx *ctx,
                     dsc_tensor *xa,
                     dsc_tensor *xb,
                     dsc_tensor *out) noexcept {
+    DSC_TRACE_BINARY_OP(xa, xb, out);
+
     validate_binary_params();
 
     binary_op(xa, xb, out, div_op());
@@ -973,6 +1247,8 @@ dsc_tensor *dsc_pow(dsc_ctx *ctx,
                     dsc_tensor *xa,
                     dsc_tensor *xb,
                     dsc_tensor *out) noexcept {
+    DSC_TRACE_BINARY_OP(xa, xb, out);
+
     validate_binary_params();
 
     binary_op(xa, xb, out, pow_op());
@@ -1019,6 +1295,8 @@ static void unary_op(const dsc_tensor *DSC_RESTRICT x,
 dsc_tensor *dsc_cos(dsc_ctx *ctx,
                     const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_TRACE_UNARY_OP(x, out);
+
     validate_unary_params();
 
     unary_op(x, out, cos_op());
@@ -1029,6 +1307,8 @@ dsc_tensor *dsc_cos(dsc_ctx *ctx,
 dsc_tensor *dsc_sin(dsc_ctx *ctx,
                     const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_TRACE_UNARY_OP(x, out);
+
     validate_unary_params();
     
     unary_op(x, out, sin_op());
@@ -1039,6 +1319,8 @@ dsc_tensor *dsc_sin(dsc_ctx *ctx,
 dsc_tensor *dsc_sinc(dsc_ctx *ctx,
                      const dsc_tensor *DSC_RESTRICT x,
                      dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_TRACE_UNARY_OP(x, out);
+
     validate_unary_params();
 
     unary_op(x, out, sinc_op());
@@ -1049,6 +1331,8 @@ dsc_tensor *dsc_sinc(dsc_ctx *ctx,
 dsc_tensor *dsc_logn(dsc_ctx *ctx,
                      const dsc_tensor *DSC_RESTRICT x,
                      dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_TRACE_UNARY_OP(x, out);
+
     validate_unary_params();
 
     unary_op(x, out, logn_op());
@@ -1059,6 +1343,8 @@ dsc_tensor *dsc_logn(dsc_ctx *ctx,
 dsc_tensor *dsc_log2(dsc_ctx *ctx,
                      const dsc_tensor *DSC_RESTRICT x,
                      dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_TRACE_UNARY_OP(x, out);
+
     validate_unary_params();
 
     unary_op(x, out, log2_op());
@@ -1069,6 +1355,8 @@ dsc_tensor *dsc_log2(dsc_ctx *ctx,
 dsc_tensor *dsc_log10(dsc_ctx *ctx,
                       const dsc_tensor *DSC_RESTRICT x,
                       dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_TRACE_UNARY_OP(x, out);
+
     validate_unary_params();
 
     unary_op(x, out, log10_op());
@@ -1079,6 +1367,8 @@ dsc_tensor *dsc_log10(dsc_ctx *ctx,
 dsc_tensor *dsc_exp(dsc_ctx *ctx,
                     const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_TRACE_UNARY_OP(x, out);
+
     validate_unary_params();
 
     unary_op(x, out, exp_op());
@@ -1089,6 +1379,8 @@ dsc_tensor *dsc_exp(dsc_ctx *ctx,
 dsc_tensor *dsc_sqrt(dsc_ctx *ctx,
                      const dsc_tensor *DSC_RESTRICT x,
                      dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_TRACE_UNARY_OP(x, out);
+
     validate_unary_params();
 
     unary_op(x, out, sqrt_op());
@@ -1135,6 +1427,8 @@ static DSC_INLINE void complex_unary(const dsc_tensor *DSC_RESTRICT x,
 dsc_tensor *dsc_abs(dsc_ctx *ctx,
                     const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out) noexcept {
+    DSC_TRACE_UNARY_OP(x, out);
+
     DSC_ASSERT(x != nullptr);
 
     const dsc_dtype out_dtype = as_real(x->dtype);
@@ -1169,6 +1463,8 @@ dsc_tensor *dsc_angle(dsc_ctx *ctx,
                       const dsc_tensor *DSC_RESTRICT x) noexcept {
     DSC_ASSERT(x != nullptr);
 
+    DSC_TRACE_UNARY_NO_OUT_OP(x);
+
     const dsc_dtype out_dtype = as_real(x->dtype);
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &x->shape[DSC_MAX_DIMS - x->n_dim], out_dtype);
 
@@ -1195,6 +1491,8 @@ dsc_tensor *dsc_conj(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT x) noexcept {
     DSC_ASSERT(x != nullptr);
 
+    DSC_TRACE_UNARY_NO_OUT_OP(x);
+
     if (x->dtype == F32 || x->dtype == F64) {
         DSC_LOG_DEBUG("the input is real so it will be returned as is");
         return x;
@@ -1218,6 +1516,8 @@ dsc_tensor *dsc_conj(dsc_ctx *ctx,
 dsc_tensor *dsc_real(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT x) noexcept {
     DSC_ASSERT(x != nullptr);
+
+    DSC_TRACE_UNARY_NO_OUT_OP(x);
 
     if (x->dtype == F32 || x->dtype == F64) {
         DSC_LOG_DEBUG("the input is real so it will be returned as is");
@@ -1243,6 +1543,8 @@ dsc_tensor *dsc_real(dsc_ctx *ctx,
 dsc_tensor *dsc_imag(dsc_ctx *ctx,
                      const dsc_tensor *DSC_RESTRICT x) noexcept {
     DSC_ASSERT(x != nullptr);
+
+    DSC_TRACE_UNARY_NO_OUT_OP(x);
 
     const dsc_dtype out_dtype = as_real(x->dtype);
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &x->shape[DSC_MAX_DIMS - x->n_dim], out_dtype);
@@ -1348,6 +1650,8 @@ dsc_tensor *dsc_i0(dsc_ctx *ctx,
     DSC_ASSERT(x != nullptr);
     DSC_ASSERT(x->dtype == F32 || x->dtype == F64);
 
+    DSC_TRACE_UNARY_NO_OUT_OP(x);
+
     dsc_tensor *out = dsc_new_like(ctx, x);
 
     switch (x->dtype) {
@@ -1380,6 +1684,8 @@ static DSC_INLINE void clip(const dsc_tensor *DSC_RESTRICT x,
 dsc_tensor *dsc_clip(dsc_ctx *ctx, const dsc_tensor *DSC_RESTRICT x,
                      dsc_tensor *DSC_RESTRICT out,
                      const f64 x_min, const f64 x_max) noexcept {
+    DSC_TRACE_UNARY_OP(x, out);
+
     DSC_ASSERT(x != nullptr);
 
     validate_unary_params();
@@ -1438,6 +1744,7 @@ dsc_tensor *dsc_sum(dsc_ctx *ctx,
                     const bool keep_dims) noexcept {
     // Fixme: keepdims=false won't work if x->n_dim = 1 because a scalar cannot be returned
     //  from this function, for now probably it makes sense to emulate this in Python
+    DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
 
     validate_reduce_params();
 
@@ -1467,6 +1774,8 @@ dsc_tensor *dsc_mean(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT out,
                      const int axis,
                      const bool keep_dims) noexcept {
+    DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
+
     out = dsc_sum(ctx, x, out, axis, keep_dims);
 
     const int axis_idx = dsc_tensor_dim(x, axis);
@@ -1516,6 +1825,8 @@ dsc_tensor *dsc_max(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT out,
                      const int axis,
                      const bool keep_dims) noexcept {
+    DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
+
     validate_reduce_params();
 
     const int axis_idx = dsc_tensor_dim(x, axis);
@@ -1563,6 +1874,8 @@ dsc_tensor *dsc_min(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT out,
                      const int axis,
                      const bool keep_dims) noexcept {
+    DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
+
     validate_reduce_params();
 
     const int axis_idx = dsc_tensor_dim(x, axis);
@@ -1647,6 +1960,8 @@ static DSC_INLINE dsc_tensor *dsc_internal_fft(dsc_ctx *ctx,
                                                int n,
                                                const int axis) noexcept {
     DSC_ASSERT(x != nullptr);
+
+    DSC_TRACE_FFT_OP(x, out, n, axis, dsc_fft_type::COMPLEX, forward);
 
     const int axis_idx = dsc_tensor_dim(x, axis);
     DSC_ASSERT(axis_idx < DSC_MAX_DIMS);
@@ -1814,6 +2129,8 @@ static DSC_INLINE dsc_tensor *dsc_internal_rfft(dsc_ctx *ctx,
     //       the same shape as the output of RFFT. If this is not the case be careful, there can be
     //       issues with the results of IRFFT.
     DSC_ASSERT(x != nullptr);
+
+    DSC_TRACE_FFT_OP(x, out, n, axis, dsc_fft_type::REAL, forward);
 
     const int axis_idx = dsc_tensor_dim(x, axis);
     DSC_ASSERT(axis_idx < DSC_MAX_DIMS);

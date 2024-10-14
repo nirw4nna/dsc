@@ -89,6 +89,7 @@ struct dsc_ctx;
 struct dsc_fft_plan;
 enum dsc_fft_type : u8;
 enum dsc_backend_type : u8;
+enum dsc_allocator_type : u8;
 
 struct dsc_tensor {
     // The shape of this tensor, right-aligned. For example a 1D tensor T of 4 elements
@@ -112,12 +113,6 @@ struct dsc_slice {
     };
 };
 
-static DSC_INLINE f64 dsc_timer() noexcept {
-    timespec ts{};
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (f64) ts.tv_sec + (f64) ts.tv_nsec * 1.e-9;
-}
-
 // ============================================================
 // Initialization
 
@@ -135,6 +130,17 @@ extern void dsc_ctx_free(dsc_ctx *ctx) noexcept;
 extern void dsc_ctx_clear(dsc_ctx *ctx) noexcept;
 
 extern void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) noexcept;
+
+// ============================================================
+// Tracing
+
+extern void dsc_traces_record(dsc_ctx *,
+                              bool record = true) noexcept;
+
+extern void dsc_dump_traces(dsc_ctx *,
+                            const char *filename) noexcept;
+
+extern void dsc_clear_traces(dsc_ctx *) noexcept;
 
 // ============================================================
 // Tensor Creation

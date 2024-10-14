@@ -17,7 +17,7 @@ struct dsc_buffer {
     dsc_backend_type backend;
 };
 
-static constexpr const char *DSC_BACKED_TYPE[1] = {
+static constexpr const char *DSC_BACKED_NAMES[1] = {
         "CPU"
 };
 
