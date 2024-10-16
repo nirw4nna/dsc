@@ -14,7 +14,6 @@
 #include <cstring>
 #include <random>
 #include <cstdarg>      // va_xxx
-#include <cinttypes>    // PRIxPTR (traces-only)
 
 // How many independent FFT plans we support. This is completely arbitrary
 #if !defined(DSC_MAX_FFT_PLANS)
@@ -147,7 +146,7 @@ dsc_ctx *dsc_ctx_init(const usize nb) noexcept {
     ctx->scratch_buf = dsc_backend_buf_alloc(backend, (usize) (0.1 * (f64) nb));
 
     // Fixme: this must be tuned or configured in some way
-    dsc_init_traces(1024 * 1024 * 1024L);
+    dsc_internal_init_traces(1024 * 1024 * 1024L);
 
     // Configure the allocator for each buffer
     ctx->main_allocator = dsc_generic_allocator(ctx->main_buf);
@@ -264,7 +263,7 @@ void dsc_ctx_free(dsc_ctx *ctx) noexcept {
     dsc_backend_buf_free(ctx->default_backend, ctx->main_buf);
     dsc_backend_buf_free(ctx->default_backend, ctx->scratch_buf);
 
-    dsc_free_traces();
+    dsc_internal_free_traces();
 
     free(ctx);
 }
@@ -286,238 +285,15 @@ void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) noexcept {
 // Tracing
 
 void dsc_traces_record(dsc_ctx *, const bool record) noexcept {
-#if defined(DSC_ENABLE_TRACING)
-    g_trace_ctx->record = record;
-#else
-    DSC_UNUSED(record);
-#endif
+    dsc_internal_record_traces(record);
 }
-
-#if defined(DSC_ENABLE_TRACING)
-static DSC_INLINE void dump_indexes(FILE *f, const int *indexes,
-                                    const int n_indexes) noexcept {
-    if (n_indexes > 1) {
-        fprintf(f, "\"[");
-        for (int i = 0; i < n_indexes; ++i) {
-            fprintf(f, "%d", indexes[i]);
-            if (i < n_indexes - 1) fprintf(f, ", ");
-        }
-        fprintf(f, "]\"");
-    } else {
-        fprintf(f, "%d", indexes[0]);
-    }
-}
-
-static DSC_INLINE void dump_slices(FILE *f, const dsc_slice *slices,
-                                   const int n_slices) noexcept {
-    if (n_slices > 1) {
-        fprintf(f, "\"[");
-        for (int i = 0; i < n_slices; ++i) {
-            fprintf(f, "%d:%d:%d",
-                slices[i].start,
-                slices[i].stop,
-                slices[i].step
-            );
-            if (i < n_slices - 1) fprintf(f, ", ");
-        }
-        fprintf(f, "]\"");
-    } else {
-        fprintf(f, "\"%d:%d:%d\"",
-                slices[0].start,
-                slices[0].stop,
-                slices[0].step
-        );
-    }
-}
-
-static DSC_INLINE void dump_tensor_args(FILE *f, const dsc_tensor_args *t) noexcept {
-    fprintf(f, R"({"shape": )");
-    dump_indexes(f, t->shape, t->n_dim);
-    fprintf(f, R"(, "dtype": "%s", "backend": "%s")",
-            DSC_DTYPE_NAMES[t->dtype],
-            DSC_BACKED_NAMES[t->backend]
-    );
-    if (t->addr != 0) fprintf(f, ", \"addr\": \"0x%" PRIxPTR "\"", t->addr);
-    fprintf(f, "}");
-}
-
-static DSC_INLINE void dump_trace_args(FILE *f, const dsc_trace *t) noexcept {
-    switch (t->type) {
-        case DSC_OBJ_ALLOC:
-        case DSC_OBJ_FREE: {
-            const dsc_obj_alloc_args args = t->obj_alloc;
-            fprintf(f, R"(, "args": {)");
-            if (args.mem_size != 0) fprintf(f, R"("mem_size": %ld, )", args.mem_size);
-            if (args.addr != 0) fprintf(f, "\"addr\": \"0x%" PRIxPTR "\", ", args.addr);
-            
-            fprintf(f, R"("allocator": "%s"})", DSC_ALLOCATOR_NAMES[args.allocator]);
-            break;
-        }
-        case DSC_TENSOR_ALLOC:
-        case DSC_TENSOR_FREE: {
-            fprintf(f, R"(, "args": )");
-            dump_tensor_args(f, &t->tensor_alloc.x);
-            break;
-        }
-        case DSC_BINARY_OP: {
-            const dsc_binary_args *args = &t->binary;
-            fprintf(f, R"(, "args": {"xa": )");
-            dump_tensor_args(f, &args->xa);
-            fprintf(f, R"(, "xb": )");
-            dump_tensor_args(f, &args->xb);
-            if (args->with_out) {
-                fprintf(f, R"(, "out": )");
-                dump_tensor_args(f, &args->out);
-            }
-            fprintf(f, "}");
-            break;
-        }
-        case DSC_UNARY_OP: {
-            const dsc_unary_args *args = &t->unary;
-            fprintf(f, R"(, "args": {"x": )");
-            dump_tensor_args(f, &args->x);
-            if (args->with_out) {
-                fprintf(f, R"(, "out": )");
-                dump_tensor_args(f, &args->out);
-            }
-            fprintf(f, "}");
-            break;
-        }
-        case DSC_UNARY_NO_OUT_OP: {
-            const dsc_unary_no_out_args *args = &t->unary_no_out;
-            fprintf(f, R"(, "args": {"x": )");
-            dump_tensor_args(f, &args->x);
-            fprintf(f, "}");
-            break;
-        }
-        case DSC_UNARY_AXIS_OP: {
-            const dsc_unary_axis_args *args = &t->unary_axis;
-            fprintf(f, R"(, "args": {"axis": %d, "keepdims": "%s", "x": )",
-                    args->axis, args->keep_dims ? "True" : "False");
-            dump_tensor_args(f, &args->x);
-            if (args->with_out) {
-                fprintf(f, R"(, "out": )");
-                dump_tensor_args(f, &args->out);
-            }
-            fprintf(f, "}");
-            break;
-        }
-        case DSC_FFT_OP: {
-            const dsc_fft_args *args = &t->fft;
-            fprintf(f, R"(, "args": {"type": "%s", "order": %d, "axis": %d, "x": )",
-                    args->type == dsc_fft_type::COMPLEX ? (args->forward ? "FFT" : "IFFT") :
-                                                        (args->forward ? "RFFT" : "IRFFT"),
-                    args->n, args->axis);
-            dump_tensor_args(f, &args->x);
-            if (args->with_out) {
-                fprintf(f, R"(, "out": )");
-                dump_tensor_args(f, &args->out);
-            }
-            fprintf(f, "}");
-            break;
-        }
-        case DSC_PLAN_FFT: {
-            const dsc_plan_fft_args *args = &t->plan_fft;
-            fprintf(f, R"(, "args": {"type": "%s", "n": %d, "order": %d, "dtype": "%s"})",
-                    args->type == dsc_fft_type::COMPLEX ? "FFT" : "RFFT",
-                    args->requested_n, args->fft_n,
-                    DSC_DTYPE_NAMES[args->dtype]);
-            break;
-        }
-        case DSC_GET_IDX: {
-            const dsc_get_idx_args *args = &t->get_idx;
-            fprintf(f, R"(, "args": {"x": )");
-            dump_tensor_args(f, &args->x);
-            fprintf(f, R"(, "idx": )");
-            dump_indexes(f, args->indexes, args->n_indexes);
-            fprintf(f, "}");
-            break;
-        }
-        case DSC_GET_SLICE: {
-            const dsc_get_slice_args *args = &t->get_slice;
-            fprintf(f, R"(, "args": {"x": )");
-            dump_tensor_args(f, &args->x);
-            fprintf(f, R"(, "idx": )");
-            dump_slices(f, args->slices, args->n_slices);
-            fprintf(f, "}");
-            break;
-        }
-        case DSC_SET_IDX: {
-            const dsc_set_idx_args *args = &t->set_idx;
-            fprintf(f, R"(, "args": {"xa": )");
-            dump_tensor_args(f, &args->xa);
-            fprintf(f, R"(, "xb": )");
-            dump_tensor_args(f, &args->xb);
-            fprintf(f, R"(, "idx": )");
-            dump_slices(f, args->indexes, args->n_indexes);
-            fprintf(f, "}");
-            break;
-        }
-        case DSC_SET_SLICE: {
-            const dsc_set_slice_args *args = &t->set_slice;
-            fprintf(f, R"(, "args": {"xa": )");
-            dump_tensor_args(f, &args->xa);
-            fprintf(f, R"(, "xb": )");
-            dump_tensor_args(f, &args->xb);
-            fprintf(f, R"(, "idx": )");
-            dump_slices(f, args->slices, args->n_slices);
-            fprintf(f, "}");
-            break;
-        }
-        case DSC_CAST_OP: {
-            const dsc_cast_args *args = &t->cast;
-            fprintf(f, R"(, "args": {"x": )");
-            dump_tensor_args(f, &args->x);
-            fprintf(f, R"(, "new_dtype": "%s"})",
-                    DSC_DTYPE_NAMES[args->new_dtype]);
-            break;
-        }
-        case DSC_RANDN_OP: {
-            const dsc_randn_args *args = &t->randn;
-            fprintf(f, R"(, "args": {"shape": )");
-            dump_indexes(f, args->shape, args->n_dim);
-            fprintf(f, R"(, "dtype": "%s"})",
-                    DSC_DTYPE_NAMES[args->dtype]);
-            break;
-        }
-        case DSC_ARANGE_OP: {
-            const dsc_arange_args *args = &t->arange;
-            fprintf(f, R"(, "args": {"n": %d, "dtype": "%s"})",
-                    args->n, DSC_DTYPE_NAMES[args->dtype]);
-            break;
-        }
-        DSC_INVALID_CASE("unknown trace type %d", t->type);
-    }
-}
-#endif // DSC_ENABLE_TRACING
 
 void dsc_dump_traces(dsc_ctx *, const char *filename) noexcept {
-#if defined(DSC_ENABLE_TRACING)
-    FILE *f = fopen(filename, "wt");
-    DSC_ASSERT(f != nullptr);
-    fprintf(f, "[\n");
-    for (u64 i = 0; i < g_trace_ctx->n_traces; ++i) {
-        dsc_trace *trace = &g_trace_ctx->traces[i];
-        fprintf(f, "\t" R"({"name": "%s", "cat": "%s", "ph": "%c", "ts": %ld, "pid": %d, "tid": %ld)",
-                trace->name, trace->cat, trace->phase, trace->ts, trace->pid, trace->tid);
-
-        dump_trace_args(f, trace);
-
-        fprintf(f, "}");
-        if (i < g_trace_ctx->n_traces - 1) fprintf(f, ",");
-        fprintf(f, "\n");
-    }
-    fprintf(f, "]");
-    fclose(f);
-#else
-    DSC_UNUSED(filename);
-#endif
+    dsc_internal_dump_traces(filename);
 }
 
 void dsc_clear_traces(dsc_ctx *) noexcept {
-#if defined(DSC_ENABLE_TRACING)
-    g_trace_ctx->n_traces = 0;
-#endif
+    dsc_internal_clear_traces();
 }
 
 // ============================================================

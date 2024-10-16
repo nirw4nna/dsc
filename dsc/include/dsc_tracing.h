@@ -13,9 +13,9 @@
 #   include <unistd.h>     // getpid()
 #   include <pthread.h>    // pthread_self()
 
+
 #define DSC_TRACE_NAME_MAX  ((int) 20)
 #define DSC_TRACE_CAT_MAX   ((int) 12)
-
 
 #define DSC_INSERT_TYPED_TRACE(T, cat_, type_) \
     dsc_trace_tracker<T> trace__{__FUNCTION__, (cat_), (type_), &args__}
@@ -94,7 +94,7 @@
     if ((OUT) != nullptr) {                 \
         DSC_TRACE_SET_TENSOR(OUT, out);     \
     }                                       \
-     args__.with_out = (OUT) != nullptr;    \
+    args__.with_out = (OUT) != nullptr;     \
     DSC_INSERT_TYPED_TRACE(dsc_fft_args, "op;fft", DSC_FFT_OP)
 
 #define DSC_TRACE_PLAN_FFT(n_, fft_n_, fft_type_, dtype_)               \
@@ -306,7 +306,8 @@ struct dsc_trace_tracker {
                       const dsc_trace_type type, const T *data) noexcept :
             data_(data), name_(name), cat_(cat),
             tid_(pthread_self()), pid_(getpid()), type_(type)  {
-        if (g_trace_ctx->record) {
+        if (g_trace_ctx->record &&
+            g_trace_ctx->n_traces < g_trace_ctx->max_traces) {
             dsc_trace *t = &g_trace_ctx->traces[g_trace_ctx->n_traces++];
             pre_fill(t, 'B');
             fill_data(t);
@@ -315,7 +316,8 @@ struct dsc_trace_tracker {
     }
 
     ~dsc_trace_tracker() noexcept {
-        if (g_trace_ctx->record) {
+        if (g_trace_ctx->record &&
+            g_trace_ctx->n_traces < g_trace_ctx->max_traces) {
             dsc_trace *t = &g_trace_ctx->traces[g_trace_ctx->n_traces++];
             t->ts = dsc_time_us();
             pre_fill(t, 'E');
@@ -413,6 +415,12 @@ private:
 
 #endif // DSC_ENABLE_TRACING
 
-extern void dsc_init_traces(usize nb) noexcept;
+extern void dsc_internal_init_traces(usize nb) noexcept;
 
-extern void dsc_free_traces() noexcept;
+extern void dsc_internal_free_traces() noexcept;
+
+extern void dsc_internal_record_traces(bool record) noexcept;
+
+extern void dsc_internal_dump_traces(const char *filename) noexcept;
+
+extern void dsc_internal_clear_traces() noexcept;
