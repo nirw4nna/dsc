@@ -132,6 +132,13 @@ extern void dsc_ctx_clear(dsc_ctx *ctx) noexcept;
 extern void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) noexcept;
 
 // ============================================================
+// Utilities
+
+extern usize dsc_used_mem(dsc_ctx *ctx) noexcept;
+
+extern void dsc_print_mem_usage(dsc_ctx *ctx) noexcept;
+
+// ============================================================
 // Tracing
 
 extern void dsc_traces_record(dsc_ctx *,

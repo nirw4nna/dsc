@@ -22,8 +22,19 @@
 
 #define DSC_SIMD_ALIGN ((int) 32)
 
+#define DSC_CTX_PUSH(CTX) \
+    (CTX)->default_allocator = (CTX)->scratch_allocator;    \
+    dsc_clear_buffer(CTX->default_allocator)
+
+#define DSC_CTX_POP(CTX) \
+    (CTX)->default_allocator = (CTX)->main_allocator
+
 // This needs to be a macro otherwise the pointer assignments to out, xa and xb
 // would not work unless I pass them as pointers to pointers which is very ugly.
+// Note the usage of the scratch buffer, this allows dsc_cast to return a new tensor
+// if it's needed without worrying about leaking memory. Without we'll have to manually
+// free the result of dsc_cast after the binary operation but only if it something was
+// returned (otherwise we will free something that the user may still need!).
 #define validate_binary_params() \
     do {                                    \
         DSC_ASSERT(xa != nullptr);          \
@@ -45,9 +56,11 @@
             DSC_ASSERT(memcmp(out->shape, shape, DSC_MAX_DIMS * sizeof(shape[0])) == 0);    \
         }                                                                                   \
 \
+        DSC_CTX_PUSH(ctx);                  \
         xa = dsc_cast(ctx, xa, out_dtype);  \
         xb = dsc_cast(ctx, xb, out_dtype);  \
-    } while (0)                             \
+        DSC_CTX_POP(ctx);                   \
+    } while (0)
 
 #define validate_unary_params() \
     do {                                \
@@ -114,12 +127,6 @@
 
 #define dsc_for(idx, X) for (int idx = 0; idx < (X)->ne; ++idx)
 
-#define DSC_CTX_PUSH(CTX) \
-    (CTX)->default_allocator = (CTX)->scratch_allocator
-
-#define DSC_CTX_POP(CTX) \
-    dsc_clear_buffer(CTX->default_allocator);      \
-    (CTX)->default_allocator = (CTX)->main_allocator
 
 struct dsc_ctx {
     dsc_backend *default_backend;
@@ -279,6 +286,25 @@ void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) noexcept {
     DSC_TRACE_TENSOR_FREE(x);
     // Tensors that are explicitly freed are allocated on the main memory
     dsc_obj_free(ctx->main_allocator, x);
+}
+
+// ============================================================
+// Utilities
+
+// The memory that must be monitored is the main memory, monitoring the scratch
+// is not really useful.
+usize dsc_used_mem(dsc_ctx *ctx) noexcept {
+    return dsc_buffer_used_mem(ctx->main_allocator);
+}
+
+void dsc_print_mem_usage(dsc_ctx *ctx) noexcept {
+    const usize used_mem = dsc_used_mem(ctx);
+    const usize total_mem = ctx->main_buf->size;
+    DSC_LOG_INFO("main memory (%s) usage: %ld/%ld MB (%.1f%%)",
+                 DSC_BACKED_NAMES[ctx->main_buf->backend],
+                 (usize) DSC_B_TO_MB(used_mem),
+                 (usize) DSC_B_TO_MB(total_mem),
+                 (f64) used_mem / (f64) total_mem * 1e2);
 }
 
 // ============================================================

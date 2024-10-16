@@ -152,7 +152,7 @@ static void generic_free(dsc_buffer *buf, void *ptr) noexcept {
         const uintptr_t free_range_start = (uintptr_t) ((byte *) node);
         const uintptr_t free_range_stop = (uintptr_t) ((byte *) node + node->size);
 
-        if (ptr_addr >= free_range_start && ptr_addr <= free_range_stop) {
+        if (ptr_addr >= free_range_start && ptr_addr < free_range_stop) {
             // The idea here is that if we are trying to free an object that has already
             // been freed we will get a pointer to a range that is part of the free list.
             // It that's the case simple return without updating anything.
@@ -178,7 +178,7 @@ static void generic_free(dsc_buffer *buf, void *ptr) noexcept {
         DSC_LOG_DEBUG("careful, you are trying to free %p multiple times!", ptr);
         return;
     }
-    
+
     gb->used_mem -= new_node->size;
     
     // Coalescence

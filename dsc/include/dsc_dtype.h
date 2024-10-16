@@ -33,7 +33,7 @@ using byte = char;
 using f32 = float;
 using f64 = double;
 
-namespace {
+namespace internal {
 template<typename T>
 struct complex_ {
     union {
@@ -45,8 +45,8 @@ struct complex_ {
 };
 }
 
-using c32 = complex_<f32>;
-using c64 = complex_<f64>;
+using c32 = internal::complex_<f32>;
+using c64 = internal::complex_<f64>;
 
 enum dsc_dtype : u8 {
     F32,
