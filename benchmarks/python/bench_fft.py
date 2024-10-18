@@ -9,7 +9,7 @@ os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['GOTO_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
 
-import python.dsc as dsc
+import dsc
 import numpy as np
 import matplotlib.pyplot as plt
 import time

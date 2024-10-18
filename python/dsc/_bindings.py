@@ -112,6 +112,51 @@ _lib.dsc_tensor_free.argtypes = [_DscCtx, _DscTensor_p]
 _lib.dsc_tensor_free.restype = None
 
 
+# extern usize dsc_used_mem(dsc_ctx *ctx) noexcept;
+def _dsc_used_mem(ctx: _DscCtx) -> int:
+    return _lib.dsc_used_mem(ctx)
+
+
+_lib.dsc_used_mem.argtypes = [_DscCtx]
+_lib.dsc_used_mem.restype = c_size_t
+
+
+# extern void dsc_print_mem_usage(dsc_ctx *ctx) noexcept;
+def _dsc_print_mem_usage(ctx: _DscCtx):
+    return _lib.dsc_print_mem_usage(ctx)
+
+
+_lib.dsc_print_mem_usage.argtypes = [_DscCtx]
+_lib.dsc_print_mem_usage.restype = None
+
+
+# extern void dsc_traces_record(dsc_ctx *ctx, bool record) noexcept;
+def _dsc_traces_record(ctx: _DscCtx, record: bool):
+    return _lib.dsc_traces_record(ctx, c_bool(record))
+
+
+_lib.dsc_traces_record.argtypes = [_DscCtx, c_bool]
+_lib.dsc_traces_record.restype = None
+
+
+# extern void dsc_dump_traces(dsc_ctx *ctx, const char *filename) noexcept;
+def _dsc_dump_traces(ctx: _DscCtx, filename: str):
+    return _lib.dsc_dump_traces(ctx, c_char_p(filename.encode('utf-8')))
+
+
+_lib.dsc_dump_traces.argtypes = [_DscCtx, c_char_p]
+_lib.dsc_dump_traces.restype = None
+
+
+# extern void dsc_clear_traces(dsc_ctx *) noexcept;
+def _dsc_clear_traces(ctx: _DscCtx):
+    return _lib.dsc_clear_traces(ctx)
+
+
+_lib.dsc_clear_traces.argtypes = [_DscCtx]
+_lib.dsc_clear_traces.restype = None
+
+
 # extern dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx,
 #                                  dsc_dtype dtype,
 #                                  int dim1) noexcept;

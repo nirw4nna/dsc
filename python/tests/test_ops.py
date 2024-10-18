@@ -4,7 +4,7 @@
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
 
-import python.dsc as dsc
+import dsc
 import numpy as np
 import random
 import pytest

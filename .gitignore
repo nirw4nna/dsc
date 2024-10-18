@@ -5,6 +5,10 @@ venv/
 
 *.egg-info*
 __pycache__/
+.pytest*/
+
+# Traces
+*.json
 
 *.o
 *.so

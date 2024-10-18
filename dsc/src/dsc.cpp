@@ -20,6 +20,12 @@
 #   define DSC_MAX_FFT_PLANS ((int) 16)
 #endif
 
+// Max number of traces that can be recorded. Changing this will result in more memory
+// allocated during context initialization.
+#if !defined(DSC_MAX_TRACES)
+#   define DSC_MAX_TRACES ((u64) 1'000)
+#endif
+
 #define DSC_SIMD_ALIGN ((int) 32)
 
 #define DSC_CTX_PUSH(CTX) \
@@ -152,8 +158,7 @@ dsc_ctx *dsc_ctx_init(const usize nb) noexcept {
     ctx->main_buf = dsc_backend_buf_alloc(backend, (usize) (0.9 * (f64) nb));
     ctx->scratch_buf = dsc_backend_buf_alloc(backend, (usize) (0.1 * (f64) nb));
 
-    // Fixme: this must be tuned or configured in some way
-    dsc_internal_init_traces(1024 * 1024 * 1024L);
+    dsc_internal_init_traces(DSC_MAX_TRACES);
 
     // Configure the allocator for each buffer
     ctx->main_allocator = dsc_generic_allocator(ctx->main_buf);

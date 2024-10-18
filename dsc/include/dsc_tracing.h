@@ -415,7 +415,7 @@ private:
 
 #endif // DSC_ENABLE_TRACING
 
-extern void dsc_internal_init_traces(usize nb) noexcept;
+extern void dsc_internal_init_traces(u64 max_traces) noexcept;
 
 extern void dsc_internal_free_traces() noexcept;
 

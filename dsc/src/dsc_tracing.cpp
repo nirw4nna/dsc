@@ -22,9 +22,9 @@
 
 dsc_trace_ctx *g_trace_ctx = nullptr;
 
-void dsc_internal_init_traces(const usize nb) noexcept {
+void dsc_internal_init_traces(const u64 max_traces) noexcept {
     if (g_trace_ctx == nullptr) {
-        const usize max_traces = (usize) (nb / sizeof(dsc_trace));
+        DSC_LOG_DEBUG("max_traces=%ld", max_traces);
         g_trace_ctx = (dsc_trace_ctx *) malloc(sizeof(dsc_trace_ctx));
         g_trace_ctx->traces = (dsc_trace *) malloc(max_traces * sizeof(dsc_trace));
         g_trace_ctx->n_traces = 0;
@@ -259,6 +259,8 @@ void dsc_internal_dump_traces(const char *filename) noexcept {
     }
     fprintf(f, "]");
     fclose(f);
+
+    DSC_LOG_INFO("exported Perfetto-compatible traces to \"%s\"", filename);
 }
 
 void dsc_internal_clear_traces() noexcept {
@@ -267,8 +269,8 @@ void dsc_internal_clear_traces() noexcept {
 
 #else
 
-void dsc_internal_init_traces(const usize nb) noexcept {
-    DSC_UNUSED(nb);
+void dsc_internal_init_traces(const u64 max_traces) noexcept {
+    DSC_UNUSED(max_traces);
 }
 
 void dsc_internal_free_traces() noexcept {}
