@@ -72,12 +72,12 @@ class _DscSlice(Structure):
     _fields_ = [('start', c_int), ('stop', c_int), ('step', c_int)]
 
 
-# extern dsc_ctx *dsc_ctx_init(usize nb) noexcept;
-def _dsc_ctx_init(nb: int) -> _DscCtx:
-    return _lib.dsc_ctx_init(c_size_t(nb))
+# extern dsc_ctx *dsc_ctx_init(usize main_mem, usize scratch_mem) noexcept;
+def _dsc_ctx_init(main_mem: int, scratch_mem: int) -> _DscCtx:
+    return _lib.dsc_ctx_init(c_size_t(main_mem), c_size_t(scratch_mem))
 
 
-_lib.dsc_ctx_init.argtypes = [c_size_t]
+_lib.dsc_ctx_init.argtypes = [c_size_t, c_size_t]
 _lib.dsc_ctx_init.restype = _DscCtx
 
 

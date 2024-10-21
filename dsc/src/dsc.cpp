@@ -144,8 +144,9 @@ struct dsc_ctx {
 // ============================================================
 // Initialization
 
-dsc_ctx *dsc_ctx_init(const usize nb) noexcept {
-    DSC_ASSERT(nb > 0);
+dsc_ctx *dsc_ctx_init(const usize main_mem, const usize scratch_mem) noexcept {
+    DSC_ASSERT(main_mem > 0);
+    DSC_ASSERT(scratch_mem > 0);
 
     dsc_ctx *ctx = (dsc_ctx *) calloc(1, sizeof(dsc_ctx));
     DSC_ASSERT(ctx != nullptr);
@@ -155,8 +156,8 @@ dsc_ctx *dsc_ctx_init(const usize nb) noexcept {
     ctx->default_backend = backend;
 
     // Reserve 10% of the total memory storage for the scratch buffer
-    ctx->main_buf = dsc_backend_buf_alloc(backend, (usize) (0.9 * (f64) nb));
-    ctx->scratch_buf = dsc_backend_buf_alloc(backend, (usize) (0.1 * (f64) nb));
+    ctx->main_buf = dsc_backend_buf_alloc(backend, main_mem);
+    ctx->scratch_buf = dsc_backend_buf_alloc(backend, scratch_mem);
 
     dsc_internal_init_traces(DSC_MAX_TRACES);
 
@@ -288,7 +289,8 @@ void dsc_ctx_clear(dsc_ctx *ctx) noexcept {
 
 void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) noexcept {
     if (x == nullptr) return;
-    DSC_TRACE_TENSOR_FREE(x);
+    // Fixme: Disable tracing until the double free issue is fixed
+//    DSC_TRACE_TENSOR_FREE(x);
     // Tensors that are explicitly freed are allocated on the main memory
     dsc_obj_free(ctx->main_allocator, x);
 }

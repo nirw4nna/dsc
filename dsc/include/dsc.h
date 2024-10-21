@@ -116,7 +116,7 @@ struct dsc_slice {
 // ============================================================
 // Initialization
 
-extern dsc_ctx *dsc_ctx_init(usize nb) noexcept;
+extern dsc_ctx *dsc_ctx_init(usize main_mem, usize scratch_mem) noexcept;
 
 extern dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, int n,
                                   dsc_fft_type fft_type,

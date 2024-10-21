@@ -17,19 +17,19 @@ def _get_ctx():
         # we can simply initialize one with a fixed amount of memory that is a small %
         # of the total available memory.
         total_mem = psutil.virtual_memory().total
-        nb = int(min(total_mem * 0.1, 2**30))
+        mem = int(total_mem * 0.1)
         print(
-            f'DSC has not been explicitly initialized! Will create a context of {round(nb / (2**20))} MB. '
+            f'DSC has not been explicitly initialized. Using {round(mem / 1024.)}MB for both the main and scratch memory.'
             f'If you require more memory please call dsc.init() once before executing your code.'
         )
-        _ctx_instance = _DscContext(nb)
+        _ctx_instance = _DscContext(mem, mem)
     return _ctx_instance._ctx
 
 
-def init(nb: int):
+def init(main_mem: int, scratch_mem: int):
     global _ctx_instance
     if _ctx_instance is None:
-        _ctx_instance = _DscContext(nb)
+        _ctx_instance = _DscContext(main_mem, scratch_mem)
     else:
         raise RuntimeWarning('Context already initialized')
 
@@ -41,8 +41,8 @@ def clear():
 
 
 class _DscContext:
-    def __init__(self, nb: int):
-        self._ctx = _dsc_ctx_init(nb)
+    def __init__(self, main_mem: int, scratch_mem: int):
+        self._ctx = _dsc_ctx_init(main_mem, scratch_mem)
 
     def __del__(self):
         _dsc_ctx_free(self._ctx)
