@@ -24,7 +24,7 @@ from ctypes import (
     Array,
     POINTER,
 )
-from typing import NewType, Union
+from typing import Union
 from .dtype import Dtype
 
 
@@ -53,7 +53,10 @@ class _DscTensor(Structure):
     ]
 
 
-_DscTensor_p = NewType('_DscTensor_p', POINTER(_DscTensor))
+_DscTensor_p_ = POINTER(_DscTensor)
+# For some reason this format works fine with Pyright while just doing _DscTensor_p = POINTER(_DscTensor) doesn't
+_DscTensor_p = _DscTensor_p_
+
 _OptionalTensor = Union[_DscTensor_p, None]
 
 
