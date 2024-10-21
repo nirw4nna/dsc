@@ -12,11 +12,12 @@ from typing import List
 import math
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope='session', autouse=True)
 def session_fixture():
     # This is invoked once before starting the test session
-    dsc.init(1024*1024*1024)
+    dsc.init(1024 * 1024 * 1024)
     yield
+
 
 @pytest.fixture(autouse=True)
 def teardown_fixture():
@@ -42,8 +43,9 @@ DSC_DTYPES = {
     np.float32: dsc.Dtype.F32,
     np.float64: dsc.Dtype.F64,
     np.complex64: dsc.Dtype.C32,
-    np.complex128: dsc.Dtype.C64
+    np.complex128: dsc.Dtype.C64,
 }
+
 
 class TestOps:
     def test_binary(self):
@@ -122,7 +124,9 @@ class TestOps:
         for op_name in ops.keys():
             np_op, dsc_op = ops[op_name]
             for dtype in DTYPES:
-                if op_name == 'i0' and (dtype == np.complex64 or dtype == np.complex128):
+                if op_name == 'i0' and (
+                    dtype == np.complex64 or dtype == np.complex128
+                ):
                     continue
 
                 print(f'Testing {op_name} with {dtype.__name__}')
@@ -155,7 +159,9 @@ class TestOps:
             for dtype in DTYPES:
                 for axis in range(-4, 4):
                     print(f'Testing {op_name} with {dtype.__name__} along axis {axis}')
-                    x = random_nd([random.randint(1, 10) for _ in range(4)], dtype=dtype)
+                    x = random_nd(
+                        [random.randint(1, 10) for _ in range(4)], dtype=dtype
+                    )
                     x_dsc = dsc.from_numpy(x)
 
                     res_np = np_op(x, axis=axis, keepdims=True)
@@ -165,6 +171,7 @@ class TestOps:
                     res_np_2 = np_op(x, axis=axis, keepdims=False)
                     res_dsc_2 = dsc_op(x_dsc, axis=axis, keepdims=False)
                     assert all_close(res_dsc_2.numpy(), res_np_2)
+
 
 class TestInit:
     def test_arange(self):
@@ -191,6 +198,7 @@ class TestInit:
 
                 assert res_dsc_np.dtype == res_np.dtype
                 assert res_dsc_np.shape == res_np.shape
+
 
 class TestIndexing:
     def test_get_idx(self):
@@ -222,7 +230,9 @@ class TestIndexing:
         # Some of these checks should probably be handles gracefully by DSC
         if s_step == 0 or san_start == san_stop:
             return False
-        if (s_step > 0 and san_stop < san_start) or (s_step < 0 and san_stop > san_start):
+        if (s_step > 0 and san_stop < san_start) or (
+            s_step < 0 and san_stop > san_start
+        ):
             return False
         return True
 
@@ -248,7 +258,10 @@ class TestIndexing:
                     s = slice(start, stop, step)
                     if not TestIndexing._validate_slice(s, 5):
                         continue
-                    assert all_close(x_2d_dsc[(slice(None, None, None), s)].numpy(), x_2d[(slice(None, None, None), s)])
+                    assert all_close(
+                        x_2d_dsc[(slice(None, None, None), s)].numpy(),
+                        x_2d[(slice(None, None, None), s)],
+                    )
 
         for extra_dim in range(-5, 5):
             for start in range(-5, 5):
@@ -275,8 +288,13 @@ class TestIndexing:
                 for indexes in range(1, n_dim):
                     for _ in range(10):
                         idx = tuple(random.randint(-10, 9) for _ in range(indexes))
-                        val = random.random() + 1 if indexes == n_dim else \
-                            random_nd([10 for _ in range(n_dim - indexes)], dtype=dtype)
+                        val = (
+                            random.random() + 1
+                            if indexes == n_dim
+                            else random_nd(
+                                [10 for _ in range(n_dim - indexes)], dtype=dtype
+                            )
+                        )
                         x[idx] = val
                         x_dsc[idx] = val
                         assert all_close(x_dsc.numpy(), x)
@@ -301,8 +319,8 @@ class TestIndexing:
                     s = slice(start, stop, step)
                     if not TestIndexing._validate_slice(s, 10):
                         continue
-                    x_1d[s] = 1516.
-                    x_1d_dsc[s] = 1516.
+                    x_1d[s] = 1516.0
+                    x_1d_dsc[s] = 1516.0
                     assert all_close(x_1d_dsc.numpy(), x_1d)
 
                     val_shape = _shape_from_slice(s, 10)
@@ -322,8 +340,8 @@ class TestIndexing:
                         if not TestIndexing._validate_slice(s, 5):
                             continue
 
-                        x_2d[(extra_dim, s)] = 12.
-                        x_2d_dsc[(extra_dim, s)] = 12.
+                        x_2d[(extra_dim, s)] = 12.0
+                        x_2d_dsc[(extra_dim, s)] = 12.0
                         assert all_close(x_2d_dsc.numpy(), x_2d)
 
                         x_2d[(s, extra_dim)] = -1.55
@@ -340,6 +358,7 @@ class TestIndexing:
                         x_2d[(s, extra_dim)] = val
                         x_2d_dsc[(s, extra_dim)] = val
                         assert all_close(x_2d_dsc.numpy(), x_2d)
+
 
 def test_creation():
     for n_dim in range(4):
@@ -374,13 +393,14 @@ def test_creation():
             x_dsc = dsc.zeros_like(like, dtype=DSC_DTYPES[dtype])
             assert all_close(x_dsc.numpy(), x)
 
+
 def test_fft():
     ops = {
         'fft': ((np.fft.fft, np.fft.ifft), (dsc.fft, dsc.ifft)),
         'rfft': ((np.fft.rfft, np.fft.irfft), (dsc.rfft, dsc.irfft)),
     }
     n_ = random.randint(3, 10)
-    n = 2 ** n_
+    n = 2**n_
 
     for axis in range(4):
         shape = [8] * 4
@@ -406,6 +426,7 @@ def test_fft():
                 x_dsc_ifft = dsc_ifft_op(x_dsc_fft, axis=axis)
 
                 assert all_close(x_dsc_ifft.numpy(), x_np_ifft)
+
 
 def test_fftfreq():
     for _ in range(10):

@@ -13,14 +13,15 @@ from pathlib import Path
 
 def _compile_cpp():
     subprocess.check_call(
-        ['make', 'shared', 'DSC_FAST=1'],
-        cwd=os.path.dirname(os.path.abspath(__file__))
+        ['make', 'shared', 'DSC_FAST=1'], cwd=os.path.dirname(os.path.abspath(__file__))
     )
+
 
 class BuildCmd(install):
     def run(self):
         _compile_cpp()
         install.run(self)
+
 
 if __name__ == '__main__':
     with open(Path(__file__).parent / 'README.md', 'r', encoding='utf-8') as f:
@@ -45,17 +46,11 @@ if __name__ == '__main__':
             'numpy',
             'psutil',
         ],
-        extras_require={
-            'dev': [
-                'matplotlib',
-                'pytest',
-                'tabulate'
-            ]
-        },
+        extras_require={'dev': ['matplotlib', 'pytest', 'tabulate', 'pyright', 'ruff']},
         cmdclass={
             'install': BuildCmd,
         },
         include_package_data=True,
         package_data=package_data,
-        python_requires='>=3.9'
+        python_requires='>=3.10',
     )

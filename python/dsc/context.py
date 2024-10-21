@@ -18,8 +18,10 @@ def _get_ctx():
         # of the total available memory.
         total_mem = psutil.virtual_memory().total
         nb = int(min(total_mem * 0.1, 2**30))
-        print(f'DSC has not been explicitly initialized! Will create a context of {round(nb / (2**20))} MB. '
-              f'If you require more memory please call dsc.init() once before executing your code.')
+        print(
+            f'DSC has not been explicitly initialized! Will create a context of {round(nb / (2**20))} MB. '
+            f'If you require more memory please call dsc.init() once before executing your code.'
+        )
         _ctx_instance = _DscContext(nb)
     return _ctx_instance._ctx
 

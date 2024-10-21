@@ -1,0 +1,54 @@
+[tool.pyright]
+include = ["python/dsc"]
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    "benchmarks",
+    "python/tests"
+]
+venvPath = "."
+venv = "venv"
+
+reportMissingImports = "error"
+
+pythonVersion = "3.10"
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".eggs",
+    ".git",
+    ".pyenv",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".vscode",
+    ".idea",
+    "__pypackages__",
+    "node_modules",
+    "site-packages",
+    "venv",
+    "benchmarks/*"
+]
+
+# Same as Black.
+line-length = 88
+indent-width = 4
+
+target-version = "py310"
+
+[tool.ruff.lint]
+ignore = ["F401"]
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"

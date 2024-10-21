@@ -4,7 +4,7 @@
 #  This code is licensed under the terms of the 3-clause BSD license
 #  (https://opensource.org/license/bsd-3-clause).
 
-from ._bindings import (_dsc_dump_traces, _dsc_traces_record, _dsc_clear_traces)
+from ._bindings import _dsc_dump_traces, _dsc_traces_record, _dsc_clear_traces
 from .context import _get_ctx
 from contextlib import contextmanager
 from http.server import SimpleHTTPRequestHandler
@@ -13,6 +13,7 @@ import socketserver
 
 def start_recording():
     _dsc_traces_record(_get_ctx(), True)
+
 
 class _PerfettoServer(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -24,11 +25,12 @@ class _PerfettoServer(SimpleHTTPRequestHandler):
         return super().end_headers()
 
     def do_GET(self):
-        self.server.last_request = self.path
+        self.server.last_request = self.path  # pyright: ignore[reportAttributeAccessIssue]
         return super().do_GET()
 
     def do_POST(self):
-        self.send_error(404, "File not found")
+        self.send_error(404, 'File not found')
+
 
 def _serve_traces(traces_file: str):
     # Taken from https://github.com/jax-ml/jax
@@ -41,6 +43,7 @@ def _serve_traces(traces_file: str):
         while httpd.__dict__.get('last_request') != '/' + traces_file:
             httpd.handle_request()
 
+
 def stop_recording(traces_file: str, clear: bool = True):
     _dsc_traces_record(_get_ctx(), False)
     _dsc_dump_traces(_get_ctx(), traces_file)
@@ -49,6 +52,7 @@ def stop_recording(traces_file: str, clear: bool = True):
 
     if clear:
         _dsc_clear_traces(_get_ctx())
+
 
 @contextmanager
 def profile(dump_file: str = 'traces.json'):

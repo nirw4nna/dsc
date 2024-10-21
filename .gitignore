@@ -6,6 +6,7 @@ venv/
 *.egg-info*
 __pycache__/
 .pytest*/
+.ruff*/
 
 # Traces
 *.json

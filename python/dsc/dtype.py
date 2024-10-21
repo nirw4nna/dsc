@@ -6,11 +6,7 @@
 
 from enum import Enum
 import numpy as np
-from ctypes import (
-    POINTER,
-    c_float,
-    c_double
-)
+from ctypes import POINTER, c_float, c_double
 from typing import Union
 
 ScalarType = Union[int, float, complex]
