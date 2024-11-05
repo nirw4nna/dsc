@@ -78,8 +78,9 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 #define DSC_SLICE_NONE          INT32_MAX
 #define DSC_TENSOR_DATA(T, PTR) T *DSC_RESTRICT PTR##_data = (T *) (PTR)->data
 
-#define dsc_new_like(CTX, PTR)      (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[DSC_MAX_DIMS - (PTR)->n_dim], (PTR)->dtype))
 #define dsc_tensor_dim(PTR, dim)    (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (PTR)->n_dim + (dim)))
+#define dsc_new_like(CTX, PTR)      (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[dsc_tensor_dim(PTR, 0)], (PTR)->dtype))
+#define dsc_new_view(CTX, PTR)      (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[dsc_tensor_dim(PTR, 0)], (PTR)->dtype, (PTR)->buffer))
 
 #if defined(__cplusplus)
 extern "C" {
@@ -90,6 +91,7 @@ struct dsc_fft_plan;
 enum dsc_fft_type : u8;
 enum dsc_backend_type : u8;
 enum dsc_allocator_type : u8;
+struct dsc_tensor_buffer;
 
 struct dsc_tensor {
     // The shape of this tensor, right-aligned. For example a 1D tensor T of 4 elements
@@ -97,6 +99,7 @@ struct dsc_tensor {
     int shape[DSC_MAX_DIMS];
     // Stride for a given dimension expressed in number of bytes.
     int stride[DSC_MAX_DIMS];
+    dsc_tensor_buffer *buffer;
     void *data;
     int ne;
     int n_dim;
@@ -155,7 +158,8 @@ extern void dsc_clear_traces(dsc_ctx *) noexcept;
 extern DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                                              int n_dim,
                                              const int *shape,
-                                             dsc_dtype dtype) noexcept;
+                                             dsc_dtype dtype,
+                                             dsc_tensor_buffer *buffer = nullptr) noexcept;
 
 extern dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx,
                                  dsc_dtype dtype,
@@ -198,7 +202,12 @@ extern dsc_tensor *dsc_randn(dsc_ctx *ctx,
 
 extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
                             dsc_tensor *DSC_RESTRICT x,
-                            dsc_dtype new_dtype) noexcept;
+                            dsc_dtype new_dtype,
+                            bool allow_inplace = true) noexcept;
+
+extern dsc_tensor *dsc_reshape(dsc_ctx *ctx,
+                               const dsc_tensor *DSC_RESTRICT x,
+                               int dimensions...) noexcept;
 
 // ============================================================
 // Indexing and Slicing
@@ -297,10 +306,12 @@ extern dsc_tensor *dsc_angle(dsc_ctx *ctx,
 
 // conj and real are NOP if the input is real meaning x will be returned as is.
 extern dsc_tensor *dsc_conj(dsc_ctx *ctx,
-                            dsc_tensor *DSC_RESTRICT x) noexcept;
+                            dsc_tensor *DSC_RESTRICT x,
+                            bool allow_inplace = true) noexcept;
 
 extern dsc_tensor *dsc_real(dsc_ctx *ctx,
-                            dsc_tensor *DSC_RESTRICT x) noexcept;
+                            dsc_tensor *DSC_RESTRICT x,
+                            bool allow_inplace = true) noexcept;
 
 extern dsc_tensor *dsc_imag(dsc_ctx *ctx,
                             const dsc_tensor *DSC_RESTRICT x) noexcept;

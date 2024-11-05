@@ -11,6 +11,7 @@ from ._bindings import (
     _DSC_SLICE_NONE,
     _DscSlice,
     _dsc_cast,
+    _dsc_reshape,
     _dsc_tensor_free,
     _dsc_sum,
     _dsc_mean,
@@ -69,7 +70,6 @@ from .dtype import (
 import numpy as np
 from .context import _get_ctx
 import ctypes
-from ctypes import c_uint8, c_int, c_double
 import sys
 from typing import Union, Tuple, List
 
@@ -198,7 +198,7 @@ class Tensor:
                     _dsc_tensor_get_idx(
                         _get_ctx(),
                         _c_ptr(self),
-                        *tuple(c_int(i) for i in item),  # pyright: ignore[reportArgumentType]
+                        *tuple(i for i in item),  # pyright: ignore[reportArgumentType]
                     )
                 )
             )
@@ -293,6 +293,10 @@ class Tensor:
         return bytes(byte_array)
 
     def numpy(self) -> np.ndarray:
+        # Note: this method could become the source of some nasty bugs. Here, we are creating a NumPy array
+        # that is a view of some data managed by DSC. It can happen that the underlying DSC buffer is freed before
+        # the NumPy array itself. For now, since we are using this basically just to verify that two arrays match, it's
+        # not a problem but it's worth keeping an eye out for future bugs.
         raw_tensor = self._c_ptr.contents
 
         typed_data = ctypes.cast(raw_tensor.data, DTYPE_TO_CTYPE[self.dtype])
@@ -313,6 +317,9 @@ class Tensor:
 
     def tobytes(self) -> bytes:
         return bytes(self)
+
+    def reshape(self, *shape: Union[int, Tuple[int, ...], List[int]]) -> 'Tensor':
+        return reshape(self, *shape)
 
 
 def _create_tensor(dtype: Dtype, *dims: int) -> Tensor:
@@ -356,6 +363,20 @@ def from_numpy(x: np.ndarray) -> Tensor:
     out = _create_tensor(NP_TO_DTYPE[x.dtype], *x.shape)
     ctypes.memmove(_c_ptr(out).contents.data, x.ctypes.data, x.nbytes)
     return out
+
+
+def reshape(x: Tensor, *shape: Union[int, Tuple[int, ...], List[int]]) -> Tensor:
+    if (
+        len(shape) == 1
+        and isinstance(shape[0], (Tuple, List))
+        and all(isinstance(s, int) for s in shape[0])
+    ):
+        shape_tuple = tuple(shape[0])
+    elif all(isinstance(s, int) for s in shape):
+        shape_tuple = shape
+    else:
+        raise RuntimeError(f'cannot reshape Tensor with shape {shape}')
+    return Tensor(_dsc_reshape(_get_ctx(), _c_ptr(x), *shape_tuple))  # pyright: ignore[reportArgumentType]
 
 
 def _tensor_op(

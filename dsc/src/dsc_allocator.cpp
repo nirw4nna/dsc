@@ -37,6 +37,7 @@ usize dsc_buffer_used_mem(dsc_allocator *allocator) noexcept {
 
 struct dsc_generic_node {
     usize size;
+    void *padding;
 };
 
 struct dsc_generic_free_node {
@@ -103,27 +104,29 @@ static DSC_MALLOC void *generic_alloc(dsc_buffer *buf,
                                       const usize alignment) noexcept {
     DSC_ASSERT(buf != nullptr);
     DSC_ASSERT(nb > 0);
-    
+
     dsc_generic_buf *gb = dsc_generic_buffer(buf);
-    
-    const usize alloc_size = DSC_ALIGN(nb + sizeof(dsc_generic_node), alignment);
-    const usize required_size = DSC_MAX(alloc_size, sizeof(dsc_generic_free_node));
-    
+
+    const usize required_size = DSC_ALIGN(nb + sizeof(dsc_generic_node), alignment);
+
     dsc_generic_free_node *prev = nullptr;
     dsc_generic_free_node *node = generic_find_best(gb, required_size, &prev);
     if (node == nullptr) {
         DSC_LOG_FATAL("error allocating %.2fKB", DSC_B_TO_KB(required_size));
     }
-    
-    size left = (size) (node->size - required_size);
-    if (left > 0) {
-        dsc_generic_free_node *new_node = (dsc_generic_free_node *) ((byte *) node + required_size);        
+
+    // node->size is always at least equal to required_size otherwise generic_find_best won't return
+    usize left = node->size - required_size;
+    // It doesn't make sense to add a free node with a size less than the header.
+    // Not only that, allowing such nodes could lead to serious bugs like double-frees and memory leaks.
+    if (left > sizeof(dsc_generic_free_node)) {
+        dsc_generic_free_node *new_node = (dsc_generic_free_node *) ((byte *) node + required_size);
         new_node->size = left;
         generic_list_insert(&gb->head, node, new_node);
     }
 
     generic_list_remove(&gb->head, prev, node);
-    
+
     dsc_generic_node *obj = (dsc_generic_node *) node;
     obj->size = required_size;
     gb->used_mem += required_size;
@@ -138,7 +141,7 @@ static void generic_clear(dsc_buffer *buf) noexcept {
 static void generic_free(dsc_buffer *buf, void *ptr) noexcept {
     DSC_ASSERT(buf != nullptr);
     DSC_ASSERT(ptr != nullptr);
-    
+
     dsc_generic_buf *gb = dsc_generic_buffer(buf);
 
     const uintptr_t ptr_addr = (uintptr_t) ((byte *) ptr - sizeof(dsc_generic_node));
@@ -180,14 +183,14 @@ static void generic_free(dsc_buffer *buf, void *ptr) noexcept {
     }
 
     gb->used_mem -= new_node->size;
-    
+
     // Coalescence
     if ((new_node->next != nullptr) &&
         (void *) ((byte *) new_node + new_node->size) == new_node->next) {
         new_node->size += new_node->next->size;
         generic_list_remove(&gb->head, new_node, new_node->next);
     }
-    
+
     if ((prev != nullptr && prev->next != nullptr) &&
         (void *) ((byte *) prev + prev->size) == new_node) {
         prev->size += new_node->size;

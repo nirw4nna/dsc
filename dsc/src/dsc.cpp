@@ -133,6 +133,9 @@
 
 #define dsc_for(idx, X) for (int idx = 0; idx < (X)->ne; ++idx)
 
+struct dsc_tensor_buffer {
+    int refs;
+};
 
 struct dsc_ctx {
     dsc_backend *default_backend;
@@ -289,9 +292,13 @@ void dsc_ctx_clear(dsc_ctx *ctx) noexcept {
 
 void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) noexcept {
     if (x == nullptr) return;
-    // Fixme: Disable tracing until the double free issue is fixed
-//    DSC_TRACE_TENSOR_FREE(x);
+    DSC_TRACE_TENSOR_FREE(x);
     // Tensors that are explicitly freed are allocated on the main memory
+    x->buffer->refs--;
+    if (x->buffer->refs == 0) {
+        DSC_LOG_DEBUG("reference counter reached 0 for %p so it will be freed", x->buffer);
+        dsc_obj_free(ctx->main_allocator, x->buffer);
+    }
     dsc_obj_free(ctx->main_allocator, x);
 }
 
@@ -335,7 +342,8 @@ void dsc_clear_traces(dsc_ctx *) noexcept {
 DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                                       const int n_dim,
                                       const int *shape,
-                                      const dsc_dtype dtype) noexcept {
+                                      const dsc_dtype dtype,
+                                      dsc_tensor_buffer *buffer) noexcept {
     DSC_ASSERT((unsigned) n_dim <= DSC_MAX_DIMS);
 
     const dsc_backend_type backend = dsc_get_backend_type(ctx->default_backend);
@@ -345,19 +353,22 @@ DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
     int ne = 1;
     for (int i = 0; i < n_dim; ++i) ne *= shape[i];
 
-    const usize mem_needed = sizeof(dsc_tensor) + ne * DSC_DTYPE_SIZE[dtype];
-    // Allocate the actual tensor
-    //
-    // Note: don't use the alignment offered by dsc_obj_alloc instead allocate DSC_SIMD_ALIGN more bytes
-    // and just handle the alignment of data manually
-    dsc_tensor *new_tensor = (dsc_tensor *) dsc_obj_alloc(ctx->default_allocator,
-                                                          mem_needed + DSC_SIMD_ALIGN
-    );
+    dsc_tensor *new_tensor = (dsc_tensor *) dsc_obj_alloc(ctx->default_allocator, sizeof(dsc_tensor));
+    if (buffer == nullptr) {
+        // Note: don't use the alignment offered by dsc_obj_alloc instead allocate DSC_SIMD_ALIGN more bytes
+        // and just handle the alignment of data manually
+        new_tensor->buffer = (dsc_tensor_buffer *) dsc_obj_alloc(ctx->default_allocator,
+                                                                 sizeof(dsc_tensor_buffer) + ne * DSC_DTYPE_SIZE[dtype] + DSC_SIMD_ALIGN);
+        new_tensor->buffer->refs = 0;
+    } else {
+        new_tensor->buffer = buffer;
+    }
 
     new_tensor->dtype = dtype;
     new_tensor->ne = ne;
     new_tensor->n_dim = n_dim;
     new_tensor->backend = backend;
+    new_tensor->buffer->refs++;
 
     // If n_dim is lower than DSC_MAX_DIM then we need to pre-fill the beginning of the array with 1
     for (int i = 0; i < DSC_MAX_DIMS; ++i) {
@@ -372,14 +383,14 @@ DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
         new_tensor->stride[i] = new_tensor->stride[i + 1] * new_tensor->shape[i + 1];
     }
 
-    const uintptr_t unaligned_offset = (uintptr_t) ((byte *) new_tensor + sizeof(dsc_tensor));
+    const uintptr_t unaligned_offset = (uintptr_t) ((byte *) new_tensor->buffer + sizeof(dsc_tensor_buffer));
     new_tensor->data = (void *) (DSC_ALIGN(unaligned_offset, DSC_SIMD_ALIGN));
 
-    DSC_LOG_DEBUG("n_dim=%d shape=[%d, %d, %d, %d] stride=[%d, %d, %d, %d] dtype=%s",
-                  n_dim,
+    DSC_LOG_DEBUG("ptr=%p n_dim=%d shape=[%d, %d, %d, %d] stride=[%d, %d, %d, %d] dtype=%s buffer=%p refs=%d",
+                  new_tensor, n_dim,
                   new_tensor->shape[0], new_tensor->shape[1], new_tensor->shape[2], new_tensor->shape[3],
                   new_tensor->stride[0], new_tensor->stride[1], new_tensor->stride[2], new_tensor->stride[3],
-                  DSC_DTYPE_NAMES[dtype]
+                  DSC_DTYPE_NAMES[dtype], new_tensor->buffer, new_tensor->buffer->refs
     );
 
     return new_tensor;
@@ -570,16 +581,55 @@ static void copy(const dsc_tensor *DSC_RESTRICT x,
 }
 
 dsc_tensor *dsc_cast(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
-                     const dsc_dtype new_dtype) noexcept {
+                     const dsc_dtype new_dtype, const bool allow_inplace) noexcept {
     DSC_TRACE_CAST_OP(x, new_dtype);
 
-    if (x->dtype == new_dtype)
-        return x;
+    if (x->dtype == new_dtype) {
+        if (allow_inplace) return x;
+        return dsc_new_view(ctx, x);
+    }
 
-    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &x->shape[DSC_MAX_DIMS - x->n_dim], new_dtype);
+    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &x->shape[dsc_tensor_dim(x, 0)], new_dtype);
     copy(x, out);
 
     return out;
+}
+
+dsc_tensor *dsc_reshape(dsc_ctx *ctx,
+                        const dsc_tensor *DSC_RESTRICT x,
+                        const int dimensions...) noexcept {
+    DSC_ASSERT((unsigned) dimensions <= DSC_MAX_DIMS);
+
+    int new_shape[DSC_MAX_DIMS];
+    int new_ne = 1;
+    int unknown_dim = -1;
+
+    std::va_list args;
+    va_start(args, dimensions);
+    for (int i = 0; i < dimensions; ++i) {
+        int el = va_arg(args, int);
+
+        if (el < 0) {
+            if (unknown_dim == -1) unknown_dim = i;
+            else DSC_LOG_FATAL("can only specify one unknown dim");
+        } else {
+            new_ne *= el;
+            new_shape[i] = el;
+        }
+
+    }
+    va_end(args);
+
+    if (unknown_dim != -1) {
+        if (x->ne % new_ne != 0) DSC_LOG_FATAL("cannot reshape %d into %d with an unknown dimension", x->ne, new_ne);
+
+        new_shape[unknown_dim] = x->ne / new_ne;
+        new_ne = x->ne;
+    }
+
+    DSC_ASSERT(x->ne == new_ne);
+
+    return dsc_new_tensor(ctx, dimensions, new_shape, x->dtype, x->buffer);
 }
 
 // ============================================================
@@ -1297,14 +1347,17 @@ dsc_tensor *dsc_angle(dsc_ctx *ctx,
 }
 
 dsc_tensor *dsc_conj(dsc_ctx *ctx,
-                     dsc_tensor *DSC_RESTRICT x) noexcept {
+                     dsc_tensor *DSC_RESTRICT x,
+                     const bool allow_inplace) noexcept {
     DSC_ASSERT(x != nullptr);
 
     DSC_TRACE_UNARY_NO_OUT_OP(x);
 
     if (x->dtype == F32 || x->dtype == F64) {
         DSC_LOG_DEBUG("the input is real so it will be returned as is");
-        return x;
+
+        if (allow_inplace) return x;
+        return dsc_new_view(ctx, x);
     }
 
     dsc_tensor *out = dsc_new_like(ctx, x);
@@ -1323,14 +1376,17 @@ dsc_tensor *dsc_conj(dsc_ctx *ctx,
 }
 
 dsc_tensor *dsc_real(dsc_ctx *ctx,
-                     dsc_tensor *DSC_RESTRICT x) noexcept {
+                     dsc_tensor *DSC_RESTRICT x,
+                     const bool allow_inplace) noexcept {
     DSC_ASSERT(x != nullptr);
 
     DSC_TRACE_UNARY_NO_OUT_OP(x);
 
     if (x->dtype == F32 || x->dtype == F64) {
         DSC_LOG_DEBUG("the input is real so it will be returned as is");
-        return x;
+
+        if (allow_inplace) return x;
+        return dsc_new_view(ctx, x);
     }
 
     const dsc_dtype out_dtype = as_real(x->dtype);

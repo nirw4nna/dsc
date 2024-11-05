@@ -8,6 +8,7 @@ from dsc.context import init, clear
 from dsc.tensor import (
     Tensor,
     from_numpy,
+    reshape,
     arange,
     randn,
     cos,

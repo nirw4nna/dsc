@@ -8,20 +8,14 @@ import os
 import ctypes
 from ctypes import (
     c_bool,
-    c_char,
     c_char_p,
     c_int,
-    c_int8,
-    c_int32,
-    c_int64,
     c_uint8,
-    c_uint32,
     c_size_t,
     c_float,
     c_double,
     c_void_p,
     Structure,
-    Array,
     POINTER,
 )
 from typing import Union
@@ -41,10 +35,17 @@ if not os.path.exists(_lib_file):
 _lib = ctypes.CDLL(_lib_file)
 
 
+class _DscTensorBuffer(Structure):
+    _fields_ = [
+        ('refs', c_int),
+    ]
+
+
 class _DscTensor(Structure):
     _fields_ = [
         ('shape', c_int * _DSC_MAX_DIMS),
         ('stride', c_int * _DSC_MAX_DIMS),
+        ('buffer', POINTER(_DscTensorBuffer)),
         ('data', c_void_p),
         ('ne', c_int),
         ('n_dim', c_int),
@@ -354,13 +355,25 @@ _lib.dsc_pow.restype = _DscTensor_p
 
 # extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
 #                             dsc_tensor *__restrict x,
-#                             dsc_dtype new_dtype) noexcept;
+#                             dsc_dtype new_dtype,
+#                             bool allow_inplace = true) noexcept;
 def _dsc_cast(ctx: _DscCtx, x: _DscTensor_p, dtype: Dtype) -> _DscTensor_p:
-    return _lib.dsc_cast(ctx, x, c_uint8(dtype.value))
+    return _lib.dsc_cast(ctx, x, c_uint8(dtype.value), c_bool(False))
 
 
-_lib.dsc_cast.argtypes = [_DscCtx, _DscTensor_p, c_uint8]
+_lib.dsc_cast.argtypes = [_DscCtx, _DscTensor_p, c_uint8, c_bool]
 _lib.dsc_cast.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_reshape(dsc_ctx *ctx,
+#                                const dsc_tensor *DSC_RESTRICT x,
+#                                int dims...) noexcept;
+def _dsc_reshape(ctx: _DscCtx, x: _DscTensor_p, *dimensions: int) -> _DscTensor_p:
+    return _lib.dsc_reshape(ctx, x, len(dimensions), *dimensions)
+
+
+_lib.dsc_reshape.argtypes = [_DscCtx, _DscTensor_p, c_int]
+_lib.dsc_reshape.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
@@ -525,22 +538,24 @@ _lib.dsc_angle.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_conj(dsc_ctx *,
-#                             dsc_tensor *__restrict x) noexcept;
+#                             dsc_tensor *__restrict x,
+#                             bool allow_inplace = true) noexcept;
 def _dsc_conj(ctx: _DscCtx, x: _DscTensor_p) -> _DscTensor_p:
-    return _lib.dsc_conj(ctx, x)
+    return _lib.dsc_conj(ctx, x, c_bool(False))
 
 
-_lib.dsc_conj.argtypes = [_DscCtx, _DscTensor_p]
+_lib.dsc_conj.argtypes = [_DscCtx, _DscTensor_p, c_bool]
 _lib.dsc_conj.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_real(dsc_ctx *,
-#                             dsc_tensor *__restrict x) noexcept;
+#                             dsc_tensor *__restrict x,
+#                             bool allow_inplace = true) noexcept;
 def _dsc_real(ctx: _DscCtx, x: _DscTensor_p) -> _DscTensor_p:
-    return _lib.dsc_real(ctx, x)
+    return _lib.dsc_real(ctx, x, c_bool(False))
 
 
-_lib.dsc_real.argtypes = [_DscCtx, _DscTensor_p]
+_lib.dsc_real.argtypes = [_DscCtx, _DscTensor_p, c_bool]
 _lib.dsc_real.restype = _DscTensor_p
 
 

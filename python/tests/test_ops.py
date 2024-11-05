@@ -15,7 +15,7 @@ import math
 @pytest.fixture(scope='session', autouse=True)
 def session_fixture():
     # This is invoked once before starting the test session
-    dsc.init(1024 * 1024 * 1024)
+    dsc.init(int(2**30), int(2**30))
     yield
 
 
@@ -392,6 +392,18 @@ def test_creation():
             x = np.zeros_like(like, dtype=dtype)
             x_dsc = dsc.zeros_like(like, dtype=DSC_DTYPES[dtype])
             assert all_close(x_dsc.numpy(), x)
+
+
+def test_reshape():
+    x = np.ones((10, 10))
+    x_dsc = dsc.from_numpy(x)
+    assert all_close(x.reshape(4, 5, 5), x_dsc.reshape(4, 5, 5).numpy())
+    assert all_close(x.reshape([4, 5, 5]), x_dsc.reshape([4, 5, 5]).numpy())
+    assert all_close(x.reshape((4, 5, 5)), x_dsc.reshape((4, 5, 5)).numpy())
+
+    assert all_close(x.reshape(-1, 5), x_dsc.reshape(-1, 5).numpy())
+    assert all_close(x.reshape([-1, 5]), x_dsc.reshape([-1, 5]).numpy())
+    assert all_close(x.reshape((-1, 5)), x_dsc.reshape((-1, 5)).numpy())
 
 
 def test_fft():
