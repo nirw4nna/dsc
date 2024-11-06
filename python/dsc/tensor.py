@@ -13,6 +13,7 @@ from ._bindings import (
     _dsc_cast,
     _dsc_reshape,
     _dsc_concat,
+    _dsc_transpose,
     _dsc_tensor_free,
     _dsc_sum,
     _dsc_mean,
@@ -391,6 +392,18 @@ def concat(
         return Tensor(_dsc_concat(_get_ctx(), axis, *tensors_tuple))
     else:
         raise RuntimeError(f'cannot concatenate tensors {tensors}')
+
+
+def transpose(
+    x: Tensor, axes: Union[None, Tuple[int, ...], List[int]] = None
+) -> Tensor:
+    if (isinstance(axes, (Tuple, List)) and all(isinstance(a, int) for a in axes)) or (
+        axes is None
+    ):
+        axes_tuple = tuple(axes) if axes is not None else tuple()
+        return Tensor(_dsc_transpose(_get_ctx(), _c_ptr(x), *axes_tuple))
+    else:
+        raise RuntimeError(f'cannot transpose axes {axes}')
 
 
 def _tensor_op(

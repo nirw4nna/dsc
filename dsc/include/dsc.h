@@ -213,6 +213,10 @@ extern dsc_tensor *dsc_concat(dsc_ctx *ctx,
                               int axis,
                               int tensors...) noexcept;
 
+extern dsc_tensor *dsc_transpose(dsc_ctx *ctx,
+                                 const dsc_tensor *DSC_RESTRICT x,
+                                 int axes...) noexcept;
+
 // ============================================================
 // Indexing and Slicing
 //

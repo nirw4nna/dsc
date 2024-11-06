@@ -10,6 +10,7 @@ from dsc.tensor import (
     from_numpy,
     reshape,
     concat,
+    transpose,
     arange,
     randn,
     cos,

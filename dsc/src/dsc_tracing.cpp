@@ -237,7 +237,33 @@ static DSC_INLINE void dump_trace_args(FILE *f, const dsc_trace *t) noexcept {
                     args->n, DSC_DTYPE_NAMES[args->dtype]);
             break;
         }
-            DSC_INVALID_CASE("unknown trace type %d", t->type);
+        case DSC_RESHAPE_OP: {
+            const dsc_reshape_args *args = &t->reshape;
+            fprintf(f, R"(, "args": {"x": )");
+            dump_tensor_args(f, &args->x);
+            fprintf(f, R"(, "new_shape": )");
+            dump_indexes(f, args->new_shape, args->new_ndim);
+            fprintf(f, "}");
+            break;
+        }
+        case DSC_CONCAT_OP: {
+            const dsc_concat_args *args = &t->concat;
+            char axis[32];
+            if (args->axis == DSC_VALUE_NONE) snprintf(axis, 32, "Flatten");
+            else snprintf(axis, 32, "%d", args->axis);
+            fprintf(f, R"(, "args": {"tensors": %d, "axis": "%s"})", args->tensors, axis);
+            break;
+        }
+        case DSC_TRANSPOSE_OP: {
+            const dsc_transpose_args *args = &t->transpose;
+            fprintf(f, R"(, "args": {"x": )");
+            dump_tensor_args(f, &args->x);
+            fprintf(f, R"(, "axes": )");
+            dump_indexes(f, args->swap_axes, args->x.n_dim);
+            fprintf(f, "}");
+            break;
+        }
+        DSC_INVALID_CASE("unknown trace type=%d", t->type);
     }
 }
 

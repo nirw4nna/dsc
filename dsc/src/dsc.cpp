@@ -489,7 +489,7 @@ dsc_tensor *dsc_arange(dsc_ctx *ctx,
         case dsc_dtype::C64:
             assign_op<c64>(out, dsc_complex(c64, 0, 0), dsc_complex(c64, 1, 0));
             break;
-        DSC_INVALID_CASE("unknown dtype %d", dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", dtype);
     }
     return out;
 }
@@ -557,7 +557,7 @@ static void copy_op(const dsc_tensor *DSC_RESTRICT x,
         case dsc_dtype::C64:
             copy_op<Tx, c64>(x, out);
             break;
-        DSC_INVALID_CASE("unknown dtype %d", x->dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
 }
 
@@ -576,7 +576,7 @@ static void copy(const dsc_tensor *DSC_RESTRICT x,
         case dsc_dtype::C64:
             copy_op<c64>(x, out);
             break;
-        DSC_INVALID_CASE("unknown dtype %d", x->dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
 }
 
@@ -737,10 +737,92 @@ dsc_tensor *dsc_concat(dsc_ctx *ctx, const int axis,
             case C64:
                 concat<c64>(to_concat, tensors, out, axis_idx);
                 break;
+            DSC_INVALID_CASE("unknown dtype=%d", dtype);
         }
 
         return out;
     }
+}
+
+template <typename T>
+static DSC_INLINE void copy_with_stride(const dsc_tensor *DSC_RESTRICT x,
+                                        dsc_tensor *DSC_RESTRICT out,
+                                        const int *shape,
+                                        const int *stride) noexcept {
+    // Todo: it's probably better to have a copy that takes care of this?
+    DSC_TENSOR_DATA(T, x);
+    DSC_TENSOR_DATA(T, out);
+
+    dsc_stride_iterator x_it(shape, stride);
+    dsc_for(i, out) {
+        out_data[i] = x_data[x_it.index()];
+        x_it.next();
+    }
+}
+
+dsc_tensor *dsc_transpose(dsc_ctx *ctx,
+                          const dsc_tensor *DSC_RESTRICT x,
+                          const int axes...) noexcept {
+    // Transpose the given axes of tensor x.
+    // If axes are not given (0) reverse the order of the axes of x.
+    DSC_ASSERT(x != nullptr);
+
+    if (x->n_dim == 1) {
+        // Return a view of the same vector since a transpose is a NOP in this case
+        return dsc_new_view(ctx, x);
+    }
+
+    int swap_axes[DSC_MAX_DIMS];
+    if (axes == 0) {
+        // [0, 1, .., N-1] --> [N-1, .., 1, 0]
+        for (int i = 0; i < x->n_dim; ++i) swap_axes[i] = x->n_dim - (i + 1);
+    } else {
+        DSC_ASSERT(axes == x->n_dim);
+        std::va_list args;
+        va_start(args, axes);
+        for (int i = 0; i < axes; ++i) {
+            const int el = va_arg(args, int);
+            DSC_ASSERT((unsigned) el < DSC_MAX_DIMS);
+            swap_axes[i] = el;
+        }
+        va_end(args);
+    }
+    DSC_TRACE_TRANSPOSE_OP(x, swap_axes);
+
+    int swapped_shape[DSC_MAX_DIMS], swapped_stride[DSC_MAX_DIMS];
+    for (int i = 0; i < DSC_MAX_DIMS - x->n_dim; ++i) {
+        // Fixme: useless??
+        swapped_shape[i] = x->shape[i];
+        swapped_stride[i] = x->stride[i];
+    }
+
+    for (int i = 0; i < x->n_dim; ++i) {
+        const int idx = dsc_tensor_dim(x, swap_axes[i]);
+        swapped_shape[dsc_tensor_dim(x, i)] = x->shape[idx];
+        swapped_stride[dsc_tensor_dim(x, i)] = x->stride[idx];
+    }
+
+    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim,
+                                     &swapped_shape[dsc_tensor_dim(x, 0)],
+                                     x->dtype);
+
+    switch (x->dtype) {
+        case F32:
+            copy_with_stride<f32>(x, out, swapped_shape, swapped_stride);
+            break;
+        case F64:
+            copy_with_stride<f64>(x, out, swapped_shape, swapped_stride);
+            break;
+        case C32:
+            copy_with_stride<c32>(x, out, swapped_shape, swapped_stride);
+            break;
+        case C64:
+            copy_with_stride<c64>(x, out, swapped_shape, swapped_stride);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
+    }
+
+    return out;
 }
 
 // ============================================================
@@ -1018,7 +1100,7 @@ void dsc_tensor_set_idx(dsc_ctx *,
         case dsc_dtype::C64:
             tensor_set<c64>(xa, xa_sub_ndim == 0, xb, indexes, el_slices);
             break;
-        DSC_INVALID_CASE("unknown dtype %d", xa->dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", xa->dtype);
     }
 }
 
@@ -1081,7 +1163,7 @@ void dsc_tensor_set_slice(dsc_ctx *,
         case dsc_dtype::C64:
             tensor_set<c64>(xa, xa_scalar, xb, slices, el_slices);
             break;
-        DSC_INVALID_CASE("unknown dtype %d", xa->dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", xa->dtype);
     }
 }
 
@@ -1157,7 +1239,7 @@ static void binary_op(const dsc_tensor *xa,
         case dsc_dtype::C64:
             binary_op<c64>(xa, xb, out, op);
             break;
-        DSC_INVALID_CASE("unknown dtype %d", out->dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
     }
 }
 
@@ -1258,7 +1340,7 @@ static void unary_op(const dsc_tensor *DSC_RESTRICT x,
         case dsc_dtype::C64:
             unary_op<c64>(x, out, op);
             break;
-        DSC_INVALID_CASE("unknown dtype %d", x->dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
 }
 
@@ -1987,7 +2069,7 @@ static DSC_INLINE dsc_tensor *dsc_internal_fft(dsc_ctx *ctx,
         case C64:
             exec_fft<c64, c64, forward>(ctx, x, out, axis_idx, x_n, n);
             break;
-        DSC_INVALID_CASE("unknown dtype %d", x->dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
 
     return out;
@@ -2160,7 +2242,7 @@ static DSC_INLINE dsc_tensor *dsc_internal_rfft(dsc_ctx *ctx,
         case C64:
             exec_rfft<c64, forward>(ctx, x, out, axis_idx, x_n, out_n, fft_order);
             break;
-        DSC_INVALID_CASE("unknown dtype %d", x->dtype);
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
 
     return out;

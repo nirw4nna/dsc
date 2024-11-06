@@ -387,6 +387,17 @@ _lib.dsc_concat.argtypes = [_DscCtx, c_int, c_int]
 _lib.dsc_concat.restype = _DscTensor_p
 
 
+# extern dsc_tensor *dsc_transpose(dsc_ctx *ctx,
+#                                  const dsc_tensor *DSC_RESTRICT x,
+#                                  int axes...) noexcept {
+def _dsc_transpose(ctx: _DscCtx, x: _DscTensor_p, *axes: int) -> _DscTensor_p:
+    return _lib.dsc_transpose(ctx, x, len(axes), *axes)
+
+
+_lib.dsc_transpose.argtypes = [_DscCtx, _DscTensor_p, c_int]
+_lib.dsc_transpose.restype = _DscTensor_p
+
+
 # extern dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
 #                                       const dsc_tensor *DSC_RESTRICT x,
 #                                       int indexes...) noexcept;

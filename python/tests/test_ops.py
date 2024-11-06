@@ -10,6 +10,7 @@ import random
 import pytest
 from typing import List
 import math
+from itertools import permutations
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -412,7 +413,7 @@ def test_concat():
             shape = [random.randint(2, 10) for _ in range(n_dim)]
             for axis_idx in range(n_dim):
                 print(
-                    f'Testing with {n_dim}-dimensional tensors of type {dtype.__name__} on axis {axis_idx}'
+                    f'Testing concat with {n_dim}-dimensional tensors of type {dtype.__name__} on axis {axis_idx}'
                 )
                 shape_x1 = list(shape)
                 shape_x1[axis_idx] = random.randint(2, 10)
@@ -431,6 +432,27 @@ def test_concat():
                 res_np_flat = np.concat((x1, x2), None)
                 res_dsc_flat = dsc.concat((x1_dsc, x2_dsc), None)
                 assert all_close(res_dsc_flat.numpy(), res_np_flat)
+
+
+def test_transpose():
+    for n_dim in range(1, 5):
+        for dtype in DTYPES:
+            print(
+                f'Testing transpose with {n_dim}-dimensional tensors of type {dtype.__name__}'
+            )
+            shape = [random.randint(2, 10) for _ in range(n_dim)]
+            x = random_nd(shape, dtype)
+            x_dsc = dsc.from_numpy(x)
+            # Simple transpose
+            res_np_simple = np.transpose(x)
+            res_dsc_simple = dsc.transpose(x_dsc)
+            assert all_close(res_dsc_simple.numpy(), res_np_simple)
+
+            # Test with all the permutations of axes
+            for axes in permutations(range(n_dim)):
+                res_np = np.transpose(x, axes)
+                res_dsc = dsc.transpose(x_dsc, axes)
+                assert all_close(res_dsc.numpy(), res_np)
 
 
 def test_fft():

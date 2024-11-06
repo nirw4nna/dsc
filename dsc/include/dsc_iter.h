@@ -94,6 +94,34 @@ private:
     int x_broadcast_stride_[DSC_MAX_DIMS]{}, x_idx_[DSC_MAX_DIMS]{};
 };
 
+// Todo: unify the stride iterator with the broadcast iterator?
+struct dsc_stride_iterator {
+    dsc_stride_iterator(const int *shape, const int *stride) noexcept :
+            shape_(shape), stride_(stride) {
+    }
+
+    DSC_INLINE void next() noexcept {
+        for (int i = DSC_MAX_DIMS - 1; i >= 0; --i) {
+            if (++x_idx_[i] < shape_[i]) [[likely]] {
+                index_ += stride_[i];
+                return;
+            }
+            // Rollover this dimension
+            index_ -= (x_idx_[i] - 1) * stride_[i];
+            x_idx_[i] = 0;
+        }
+    }
+
+    DSC_INLINE int index() const noexcept {
+        return index_;
+    }
+
+private:
+    int index_ = 0;
+    const int *shape_, *stride_;
+    int x_idx_[DSC_MAX_DIMS]{};
+};
+
 struct dsc_slice_iterator {
     dsc_slice_iterator(const dsc_tensor *x, const int n_slices, const dsc_slice *slices) noexcept :
             shape_(x->shape), stride_(x->stride), n_dim_(x->n_dim) {
