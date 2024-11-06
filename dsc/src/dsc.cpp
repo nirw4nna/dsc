@@ -663,6 +663,8 @@ static DSC_INLINE void concat(dsc_tensor **to_concat,
 
 dsc_tensor *dsc_concat(dsc_ctx *ctx, const int axis,
                        const int tensors...) noexcept {
+    DSC_ASSERT(tensors > 1);
+
     DSC_TRACE_CONCAT_OP(tensors, axis);
 
     dsc_tensor **to_concat = (dsc_tensor **) alloca(tensors * sizeof(dsc_tensor *));
