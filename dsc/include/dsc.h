@@ -75,7 +75,7 @@
 
 static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 
-#define DSC_SLICE_NONE          INT32_MAX
+#define DSC_VALUE_NONE          INT32_MAX
 #define DSC_TENSOR_DATA(T, PTR) T *DSC_RESTRICT PTR##_data = (T *) (PTR)->data
 
 #define dsc_tensor_dim(PTR, dim)    (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (PTR)->n_dim + (dim)))
@@ -208,6 +208,10 @@ extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
 extern dsc_tensor *dsc_reshape(dsc_ctx *ctx,
                                const dsc_tensor *DSC_RESTRICT x,
                                int dimensions...) noexcept;
+
+extern dsc_tensor *dsc_concat(dsc_ctx *ctx,
+                              int axis,
+                              int tensors...) noexcept;
 
 // ============================================================
 // Indexing and Slicing

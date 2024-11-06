@@ -150,6 +150,20 @@
     args__.dtype = (dtype_);            \
     DSC_INSERT_TYPED_TRACE(dsc_arange_args, "op;arange", DSC_ARANGE_OP)
 
+#define DSC_TRACE_RESHAPE_OP(X, new_ndim_, new_shape_)  \
+    dsc_reshape_args args__{};                          \
+    DSC_TRACE_SET_TENSOR(X, x);                         \
+    args__.new_ndim = (new_ndim_);                      \
+    memcpy(args__.new_shape, (new_shape_), (new_ndim_) * sizeof(*(new_shape_))); \
+    DSC_INSERT_TYPED_TRACE(dsc_reshape_args, "op;reshape", DSC_RESHAPE_OP)
+
+#define DSC_TRACE_CONCAT_OP(tensors_, axis_)    \
+    dsc_concat_args args__{};                   \
+    args__.tensors = (tensors_);                \
+    args__.axis_ = (axis_);                     \
+    DSC_INSERT_TYPED_TRACE(dsc_concat_args, "op;concat", DSC_CONCAT_OP)
+
+
 enum dsc_trace_type : u8 {
     DSC_OBJ_ALLOC,
     DSC_OBJ_FREE,
@@ -168,6 +182,8 @@ enum dsc_trace_type : u8 {
     DSC_CAST_OP,
     DSC_RANDN_OP,
     DSC_ARANGE_OP,
+    DSC_RESHAPE_OP,
+    DSC_CONCAT_OP,
 };
 
 struct dsc_obj_alloc_args {
@@ -261,6 +277,17 @@ struct dsc_arange_args {
     dsc_dtype dtype;
 };
 
+struct dsc_reshape_args {
+    dsc_tensor_args x;
+    int new_shape[DSC_MAX_DIMS];
+    int new_ndim;
+};
+
+struct dsc_concat_args {
+    int tensors;
+    int axis;
+};
+
 struct dsc_trace {
     char name[DSC_TRACE_NAME_MAX], cat[DSC_TRACE_CAT_MAX];
     u64 tid, ts; // Timestamp of the event in us
@@ -283,6 +310,8 @@ struct dsc_trace {
         dsc_cast_args cast;        
         dsc_randn_args randn;
         dsc_arange_args arange;
+        dsc_reshape_args reshape;
+        dsc_concat_args concat;
     };
 };
 
@@ -381,6 +410,12 @@ private:
         } else if constexpr (dsc_is_type<T, dsc_arange_args>()) {
             const dsc_arange_args *args = (const dsc_arange_args *) data_;
             memcpy(&t->arange, args, sizeof(*args));
+        } else if constexpr (dsc_is_type<T, dsc_reshape_args>()) {
+            const dsc_reshape_args *args = (const dsc_reshape_args *) data_;
+            memcpy(&t->reshape, args, sizeof(*args));
+        } else if constexpr (dsc_is_type<T, dsc_concat_args>()) {
+            const dsc_concat_args *args = (const dsc_concat_args *) data_;
+            memcpy(&t->concat, args, sizeof(*args));
         } else {
             static_assert("T is not supported");
         }
@@ -412,6 +447,8 @@ private:
 #define DSC_TRACE_CAST_OP(X, new_dtype_)                        ((void) 0)
 #define DSC_TRACE_RANDN_OP(shape_, n_dim_, dtype_)              ((void) 0)
 #define DSC_TRACE_ARANGE_OP(n_, dtype_)                         ((void) 0)
+#define DSC_TRACE_RESHAPE_OP(X, new_ndim_, new_shape_)          ((void) 0)
+#define DSC_TRACE_CONCAT_OP(tensors_, axis_)                    ((void) 0)
 
 #endif // DSC_ENABLE_TRACING
 

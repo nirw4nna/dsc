@@ -627,9 +627,118 @@ dsc_tensor *dsc_reshape(dsc_ctx *ctx,
         new_ne = x->ne;
     }
 
+    DSC_TRACE_RESHAPE_OP(x, dimensions, new_shape);
+
     DSC_ASSERT(x->ne == new_ne);
 
     return dsc_new_tensor(ctx, dimensions, new_shape, x->dtype, x->buffer);
+}
+
+template<typename T>
+static DSC_INLINE void concat(dsc_tensor **to_concat,
+                              const int tensors,
+                              dsc_tensor *DSC_RESTRICT out,
+                              const int axis_idx) noexcept {
+    DSC_TENSOR_DATA(T, out);
+    // Todo: validate the perf of this implementation
+    dsc_axis_iterator *iterators = (dsc_axis_iterator *) alloca(tensors * sizeof(dsc_axis_iterator));
+    for (int i = 0; i < tensors; ++i) iterators[i] = dsc_axis_iterator(to_concat[i], axis_idx);
+
+    dsc_axis_iterator out_iterator(out, axis_idx);
+
+    while (out_iterator.has_next()) {
+        for (int i = 0; i < tensors; ++i) {
+            const int axis_n = to_concat[i]->shape[axis_idx];
+
+            T *DSC_RESTRICT src_data = (T *) to_concat[i]->data;
+            for (int el_idx = 0; el_idx < axis_n; ++el_idx) {
+                out_data[out_iterator.index()] = src_data[iterators[i].index()];
+
+                out_iterator.next();
+                iterators[i].next();
+            }
+        }
+    }
+}
+
+dsc_tensor *dsc_concat(dsc_ctx *ctx, const int axis,
+                       const int tensors...) noexcept {
+    DSC_TRACE_CONCAT_OP(tensors, axis);
+
+    dsc_tensor **to_concat = (dsc_tensor **) alloca(tensors * sizeof(dsc_tensor *));
+    std::va_list args;
+    va_start(args, tensors);
+    for (int i = 0; i < tensors; ++i) {
+        dsc_tensor *el = va_arg(args, dsc_tensor *);
+        DSC_ASSERT(el != nullptr);
+
+        to_concat[i] = el;
+    }
+    va_end(args);
+
+    // All the tensors must have the same dtype and the same number of dimensions
+    const dsc_dtype dtype = to_concat[0]->dtype;
+    const int n_dim = to_concat[0]->n_dim;
+    for (int i = 1; i < tensors; ++i) {
+        DSC_ASSERT(to_concat[i]->dtype == dtype);
+        DSC_ASSERT(to_concat[i]->n_dim == n_dim);
+    }
+
+    if (axis == DSC_VALUE_NONE) {
+        // Flatten
+        int ne = 0;
+        for (int i = 0; i < tensors; ++i) ne += to_concat[i]->ne;
+
+        dsc_tensor *out = dsc_tensor_1d(ctx, dtype, ne);
+        usize offset = 0;
+        for (int i = 0; i < tensors; ++i) {
+            dsc_tensor *src = to_concat[i];
+            const usize nb = src->ne * DSC_DTYPE_SIZE[dtype];
+            memcpy((byte *) out->data + offset, src->data, nb);
+            offset += nb;
+        }
+
+        return out;
+    } else {
+        const int axis_idx = dsc_tensor_dim(to_concat[0], axis);
+        DSC_ASSERT(axis_idx < DSC_MAX_DIMS);
+
+        int resulting_shape[DSC_MAX_DIMS];
+        memcpy(resulting_shape, to_concat[0]->shape, DSC_MAX_DIMS * sizeof(*resulting_shape));
+
+        // All the tensors must have the same shape expect for the axis dimension
+        for (int i = 1; i < tensors; ++i) {
+            for (int idx = 0; idx < DSC_MAX_DIMS; ++idx) {
+                if (idx == axis_idx) {
+                    resulting_shape[axis_idx] += to_concat[i]->shape[idx];
+                    continue;
+                }
+
+                DSC_ASSERT(to_concat[i]->shape[idx] == to_concat[0]->shape[idx]);
+            }
+        }
+
+        dsc_tensor *out = dsc_new_tensor(ctx, n_dim,
+                                         &resulting_shape[dsc_tensor_dim(to_concat[0], 0)],
+                                         dtype);
+
+        switch (dtype) {
+            case F32:
+                concat<f32>(to_concat, tensors, out, axis_idx);
+                break;
+            case F64:
+                concat<f64>(to_concat, tensors, out, axis_idx);
+                break;
+            case C32:
+                concat<c32>(to_concat, tensors, out, axis_idx);
+                break;
+            case C64:
+                concat<c64>(to_concat, tensors, out, axis_idx);
+                break;
+        }
+
+        return out;
+    }
 }
 
 // ============================================================
@@ -714,7 +823,7 @@ static DSC_INLINE void parse_slices(const dsc_tensor *DSC_RESTRICT x,
         // access to a single index rather than a slice (happens in mixed scenarios like x[:, 1])
         if (slice.start == slice.stop &&
             slice.start == slice.step &&
-            slice.start != DSC_SLICE_NONE) {
+            slice.start != DSC_VALUE_NONE) {
             // If we need to return a tensor then we need to keep track of the dimensions that must
             // be collapsed to match NumPy behaviour
             if (collapse_dim != nullptr) collapse_dim[i] = true;
@@ -729,14 +838,14 @@ static DSC_INLINE void parse_slices(const dsc_tensor *DSC_RESTRICT x,
 
         DSC_ASSERT(slice.step != 0);
 
-        // If a field is marked using DSC_SLICE_NONE then replace it with the 'default' behaviour.
+        // If a field is marked using DSC_VALUE_NONE then replace it with the 'default' behaviour.
         // The default behaviour is controlled by step (see: https://numpy.org/doc/stable/user/basics.indexing.html)
-        if (slice.step == DSC_SLICE_NONE) slice.step = 1;
-        if (slice.start == DSC_SLICE_NONE) {
+        if (slice.step == DSC_VALUE_NONE) slice.step = 1;
+        if (slice.start == DSC_VALUE_NONE) {
             if (slice.step > 0) slice.start = 0;
             else slice.start = x_dim_i - 1;
         }
-        if (slice.stop == DSC_SLICE_NONE) {
+        if (slice.stop == DSC_VALUE_NONE) {
             if (slice.step > 0) slice.stop = x_dim_i;
             else slice.stop = -x_dim_i - 1;
         }

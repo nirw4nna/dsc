@@ -23,7 +23,7 @@ from .dtype import Dtype
 
 
 _DSC_MAX_DIMS = 4
-_DSC_SLICE_NONE = 2**31 - 1
+_DSC_VALUE_NONE = 2**31 - 1
 
 _DscCtx = c_void_p
 
@@ -374,6 +374,17 @@ def _dsc_reshape(ctx: _DscCtx, x: _DscTensor_p, *dimensions: int) -> _DscTensor_
 
 _lib.dsc_reshape.argtypes = [_DscCtx, _DscTensor_p, c_int]
 _lib.dsc_reshape.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_concat(dsc_ctx *ctx,
+#                               int axis,
+#                               int tensors...) noexcept;
+def _dsc_concat(ctx: _DscCtx, axis: int, *tensors: _DscTensor_p) -> _DscTensor_p:
+    return _lib.dsc_concat(ctx, axis, len(tensors), *tensors)
+
+
+_lib.dsc_concat.argtypes = [_DscCtx, c_int, c_int]
+_lib.dsc_concat.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,

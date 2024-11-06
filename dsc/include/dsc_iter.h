@@ -10,9 +10,9 @@
 
 struct dsc_axis_iterator {
     dsc_axis_iterator(const dsc_tensor *x, const int axis,
-                      const int axis_n) noexcept :
+                      const int axis_n = -1) noexcept :
             shape_(x->shape), stride_(x->stride),
-            axis_(axis), axis_n_(axis_n < x->shape[axis] ? axis_n : x->shape[axis]) {
+            axis_(axis), axis_n_((axis_n < 0 || axis_n > x->shape[axis]) ? x->shape[axis] : axis_n) {
 
     }
 
@@ -59,8 +59,8 @@ private:
     int idx_[DSC_MAX_DIMS]{};
     const int *shape_;
     const int *stride_;
-    const int axis_;
-    const int axis_n_;
+    int axis_;
+    int axis_n_;
     bool end_ = false;
 };
 

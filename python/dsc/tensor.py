@@ -8,10 +8,11 @@ from ._bindings import (
     _DscTensor_p,
     _OptionalTensor,
     _DSC_MAX_DIMS,
-    _DSC_SLICE_NONE,
+    _DSC_VALUE_NONE,
     _DscSlice,
     _dsc_cast,
     _dsc_reshape,
+    _dsc_concat,
     _dsc_tensor_free,
     _dsc_sum,
     _dsc_mean,
@@ -103,7 +104,7 @@ def _unwrap(x: 'Tensor') -> Union[float, complex, 'Tensor']:
 def _c_slice(x: Union[slice, int]) -> _DscSlice:
     def _sanitize(i: Union[int, None]) -> int:
         if i is None:
-            return _DSC_SLICE_NONE
+            return _DSC_VALUE_NONE
         return i
 
     if isinstance(x, slice):
@@ -375,8 +376,21 @@ def reshape(x: Tensor, *shape: Union[int, Tuple[int, ...], List[int]]) -> Tensor
     elif all(isinstance(s, int) for s in shape):
         shape_tuple = shape
     else:
-        raise RuntimeError(f'cannot reshape Tensor with shape {shape}')
+        raise RuntimeError(f'cannot reshape tensor with shape {shape}')
     return Tensor(_dsc_reshape(_get_ctx(), _c_ptr(x), *shape_tuple))  # pyright: ignore[reportArgumentType]
+
+
+def concat(
+    tensors: Union[Tuple[Tensor, ...], List[Tensor]], axis: Union[int, None] = 0
+) -> Tensor:
+    if isinstance(tensors, (Tuple, List)) and all(
+        isinstance(t, Tensor) for t in tensors
+    ):
+        tensors_tuple = tuple(_c_ptr(t) for t in tensors)
+        axis = axis if axis is not None else _DSC_VALUE_NONE
+        return Tensor(_dsc_concat(_get_ctx(), axis, *tensors_tuple))
+    else:
+        raise RuntimeError(f'cannot concatenate tensors {tensors}')
 
 
 def _tensor_op(

@@ -406,6 +406,33 @@ def test_reshape():
     assert all_close(x.reshape((-1, 5)), x_dsc.reshape((-1, 5)).numpy())
 
 
+def test_concat():
+    for n_dim in range(1, 5):
+        for dtype in DTYPES:
+            shape = [random.randint(2, 10) for _ in range(n_dim)]
+            for axis_idx in range(n_dim):
+                print(
+                    f'Testing with {n_dim}-dimensional tensors of type {dtype.__name__} on axis {axis_idx}'
+                )
+                shape_x1 = list(shape)
+                shape_x1[axis_idx] = random.randint(2, 10)
+                shape_x2 = list(shape)
+                shape_x2[axis_idx] = random.randint(2, 10)
+                x1 = random_nd(shape_x1, dtype)
+                x2 = random_nd(shape_x2, dtype)
+                x1_dsc = dsc.from_numpy(x1)
+                x2_dsc = dsc.from_numpy(x2)
+
+                res_np = np.concat((x1, x2), axis_idx)
+                res_dsc = dsc.concat((x1_dsc, x2_dsc), axis_idx)
+                assert all_close(res_dsc.numpy(), res_np)
+
+                # Test flatten
+                res_np_flat = np.concat((x1, x2), None)
+                res_dsc_flat = dsc.concat((x1_dsc, x2_dsc), None)
+                assert all_close(res_dsc_flat.numpy(), res_np_flat)
+
+
 def test_fft():
     ops = {
         'fft': ((np.fft.fft, np.fft.ifft), (dsc.fft, dsc.ifft)),
