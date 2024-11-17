@@ -183,7 +183,7 @@ public:
         return *this;
     }
 
-    // Todo: outside
+    // Todo: should be outside
     DSC_INLINE tensor pow(const real<T> exp) const noexcept {
         return dsc_pow(ctx, x_, wrap(exp).x_);
     }
@@ -252,6 +252,7 @@ private:
             static_assert("T is not supported");
         }
     }
+
     dsc_tensor *x_;
 };
 
@@ -319,25 +320,25 @@ static DSC_INLINE tensor<T> concat(const int axis = 0, Args... tensors) noexcept
 
 template<typename T>
 static DSC_INLINE tensor<T> fft(const tensor<T>& x,
-                                int n, int axis) noexcept {
+                                const int n = -1, const int axis = -1) noexcept {
     return dsc_fft(ctx, x.x_, nullptr, n, axis);
 }
 
 template<typename T>
 static DSC_INLINE tensor<T> ifft(const tensor<T>& x,
-                                 int n, int axis) noexcept {
+                                 const int n = -1, const int axis = -1) noexcept {
     return dsc_ifft(ctx, x.x_, nullptr, n, axis);
 }
 
 template<typename T>
 static DSC_INLINE tensor<T> rfft(const tensor<T>& x,
-                                 int n, int axis) noexcept {
+                                 const int n = -1, const int axis = -1) noexcept {
     return dsc_rfft(ctx, x.x_, nullptr, n, axis);
 }
 
 template<typename T>
 static DSC_INLINE tensor<T> irfft(const tensor<T>& x,
-                                  int n, int axis) noexcept {
+                                  const int n = -1, const int axis = -1) noexcept {
     return dsc_irfft(ctx, x.x_, nullptr, n, axis);
 }
 }

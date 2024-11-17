@@ -19,7 +19,7 @@ def _get_ctx():
         total_mem = psutil.virtual_memory().total
         mem = int(total_mem * 0.1)
         print(
-            f'DSC has not been explicitly initialized. Using {round(mem / 1024.)}MB for both the main and scratch memory.'
+            f'DSC has not been explicitly initialized. Using {round(mem / (1024. * 1024.))}MB for both the main and scratch memory.'
             f'If you require more memory please call dsc.init() once before executing your code.'
         )
         _ctx_instance = _DscContext(mem, mem)
