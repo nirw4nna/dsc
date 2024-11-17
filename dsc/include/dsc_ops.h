@@ -171,10 +171,10 @@ struct log2_op {
         } else if constexpr (dsc_is_type<T, f64>()) {
             return log2(x);
         } else if constexpr (dsc_is_type<T, c32>()) {
-            static constexpr real<T> fact = 1 / logf(2);
+            static const real<T> fact = 1 / logf(2);
             return dsc_complex(T, log2f(sqrtf((x.real * x.real) + (x.imag * x.imag))), fact * atan2f(x.imag, x.real));
         } else if constexpr (dsc_is_type<T, c64>()) {
-            static constexpr real<T> fact = 1 / log(2);
+            static const real<T> fact = 1 / log(2);
             return dsc_complex(T, log2(sqrt((x.real * x.real) + (x.imag * x.imag))), fact * atan2(x.imag, x.real));
         }
     }
@@ -190,10 +190,10 @@ struct log10_op {
         } else if constexpr (dsc_is_type<T, f64>()) {
             return log10(x);
         } else if constexpr (dsc_is_type<T, c32>()) {
-            static constexpr real<T> fact = 1 / logf(10);
+            static const real<T> fact = 1 / logf(10);
             return dsc_complex(T, log10f(sqrtf((x.real * x.real) + (x.imag * x.imag))), fact * atan2f(x.imag, x.real));
         } else if constexpr (dsc_is_type<T, c64>()) {
-            static constexpr real<T> fact = 1 / log(10);
+            static const real<T> fact = 1 / log(10);
             return dsc_complex(T, log10(sqrt((x.real * x.real) + (x.imag * x.imag))), fact * atan2(x.imag, x.real));
         }
     }

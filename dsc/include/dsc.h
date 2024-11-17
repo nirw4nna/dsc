@@ -117,6 +117,21 @@ struct dsc_slice {
 };
 
 // ============================================================
+// Helper Functions
+
+static DSC_INLINE DSC_STRICTLY_PURE int dsc_pow2_n(const int n) noexcept {
+    // Compute the power-of-2 closest to n (n must be a 32bit integer)
+    DSC_ASSERT(n > 0);
+    int next_pow2_n = n - 1;
+    next_pow2_n |= (next_pow2_n >> 1);
+    next_pow2_n |= (next_pow2_n >> 2);
+    next_pow2_n |= (next_pow2_n >> 4);
+    next_pow2_n |= (next_pow2_n >> 8);
+    next_pow2_n |= (next_pow2_n >> 16);
+    return next_pow2_n + 1;
+}
+
+// ============================================================
 // Initialization
 
 extern dsc_ctx *dsc_ctx_init(usize main_mem, usize scratch_mem) noexcept;

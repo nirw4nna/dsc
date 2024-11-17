@@ -1,5 +1,5 @@
-CC			=	gcc
-CXX			=	g++
+CC			?=	gcc
+CXX			?=	g++
 CXXFLAGS	=	-std=c++20 -I./dsc/include/ -Wall -Wextra -Wshadow -Wformat -Wnoexcept  \
  				-Wcast-qual -Wunused -Wdouble-promotion -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti -pthread
 CFLAGS		=	-std=c99 -W -Wall -I./dsc/tests/
@@ -27,6 +27,16 @@ endif
 ifdef DSC_ENABLE_TRACING
 	CXXFLAGS	+= -DDSC_ENABLE_TRACING
 	CFLAGS		+= -DDSC_ENABLE_TRACING
+endif
+
+ifdef DSC_MAX_TRACES
+	CXXFLAGS	+= -DDSC_MAX_TRACES=$(DSC_MAX_TRACES)
+	CFLAGS		+= -DDSC_MAX_TRACES=$(DSC_MAX_TRACES)
+endif
+
+ifdef DSC_MAX_FFT_PLANS
+	CXXFLAGS	+= -DDSC_MAX_FFT_PLANS=$(DSC_MAX_FFT_PLANS)
+	CFLAGS		+= -DDSC_MAX_FFT_PLANS=$(DSC_MAX_FFT_PLANS)
 endif
 
 # If we are not compiling the shared object and are in debug mode then run in ASAN mode

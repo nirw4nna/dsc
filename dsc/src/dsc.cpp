@@ -218,7 +218,7 @@ static dsc_fft_plan *dsc_get_plan(dsc_ctx *ctx, const int n,
 dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, const int n,
                            const dsc_fft_type fft_type,
                            const dsc_dtype dtype) noexcept {
-    const int fft_n = dsc_fft_best_n(n);
+    const int fft_n = dsc_pow2_n(n);
 
     DSC_TRACE_PLAN_FFT(n, fft_n, fft_type, dtype);
 
@@ -2025,9 +2025,9 @@ static DSC_INLINE dsc_tensor *dsc_internal_fft(dsc_ctx *ctx,
     DSC_ASSERT(axis_idx < DSC_MAX_DIMS);
 
     const int x_n = x->shape[axis_idx];
-    const int axis_n = dsc_fft_best_n(x_n);
+    const int axis_n = dsc_pow2_n(x_n);
     if (n > 0) {
-        n = dsc_fft_best_n(n);
+        n = dsc_pow2_n(n);
     } else {
         n = axis_n;
     }
@@ -2197,11 +2197,11 @@ static DSC_INLINE dsc_tensor *dsc_internal_rfft(dsc_ctx *ctx,
     int out_n, fft_order;
 
     if constexpr (forward) {
-        fft_order = ((n > 0) ? dsc_fft_best_n(n) : dsc_fft_best_n(x_n)) >> 1;
+        fft_order = ((n > 0) ? dsc_pow2_n(n) : dsc_pow2_n(x_n)) >> 1;
         out_n = fft_order + 1;
     } else {
         // Todo: verify that this makes sense
-        fft_order = (n > 0) ? dsc_fft_best_n(n - 1) : dsc_fft_best_n(x_n - 1);
+        fft_order = (n > 0) ? dsc_pow2_n(n - 1) : dsc_pow2_n(x_n - 1);
         out_n = fft_order << 1;
     }
 

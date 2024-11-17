@@ -106,20 +106,6 @@ DSC_NOINLINE void dsc_fft_pass2(T *DSC_RESTRICT x,
 // ============================================================
 // Public Interface
 
-static DSC_STRICTLY_PURE int dsc_fft_best_n(const int n) noexcept {
-    // Compute the best fitting N based on the available algorithms.
-    // For now, return the power-of-2 closest to n.
-    DSC_ASSERT(n > 0);
-    // Compute the next power-of-2 for a 32bit integer
-    int next_pow2_n = n - 1;
-    next_pow2_n |= (next_pow2_n >> 1);
-    next_pow2_n |= (next_pow2_n >> 2);
-    next_pow2_n |= (next_pow2_n >> 4);
-    next_pow2_n |= (next_pow2_n >> 8);
-    next_pow2_n |= (next_pow2_n >> 16);
-    return next_pow2_n + 1;
-}
-
 static DSC_STRICTLY_PURE usize dsc_fft_storage(const int n, const dsc_dtype dtype,
                                                const dsc_fft_type fft_type) noexcept {
     // Compute how much storage is needed for the plan (twiddles * dtype).
