@@ -1,9 +1,11 @@
 # DSC
+[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+
 DSC is an NumPy-compatible array framework for Python and C++.
 The goal is to provide scientists and engineers with a familiar tool
 that can be used during both the prototyping and implementation phase. 
 The idea is to build something that can be as productive as NumPy to develop/test an algorithm 
-but that can also be used to implement the same algorithm in production on systems where having Python is not an option.
+but that can also be used to implement the same algorithm in production on systems where installing Python is not an option.
 
 Some key features of DSC include:
 - **Intuitive API**: DSC Python API closely resembles NumPy. DSC also has a fully 
@@ -60,7 +62,7 @@ to enable/disable specific features:
 | DSC_FAST           | Turn off logging and compile with the highest optimisation level |
 | DSC_ENABLE_TRACING | Enable tracing for all operations                                |
 | DSC_MAX_FFT_PLANS  | Max number of FFT plans that can be cached (**default=16**)      |
-| DSC_MAX_TRACES     | Max number of traces that can be recorder (**default=1K**)       |
+| DSC_MAX_TRACES     | Max number of traces that can be recorded (**default=1K**)       |
 
 To verify that everything worked out as expected try a simple operation:
 ```bash
@@ -92,6 +94,8 @@ Everything else should be familiar to those used to work with NumPy.
 To showcase some more features, let's implement an FFT-based filter in both Python and C++ using DSC.
 ### Python
 ```python
+import dsc
+
 def filterFFT(s: dsc.Tensor, b: dsc.Tensor) -> dsc.Tensor:
     # Determine the length of the output signal
     ls = len(s)
@@ -118,6 +122,8 @@ def filterFFT(s: dsc.Tensor, b: dsc.Tensor) -> dsc.Tensor:
 ```
 ### C++
 ```c++
+#include "dsc_api.h"
+
 dsc::tensor<float> filterFFT(const dsc::tensor<float>& s, const dsc::tensor<float>& b) {
     // Determine the length of the output signal
     const auto ls = s.size();
@@ -145,14 +151,14 @@ As you can see both implementations look very similar and they also achieve simi
 are all implemented using the same low-level DSC core library.
 
 ## Running Tests
-// TODO
+DSC uses `pytest` to run unit tests against NumPy which is the reference for correctness.
+
+To run all the tests simple do:
 ```bash
 cd python/tests/
 pytest -s test_ops.py --no-header --no-summary -q
 ```
-
-## Performance
-// TODO
+**Note:** there are quite a few tests so to run them it's better to compile DSC with `DSC_FAST=1`. 
 
 ## License
 BSD-3-Clause
