@@ -7,6 +7,7 @@ The goal here is to stay 'within reach' with respect to NumPy while maintaining 
 
 ## Setup
 All the experiments are executed on a laptop with an Intel **i7 8750H** and **32GB of RAM** running Ubuntu-Linux 5.15.
+
 Other settings include:
 - Python 3.10.12
 - GCC 11.4
@@ -38,7 +39,7 @@ Unary operations are in the form `out = op(x)` where:
 
 ![image](assets/unary.png)
 
-**Note:** the performance of the Bessel function of the first kind ($I_{0}$) in NumPy are 
+**Note:** the performance of the Bessel function of the first kind ($I_{0}$) in NumPy is 
 not representative see: https://numpy.org/doc/stable/reference/generated/numpy.i0.html.
 
 
