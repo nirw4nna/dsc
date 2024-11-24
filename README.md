@@ -150,6 +150,9 @@ dsc::tensor<float> filterFFT(const dsc::tensor<float>& s, const dsc::tensor<floa
 As you can see both implementations look very similar and they also achieve similar performance as the core operations
 are all implemented using the same low-level DSC core library.
 
+## Performance
+See [performance](benchmarks/perf.md) for a detailed comparison.
+
 ## Running Tests
 DSC uses `pytest` to run unit tests against NumPy which is the reference for correctness.
 
