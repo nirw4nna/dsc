@@ -27,14 +27,6 @@
     args__.field.backend = (X)->backend;    \
     args__.field.addr = (uintptr_t) (X)    
 
-#define DSC_TRACE_OBJ_ALLOC(mem_size_, allocator_)              \
-    dsc_obj_alloc_args args__{(mem_size_), 0, (allocator_)};    \
-    DSC_INSERT_TYPED_TRACE(dsc_obj_alloc_args, "alloc", DSC_OBJ_ALLOC)
-
-#define DSC_TRACE_OBJ_FREE(allocator_, addr_)               \
-    dsc_obj_alloc_args args__{0, (addr_), (allocator_)};    \
-    DSC_INSERT_TYPED_TRACE(dsc_obj_alloc_args, "free", DSC_OBJ_FREE)
-
 #define DSC_TRACE_TENSOR_NEW(shape_, n_dim_, dtype_, backend_)  \
     dsc_tensor_alloc_args args__{};                             \
     memcpy(&args__.x.shape, (shape_), (n_dim_) * sizeof(*(shape_)));    \
@@ -171,8 +163,6 @@
 
 
 enum dsc_trace_type : u8 {
-    DSC_OBJ_ALLOC,
-    DSC_OBJ_FREE,
     DSC_TENSOR_ALLOC,
     DSC_TENSOR_FREE,
     DSC_UNARY_OP,
@@ -191,12 +181,6 @@ enum dsc_trace_type : u8 {
     DSC_RESHAPE_OP,
     DSC_CONCAT_OP,
     DSC_TRANSPOSE_OP,
-};
-
-struct dsc_obj_alloc_args {
-    u64 mem_size;
-    uintptr_t addr;
-    dsc_allocator_type allocator;
 };
 
 struct dsc_tensor_args {
@@ -307,7 +291,6 @@ struct dsc_trace {
     char phase; // Phase of the event (B=begin, E=end, X=complete ecc...)
     dsc_trace_type type;
     union {
-        dsc_obj_alloc_args obj_alloc;
         dsc_tensor_alloc_args tensor_alloc;
         dsc_fft_args fft;
         dsc_plan_fft_args plan_fft;
@@ -379,10 +362,7 @@ private:
 
     DSC_INLINE void fill_data(dsc_trace *t) const noexcept {
         // Todo: this can easily be replaced by a macro or something more concise
-        if constexpr (dsc_is_type<T, dsc_obj_alloc_args>()) {
-            const dsc_obj_alloc_args *args = (const dsc_obj_alloc_args *) data_;
-            memcpy(&t->obj_alloc, args, sizeof(*args));
-        } else if constexpr (dsc_is_type<T, dsc_tensor_alloc_args>()) {
+         if constexpr (dsc_is_type<T, dsc_tensor_alloc_args>()) {
             const dsc_tensor_alloc_args *args = (const dsc_tensor_alloc_args *) data_;
             memcpy(&t->tensor_alloc, args, sizeof(*args));
         } else if constexpr (dsc_is_type<T, dsc_binary_args>()) {
@@ -447,8 +427,6 @@ private:
 
 #else
 
-#define DSC_TRACE_OBJ_ALLOC(mem_size_, allocator_)              ((void) 0)
-#define DSC_TRACE_OBJ_FREE(allocator_, addr_)                   ((void) 0)
 #define DSC_TRACE_TENSOR_NEW(shape_, n_dim_, dtype_, backend_)  ((void) 0)
 #define DSC_TRACE_TENSOR_FREE(X)                                ((void) 0)
 #define DSC_TRACE_BINARY_OP(XA, XB, OUT)                        ((void) 0)

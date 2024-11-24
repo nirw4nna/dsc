@@ -59,7 +59,7 @@ def bench(op, *args, **kwargs) -> float:
         del kwargs['out']
 
     def _call_op():
-       op(*args, **kwargs)
+        op(*args, **kwargs)
 
     for _ in range(WARMUP):
         _call_op()
@@ -73,10 +73,7 @@ def bench(op, *args, **kwargs) -> float:
     return op_time
 
 
-# To run from CLI
-# export PYTHONPATH=/home/lowl/Scrivania/projects/dspcraft/dsc:$PYTHONPATH
 def bench_binary(show_plot: bool = True):
-    dsc.init(1024 * 1024 * 1024 * 2)
     ops = {
         'add': (np.add, dsc.add),
         'addc': (np.add, dsc.add),
@@ -119,8 +116,6 @@ def bench_binary(show_plot: bool = True):
             np_latency[f'{op_name}_{dtype.__name__}'] = bench(np_op, a, b, out=out) * 1e3
             dsc_latency[f'{op_name}_{dtype.__name__}'] = bench(dsc_op, a_dsc, b_dsc, out=out_dsc) * 1e3
 
-            dsc.clear()
-
     draw_table(np_latency, dsc_latency, 'ms')
 
     if show_plot:
@@ -128,7 +123,6 @@ def bench_binary(show_plot: bool = True):
 
 
 def bench_unary(show_plot: bool = True):
-    dsc.init(1024 * 1024 * 1024 * 2)
     ops = {
         'sin': (np.sin, dsc.sin),
         'sinc': (np.sinc, dsc.sinc),
@@ -165,8 +159,6 @@ def bench_unary(show_plot: bool = True):
             np_latency[f'{op_name}_{dtype.__name__}'] = bench(np_op, a, out=out) * 1e3
             dsc_latency[f'{op_name}_{dtype.__name__}'] = bench(dsc_op, a_dsc, out=out_dsc) * 1e3
 
-            dsc.clear()
-
     draw_table(np_latency, dsc_latency, 'ms')
 
     if show_plot:
@@ -174,11 +166,11 @@ def bench_unary(show_plot: bool = True):
 
 
 def bench_unary_along_axis(show_plot: bool = True):
-    dsc.init(1024 * 1024 * 1024 * 2)
     ops = {
         'sum': (np.sum, dsc.sum),
         'mean': (np.mean, dsc.mean),
         'max': (np.max, dsc.max),
+        'min': (np.min, dsc.min),
     }
     np_latency = {}
     dsc_latency = {}
@@ -195,8 +187,6 @@ def bench_unary_along_axis(show_plot: bool = True):
             np_latency[f'{op_name}_{dtype.__name__}'] = bench(np_op, a, out=out, axis=0, keepdims=True) * 1e3
             dsc_latency[f'{op_name}_{dtype.__name__}'] = bench(dsc_op, a_dsc, out=out_dsc, axis=0, keepdims=True) * 1e3
 
-            dsc.clear()
-
     draw_table(np_latency, dsc_latency, 'ms')
 
     if show_plot:
@@ -204,6 +194,6 @@ def bench_unary_along_axis(show_plot: bool = True):
 
 
 if __name__ == '__main__':
-    bench_unary(False)
-    # bench_binary(False)
-    # bench_unary_along_axis(False)
+    # bench_binary(show_plot=True)
+    # bench_unary(show_plot=True)
+    bench_unary_along_axis(show_plot=True)

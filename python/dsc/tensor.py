@@ -25,6 +25,7 @@ from ._bindings import (
     _dsc_tensor_get_slice,
     _dsc_tensor_set_idx,
     _dsc_tensor_set_slice,
+    _dsc_view,
     _dsc_wrap_f32,
     _dsc_wrap_f64,
     _dsc_wrap_c32,
@@ -149,8 +150,15 @@ def _wrap(
             return Tensor(_dsc_wrap_c64(_get_ctx(), complex(x, 0)))
 
 
+def _pointers_are_equals(xa: _DscTensor_p, xb: _DscTensor_p) -> bool:
+    return (
+        ctypes.cast(xa, ctypes.c_void_p).value == ctypes.cast(xb, ctypes.c_void_p).value
+    )
+
+
 class Tensor:
-    def __init__(self, c_ptr: _DscTensor_p):  # pyright: ignore[reportInvalidTypeForm]
+    def __init__(self, c_ptr: _DscTensor_p, view: bool = False):  # pyright: ignore[reportInvalidTypeForm]
+        c_ptr = c_ptr if not view else _dsc_view(_get_ctx(), c_ptr)
         self._dtype = Dtype(c_ptr.contents.dtype)
         self._shape = c_ptr.contents.shape
         self._n_dim = c_ptr.contents.n_dim
@@ -315,7 +323,9 @@ class Tensor:
         return np_array.reshape(self.shape)
 
     def cast(self, dtype: Dtype) -> 'Tensor':
-        return Tensor(_dsc_cast(_get_ctx(), self._c_ptr, dtype))
+        x_ptr = _c_ptr(self)
+        out_ptr = _dsc_cast(_get_ctx(), x_ptr, dtype)
+        return Tensor(out_ptr, _pointers_are_equals(x_ptr, out_ptr))
 
     def tobytes(self) -> bytes:
         return bytes(self)
@@ -406,12 +416,18 @@ def transpose(
         raise RuntimeError(f'cannot transpose axes {axes}')
 
 
+def _has_out(out: Union[Tensor, None]) -> bool:
+    return True if out is not None else False
+
+
 def _tensor_op(
     xa: Tensor, xb: Tensor, out: Union[Tensor, None], op_name: str
 ) -> Tensor:
     if hasattr(sys.modules[__name__], op_name):
         op = getattr(sys.modules[__name__], op_name)
-        return Tensor(op(_get_ctx(), _c_ptr(xa), _c_ptr(xb), _c_ptr_or_none(out)))
+        return Tensor(
+            op(_get_ctx(), _c_ptr(xa), _c_ptr(xb), _c_ptr_or_none(out)), _has_out(out)
+        )
     else:
         raise RuntimeError(f'tensor operation "{op_name}" doesn\'t exist in module')
 
@@ -486,39 +502,39 @@ def power(
 
 
 def cos(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_cos(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)))
+    return Tensor(_dsc_cos(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
 
 
 def sin(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_sin(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)))
+    return Tensor(_dsc_sin(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
 
 
 def sinc(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_sinc(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)))
+    return Tensor(_dsc_sinc(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
 
 
 def logn(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_logn(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)))
+    return Tensor(_dsc_logn(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
 
 
 def log2(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_log2(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)))
+    return Tensor(_dsc_log2(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
 
 
 def log10(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_log10(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)))
+    return Tensor(_dsc_log10(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
 
 
 def exp(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_exp(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)))
+    return Tensor(_dsc_exp(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
 
 
 def sqrt(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_sqrt(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)))
+    return Tensor(_dsc_sqrt(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
 
 
 def absolute(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_abs(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)))
+    return Tensor(_dsc_abs(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
 
 
 def angle(x: Tensor) -> Tensor:
@@ -526,16 +542,15 @@ def angle(x: Tensor) -> Tensor:
 
 
 def conj(x: Tensor) -> Tensor:
-    return Tensor(_dsc_conj(_get_ctx(), _c_ptr(x)))
+    x_ptr = _c_ptr(x)
+    out_ptr = _dsc_conj(_get_ctx(), x_ptr)
+    return Tensor(out_ptr, _pointers_are_equals(x_ptr, out_ptr))
 
 
 def real(x: Tensor) -> Tensor:
-    return Tensor(
-        _dsc_real(
-            _get_ctx(),
-            _c_ptr(x),
-        )
-    )
+    x_ptr = _c_ptr(x)
+    out_ptr = _dsc_real(_get_ctx(), x_ptr)
+    return Tensor(out_ptr, _pointers_are_equals(x_ptr, out_ptr))
 
 
 def imag(x: Tensor) -> Tensor:
@@ -555,31 +570,46 @@ def clip(
 ) -> Tensor:
     x_min = x_min if x_min is not None else float('-inf')
     x_max = x_max if x_max is not None else float('+inf')
-    return Tensor(_dsc_clip(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), x_min, x_max))
+    return Tensor(
+        _dsc_clip(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), x_min, x_max),
+        _has_out(out),
+    )
 
 
 def sum(
     x: Tensor, out: Union[Tensor, None] = None, axis: int = -1, keepdims: bool = True
 ) -> Tensor:
-    return Tensor(_dsc_sum(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims))
+    return Tensor(
+        _dsc_sum(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims),
+        _has_out(out),
+    )
 
 
 def mean(
     x: Tensor, out: Union[Tensor, None] = None, axis: int = -1, keepdims: bool = True
 ) -> Tensor:
-    return Tensor(_dsc_mean(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims))
+    return Tensor(
+        _dsc_mean(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims),
+        _has_out(out),
+    )
 
 
 def max(
     x: Tensor, out: Union[Tensor, None] = None, axis: int = -1, keepdims: bool = True
 ) -> Tensor:
-    return Tensor(_dsc_max(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims))
+    return Tensor(
+        _dsc_max(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims),
+        _has_out(out),
+    )
 
 
 def min(
     x: Tensor, out: Union[Tensor, None] = None, axis: int = -1, keepdims: bool = True
 ) -> Tensor:
-    return Tensor(_dsc_min(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims))
+    return Tensor(
+        _dsc_min(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims),
+        _has_out(out),
+    )
 
 
 def arange(n: int, dtype: Dtype = Dtype.F32) -> Tensor:
@@ -663,26 +693,36 @@ def plan_fft(n: int, dtype: Dtype = Dtype.F64):
 def fft(
     x: Tensor, out: Union[Tensor, None] = None, n: int = -1, axis: int = -1
 ) -> Tensor:
-    return Tensor(_dsc_fft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis))
+    return Tensor(
+        _dsc_fft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis),
+        _has_out(out),
+    )
 
 
 def ifft(
     x: Tensor, out: Union[Tensor, None] = None, n: int = -1, axis: int = -1
 ) -> Tensor:
-    return Tensor(_dsc_ifft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis))
+    return Tensor(
+        _dsc_ifft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis),
+        _has_out(out),
+    )
 
 
 def rfft(
     x: Tensor, out: Union[Tensor, None] = None, n: int = -1, axis: int = -1
 ) -> Tensor:
-    return Tensor(_dsc_rfft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis))
+    return Tensor(
+        _dsc_rfft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis),
+        _has_out(out),
+    )
 
 
 def irfft(
     x: Tensor, out: Union[Tensor, None] = None, n: int = -1, axis: int = -1
 ) -> Tensor:
     return Tensor(
-        _dsc_irfft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis)
+        _dsc_irfft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis),
+        _has_out(out),
     )
 
 

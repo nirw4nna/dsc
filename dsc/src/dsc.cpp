@@ -396,6 +396,10 @@ DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
     return new_tensor;
 }
 
+DSC_MALLOC dsc_tensor *dsc_view(dsc_ctx *ctx, const dsc_tensor *x) noexcept {
+    return dsc_new_view(ctx, x);
+}
+
 dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx, const dsc_dtype dtype,
                           const int dim1) noexcept {
     const int shape[DSC_MAX_DIMS] = {dim1};
@@ -581,13 +585,10 @@ static void copy(const dsc_tensor *DSC_RESTRICT x,
 }
 
 dsc_tensor *dsc_cast(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
-                     const dsc_dtype new_dtype, const bool allow_inplace) noexcept {
+                     const dsc_dtype new_dtype) noexcept {
     DSC_TRACE_CAST_OP(x, new_dtype);
 
-    if (x->dtype == new_dtype) {
-        if (allow_inplace) return x;
-        return dsc_new_view(ctx, x);
-    }
+    if (x->dtype == new_dtype) return x;
 
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &x->shape[dsc_tensor_dim(x, 0)], new_dtype);
     copy(x, out);
@@ -1540,17 +1541,14 @@ dsc_tensor *dsc_angle(dsc_ctx *ctx,
 }
 
 dsc_tensor *dsc_conj(dsc_ctx *ctx,
-                     dsc_tensor *DSC_RESTRICT x,
-                     const bool allow_inplace) noexcept {
+                     dsc_tensor *DSC_RESTRICT x) noexcept {
     DSC_ASSERT(x != nullptr);
 
     DSC_TRACE_UNARY_NO_OUT_OP(x);
 
     if (x->dtype == F32 || x->dtype == F64) {
         DSC_LOG_DEBUG("the input is real so it will be returned as is");
-
-        if (allow_inplace) return x;
-        return dsc_new_view(ctx, x);
+        return x;
     }
 
     dsc_tensor *out = dsc_new_like(ctx, x);
@@ -1569,17 +1567,14 @@ dsc_tensor *dsc_conj(dsc_ctx *ctx,
 }
 
 dsc_tensor *dsc_real(dsc_ctx *ctx,
-                     dsc_tensor *DSC_RESTRICT x,
-                     const bool allow_inplace) noexcept {
+                     dsc_tensor *DSC_RESTRICT x) noexcept {
     DSC_ASSERT(x != nullptr);
 
     DSC_TRACE_UNARY_NO_OUT_OP(x);
 
     if (x->dtype == F32 || x->dtype == F64) {
         DSC_LOG_DEBUG("the input is real so it will be returned as is");
-
-        if (allow_inplace) return x;
-        return dsc_new_view(ctx, x);
+        return x;
     }
 
     const dsc_dtype out_dtype = as_real(x->dtype);

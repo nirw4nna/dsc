@@ -94,16 +94,6 @@ static DSC_INLINE void dump_tensor_args(FILE *f, const dsc_tensor_args *t) noexc
 
 static DSC_INLINE void dump_trace_args(FILE *f, const dsc_trace *t) noexcept {
     switch (t->type) {
-        case DSC_OBJ_ALLOC:
-        case DSC_OBJ_FREE: {
-            const dsc_obj_alloc_args args = t->obj_alloc;
-            fprintf(f, R"(, "args": {)");
-            if (args.mem_size != 0) fprintf(f, R"("mem_size": %ld, )", args.mem_size);
-            if (args.addr != 0) fprintf(f, "\"addr\": \"0x%" PRIxPTR "\", ", args.addr);
-
-            fprintf(f, R"("allocator": "%s"})", DSC_ALLOCATOR_NAMES[args.allocator]);
-            break;
-        }
         case DSC_TENSOR_ALLOC:
         case DSC_TENSOR_FREE: {
             fprintf(f, R"(, "args": )");

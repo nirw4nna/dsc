@@ -30,7 +30,6 @@ def bench(x, op):
 
 
 def bench_fft(show_plot: bool = True):
-    dsc.init(1024 * 1024 * 1024 * 2)
     # FLOPS = 5N * log2(N) / s for the FFT (https://www.fftw.org/speed/method.html)
 
     np_f64_fft_flops = {}
@@ -50,20 +49,20 @@ def bench_fft(show_plot: bool = True):
         x_dsc_f32 = dsc.from_numpy(x_f32)
         np_f64_fft_flops[n] = flops / bench(x_f64, np.fft.fft)
         dsc_f32_fft_flops[n] = flops / bench(x_dsc_f32, dsc.fft)
-        dsc.clear()
+
         x_dsc_f64 = dsc.from_numpy(x_f64)
         dsc_f64_fft_flops[n] = flops / bench(x_dsc_f64, dsc.fft)
-        dsc.clear()
+
+        del x_dsc_f32
+        del x_dsc_f64
 
         # RFFT
         flops = 0.5 * flops
         x_dsc_f32 = dsc.from_numpy(x_f32)
         np_f64_rfft_flops[n] = flops / bench(x_f64, np.fft.rfft)
         dsc_f32_rfft_flops[n] = flops / bench(x_dsc_f32, dsc.rfft)
-        dsc.clear()
         x_dsc_f64 = dsc.from_numpy(x_f64)
         dsc_f64_rfft_flops[n] = flops / bench(x_dsc_f64, dsc.rfft)
-        dsc.clear()
 
     runs = len(np_f64_fft_flops)
     np_f64_fft_mean_flops = sum(np_f64_fft_flops.values()) / runs

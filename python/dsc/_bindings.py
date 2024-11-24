@@ -165,6 +165,16 @@ _lib.dsc_clear_traces.argtypes = [_DscCtx]
 _lib.dsc_clear_traces.restype = None
 
 
+# extern dsc_tensor *dsc_view(dsc_ctx *ctx,
+#                             const dsc_tensor *x) noexcept;
+def _dsc_view(ctx: _DscCtx, x: _DscTensor_p) -> _DscTensor_p:
+    return _lib.dsc_view(ctx, x)
+
+
+_lib.dsc_view.argtypes = [_DscCtx, _DscTensor_p]
+_lib.dsc_view.restype = _DscTensor_p
+
+
 # extern dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx,
 #                                  dsc_dtype dtype,
 #                                  int dim1) noexcept;
@@ -355,13 +365,12 @@ _lib.dsc_pow.restype = _DscTensor_p
 
 # extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
 #                             dsc_tensor *__restrict x,
-#                             dsc_dtype new_dtype,
-#                             bool allow_inplace = true) noexcept;
+#                             dsc_dtype new_dtype) noexcept;
 def _dsc_cast(ctx: _DscCtx, x: _DscTensor_p, dtype: Dtype) -> _DscTensor_p:
-    return _lib.dsc_cast(ctx, x, c_uint8(dtype.value), c_bool(False))
+    return _lib.dsc_cast(ctx, x, c_uint8(dtype.value))
 
 
-_lib.dsc_cast.argtypes = [_DscCtx, _DscTensor_p, c_uint8, c_bool]
+_lib.dsc_cast.argtypes = [_DscCtx, _DscTensor_p, c_uint8]
 _lib.dsc_cast.restype = _DscTensor_p
 
 
@@ -560,24 +569,22 @@ _lib.dsc_angle.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_conj(dsc_ctx *,
-#                             dsc_tensor *__restrict x,
-#                             bool allow_inplace = true) noexcept;
+#                             dsc_tensor *__restrict x) noexcept;
 def _dsc_conj(ctx: _DscCtx, x: _DscTensor_p) -> _DscTensor_p:
-    return _lib.dsc_conj(ctx, x, c_bool(False))
+    return _lib.dsc_conj(ctx, x)
 
 
-_lib.dsc_conj.argtypes = [_DscCtx, _DscTensor_p, c_bool]
+_lib.dsc_conj.argtypes = [_DscCtx, _DscTensor_p]
 _lib.dsc_conj.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_real(dsc_ctx *,
-#                             dsc_tensor *__restrict x,
-#                             bool allow_inplace = true) noexcept;
+#                             dsc_tensor *__restrict x) noexcept;
 def _dsc_real(ctx: _DscCtx, x: _DscTensor_p) -> _DscTensor_p:
-    return _lib.dsc_real(ctx, x, c_bool(False))
+    return _lib.dsc_real(ctx, x)
 
 
-_lib.dsc_real.argtypes = [_DscCtx, _DscTensor_p, c_bool]
+_lib.dsc_real.argtypes = [_DscCtx, _DscTensor_p]
 _lib.dsc_real.restype = _DscTensor_p
 
 

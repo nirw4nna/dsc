@@ -13,12 +13,10 @@
 DSC_MALLOC void *dsc_obj_alloc(dsc_allocator *allocator,
                                const usize nb,
                                const usize alignment) noexcept {
-    DSC_TRACE_OBJ_ALLOC(nb, allocator->type);
     return allocator->alloc(allocator->buf, nb, alignment);
 }
 
 void dsc_obj_free(dsc_allocator *allocator, void *ptr) noexcept {
-    DSC_TRACE_OBJ_FREE(allocator->type, (uintptr_t) ptr);
     allocator->free(allocator->buf, ptr);
 }
 

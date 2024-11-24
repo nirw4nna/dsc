@@ -176,6 +176,9 @@ extern DSC_MALLOC dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                                              dsc_dtype dtype,
                                              dsc_tensor_buffer *buffer = nullptr) noexcept;
 
+extern DSC_MALLOC dsc_tensor *dsc_view(dsc_ctx *ctx,
+                                       const dsc_tensor *x) noexcept;
+
 extern dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx,
                                  dsc_dtype dtype,
                                  int dim1) noexcept;
@@ -217,8 +220,7 @@ extern dsc_tensor *dsc_randn(dsc_ctx *ctx,
 
 extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
                             dsc_tensor *DSC_RESTRICT x,
-                            dsc_dtype new_dtype,
-                            bool allow_inplace = true) noexcept;
+                            dsc_dtype new_dtype) noexcept;
 
 extern dsc_tensor *dsc_reshape(dsc_ctx *ctx,
                                const dsc_tensor *DSC_RESTRICT x,
@@ -329,12 +331,10 @@ extern dsc_tensor *dsc_angle(dsc_ctx *ctx,
 
 // conj and real are NOP if the input is real meaning x will be returned as is.
 extern dsc_tensor *dsc_conj(dsc_ctx *ctx,
-                            dsc_tensor *DSC_RESTRICT x,
-                            bool allow_inplace = true) noexcept;
+                            dsc_tensor *DSC_RESTRICT x) noexcept;
 
 extern dsc_tensor *dsc_real(dsc_ctx *ctx,
-                            dsc_tensor *DSC_RESTRICT x,
-                            bool allow_inplace = true) noexcept;
+                            dsc_tensor *DSC_RESTRICT x) noexcept;
 
 extern dsc_tensor *dsc_imag(dsc_ctx *ctx,
                             const dsc_tensor *DSC_RESTRICT x) noexcept;
