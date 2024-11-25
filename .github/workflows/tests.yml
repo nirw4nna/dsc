@@ -1,0 +1,31 @@
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.10
+    - name: Install dependencies
+      run: |
+        sudo apt get update
+        sudo apt get install -y build-essential
+    - name: Install DSC with requirements
+      run: |
+        pip install -e .
+        pip install -r requirements.txt
+    - name: Compile DSC C++
+      run: make shared DSC_FAST=1
+    - name: Run tests
+      run: |
+        cd python/tests/
+        pytest -s test_ops.py --no-header --no-summary -q
