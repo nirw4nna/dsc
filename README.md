@@ -1,5 +1,6 @@
 # DSC
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![Unit Tests](https://github.com/dspcraft/dsc/actions/workflows/tests.yml/badge.svg)](https://github.com/dspcraft/dsc/actions/workflows/tests.yml)
 
 DSC is an NumPy-compatible array framework for Python and C++.
 The goal is to provide scientists and engineers with a familiar tool
