@@ -24,7 +24,6 @@ dsc_trace_ctx *g_trace_ctx = nullptr;
 
 void dsc_internal_init_traces(const u64 max_traces) noexcept {
     if (g_trace_ctx == nullptr) {
-        DSC_LOG_DEBUG("max_traces=%ld", max_traces);
         g_trace_ctx = (dsc_trace_ctx *) malloc(sizeof(dsc_trace_ctx));
         g_trace_ctx->traces = (dsc_trace *) malloc(max_traces * sizeof(dsc_trace));
         g_trace_ctx->n_traces = 0;

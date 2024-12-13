@@ -10,22 +10,6 @@
 #include "dsc_ops.h"
 #include <cmath>
 
-enum dsc_fft_type : u8 {
-    REAL,
-    COMPLEX
-};
-
-struct dsc_fft_plan {
-    void *twiddles;
-    int n;
-    // Set to 0 when the plan is used, increment by one each time we go through the plans
-    int last_used;
-    dsc_dtype dtype;
-    // An RFFT plan is equal to an FFT plan with N = N/2 but with an extra set
-    // of twiddles (hence the storage requirement is the same of an order N FFT).
-    dsc_fft_type fft_type;
-};
-
 // ============================================================
 // Internal Private Interface
 
@@ -35,16 +19,16 @@ void dsc_init_plan(dsc_fft_plan *plan, const int n,
                    const dsc_dtype dtype, const dsc_fft_type fft_type) {
     static_assert(dsc_is_real<T>(), "Twiddles dtype must be real");
 
-    T *twiddles = (T *) plan->twiddles;
+    DSC_TWIDDLES(T, plan);
 
     const int sets = fft_type == REAL ? (n << 1) : n;
 
     for (int twiddle_n = 2; twiddle_n <= sets; twiddle_n <<= 1) {
         const int twiddle_n2 = twiddle_n >> 1;
         for (int k = 0; k < twiddle_n2; ++k) {
-            const T theta = ((T) (-2.) * dsc_pi<T>() * k) / (T) (twiddle_n);
-            twiddles[(2 * (twiddle_n2 - 1)) + (2 * k)] = cos_op()(theta);
-            twiddles[(2 * (twiddle_n2 - 1)) + (2 * k) + 1] = sin_op()(theta);
+            const T theta = (T) -2. * dsc_pi<T>() * k / (T) twiddle_n;
+            twiddles[2 * (twiddle_n2 - 1) + 2 * k] = cos_op()(theta);
+            twiddles[2 * (twiddle_n2 - 1) + 2 * k + 1] = sin_op()(theta);
         }
     }
 
@@ -159,9 +143,11 @@ static DSC_INLINE void dsc_complex_fft(dsc_fft_plan *plan,
                                        T *DSC_RESTRICT work) noexcept {
     static_assert(dsc_is_complex<T>(), "T must be a complex type, use rfft for real-valued FFTs");
 
+    DSC_TWIDDLES(real<T>, plan);
+
     dsc_fft_pass2<T, forward ? (real<T>) 1 : (real<T>) -1>(x,
                                                            work,
-                                                           (real<T> *) plan->twiddles,
+                                                           twiddles,
                                                            plan->n
     );
 
@@ -181,7 +167,7 @@ static DSC_INLINE void dsc_real_fft(dsc_fft_plan *plan,
                                     T *DSC_RESTRICT work) noexcept {
     static_assert(dsc_is_complex<T>(), "T must be a complex type, use rfft for real-valued FFTs");
 
-    const real<T> *twiddles = (real<T> *) plan->twiddles;
+    DSC_TWIDDLES(real<T>, plan);
 
     const int n = plan->n;
     const int n2 = n >> 1;
@@ -198,13 +184,13 @@ static DSC_INLINE void dsc_real_fft(dsc_fft_plan *plan,
 
     const int t_base = (n - 1) << 1;
     for (int k = 1; k < n2; ++k) {
-        const real<T> h1r = (real<T>) (0.5) * (x[k].real + x[n - k].real);
-        const real<T> h1i = (real<T>) (0.5) * (x[k].imag - x[n - k].imag);
+        const real<T> h1r = (real<T>) 0.5 * (x[k].real + x[n - k].real);
+        const real<T> h1i = (real<T>) 0.5 * (x[k].imag - x[n - k].imag);
 
         const real<T> h2r = -c * (x[k].imag + x[n - k].imag);
         const real<T> h2i = c * (x[k].real - x[n - k].real);
 
-        const real<T> wkr = twiddles[t_base + (2 * k)];
+        const real<T> wkr = twiddles[t_base + 2 * k];
         const real<T> wki = twd_sign * twiddles[t_base + (2 * k) + 1];
 
         x[k].real = h1r + (wkr * h2r) - (wki * h2i);
@@ -229,7 +215,7 @@ static DSC_INLINE void dsc_real_fft(dsc_fft_plan *plan,
 
         dsc_fft_pass2<T, (real<T>) -1>(x, work, twiddles, n);
 
-        real<T> scale = (real<T>) (2) / (real<T>) (n << 1);
+        real<T> scale = (real<T>) 2 / (real<T>) (n << 1);
         for (int i = 0; i < n; ++i) {
             x[i].real *= scale;
             x[i].imag *= scale;

@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cmath>
 #include <cstdint>
 #include <cstddef>
 #include <type_traits>
@@ -71,10 +70,10 @@ constexpr static const char *DSC_DTYPE_NAMES[DSC_DTYPES] = {
 
 // Conversion rules when we have two operands
 constexpr static dsc_dtype DSC_DTYPE_CONVERSION_TABLE[DSC_DTYPES][DSC_DTYPES] = {
-        {dsc_dtype::F32, dsc_dtype::F64, dsc_dtype::C32, dsc_dtype::C64},
-        {dsc_dtype::F64, dsc_dtype::F64, dsc_dtype::C32, dsc_dtype::C64},
-        {dsc_dtype::C32, dsc_dtype::C32, dsc_dtype::C32, dsc_dtype::C64},
-        {dsc_dtype::C64, dsc_dtype::C64, dsc_dtype::C64, dsc_dtype::C64},
+        {F32, F64, C32, C64},
+        {F64, F64, C32, C64},
+        {C32, C32, C32, C64},
+        {C64, C64, C64, C64},
 };
 
 // Conversion utility
@@ -83,22 +82,22 @@ struct dsc_type_mapping;
 
 template<>
 struct dsc_type_mapping<f32> {
-    static constexpr dsc_dtype value = dsc_dtype::F32;
+    static constexpr dsc_dtype value = F32;
 };
 
 template<>
 struct dsc_type_mapping<f64> {
-    static constexpr dsc_dtype value = dsc_dtype::F64;
+    static constexpr dsc_dtype value = F64;
 };
 
 template<>
 struct dsc_type_mapping<c32> {
-    static constexpr dsc_dtype value = dsc_dtype::C32;
+    static constexpr dsc_dtype value = C32;
 };
 
 template<>
 struct dsc_type_mapping<c64> {
-    static constexpr dsc_dtype value = dsc_dtype::C64;
+    static constexpr dsc_dtype value = C64;
 };
 
 namespace {
