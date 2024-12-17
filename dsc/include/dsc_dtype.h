@@ -76,6 +76,13 @@ constexpr static dsc_dtype DSC_DTYPE_CONVERSION_TABLE[DSC_DTYPES][DSC_DTYPES] = 
         {C64, C64, C64, C64},
 };
 
+constexpr static dsc_dtype DSC_DTYPE_TO_REAL[DSC_DTYPES] = {
+        F32,// F32
+        F64,// F64
+        F32,// C32
+        F64 // C64
+};
+
 // Conversion utility
 template<typename T>
 struct dsc_type_mapping;

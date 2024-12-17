@@ -4,7 +4,7 @@
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
 
-from dsc.context import init, clear
+from dsc.context import init, set_default_device
 from dsc.tensor import (
     Tensor,
     from_numpy,

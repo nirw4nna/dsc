@@ -8,6 +8,8 @@
 
 #include "dsc.h"
 
+#define DSC_MEMCPY_DIRECTIONS ((int) 3)
+
 struct dsc_data_buffer {
     void *data;
     usize size;
@@ -20,9 +22,10 @@ struct dsc_free_node {
     usize size;
 };
 
-enum dsc_copy_direction : u8 {
+enum dsc_memcpy_dir : u8 {
     FROM_DEVICE,
     TO_DEVICE,
+    ON_DEVICE
 };
 
 struct dsc_device {
@@ -38,8 +41,8 @@ struct dsc_device {
     usize mem_size, used_mem;
     dsc_device_type type;
 
-    void    (*memcpy)      (void *dst, const void *src, usize nb, dsc_copy_direction direction);
-    void    (*dispose)     (dsc_device *dev);
+    void (*memcpy)  (void *dst, const void *src, usize nb, dsc_memcpy_dir dir);
+    void (*dispose) (dsc_device *dev);
 };
 
 namespace {
@@ -119,6 +122,7 @@ static DSC_MALLOC DSC_INLINE dsc_data_buffer *dsc_data_alloc(dsc_device *dev, co
     // in tensors so for now the answer in the size of a single float32.
     if (const usize left = node->size - nb; left >= sizeof(f32)) {
         dsc_free_node *new_node = next_free_node(dev);
+        node->size = nb;
         new_node->size = left;
         // The data for the new bin starts after the previous one
         new_node->data = (byte *) node->data + node->size;
@@ -154,6 +158,8 @@ static DSC_INLINE void dsc_data_free(dsc_device *dev, dsc_data_buffer *ptr) {
     ptr->refs--;
 
     if (ptr->refs > 0) return;
+
+    DSC_LOG_DEBUG("%p will be freed", ptr);
 
     const uintptr_t ptr_addr = (uintptr_t) ptr->data;
     dsc_free_node *new_node = next_free_node(dev);

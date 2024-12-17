@@ -21,10 +21,10 @@ endif
 # On the other hand, -ffast-math makes the FFTs slower.
 ifdef DSC_FAST
 	CXXFLAGS	+= -DDSC_FAST -O3 -D__FAST_MATH__ -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
-	NVCCFLAGS	+= -DDSC_FAST --use_fast_math
+	NVCCFLAGS	+= -DDSC_FAST -O3 --use_fast_math
 else
 	CXXFLAGS	+= -DDSC_DEBUG -O0 -fno-omit-frame-pointer -g
-	NVCCFLAGS	+= -DDSC_DEBUG -O0 -fno-omit-frame-pointer -G --resource-usage
+	NVCCFLAGS	+= -DDSC_DEBUG -O0 -fno-omit-frame-pointer -G
 endif
 
 ifdef DSC_ENABLE_TRACING
@@ -62,23 +62,18 @@ $(info )
 SRCS		= $(wildcard dsc/src/*.cpp)
 SRCS		+= $(wildcard dsc/src/cpu/*.cpp)
 CUDA_SRCS	= $(wildcard dsc/src/cuda/*.cu)
-FILTERED_SRCS		= $(filter-out dsc/src/dsc.cpp dsc/src/dsc_tracing.cpp,$(SRCS))
-OBJS		= $(FILTERED_SRCS:.cpp=.o)
+OBJS		= $(SRCS:.cpp=.o)
 CUDA_OBJS	= $(CUDA_SRCS:.cu=.o)
 
 SHARED_LIB	= python/dsc/libdsc.so
 
-$(info $(SRCS))
-$(info $(FILTERED_SRCS))
-$(info $(OBJS))
-$(info $(CUDA_OBJS))
 .PHONY: clean shared
 
 clean:
 	rm -rf *.o *.so *.old $(OBJS) $(CUDA_OBJS) $(SHARED_LIB)
 
 shared: $(OBJS) $(CUDA_OBJS)
-	$(CXX) $(CXXFLAGS) dsc/src/dsc.cpp -shared $(OBJS) $(CUDA_OBJS) -o $(SHARED_LIB)
+	$(CXX) $(CXXFLAGS) -shared $(OBJS) $(CUDA_OBJS) -o $(SHARED_LIB) $(LDFLAGS)
 
 #test_simple: dsc/tests/test_simple.cpp $(OBJS)
 #	$(CXX) $(CXXFLAGS) $< -o $@ $(OBJS) $(LDFLAGS)
@@ -89,12 +84,6 @@ shared: $(OBJS) $(CUDA_OBJS)
 #	cp dsrc.wasm /home/lowl/Scrivania/projects/dspcraft/website/src/
 
 #dsc/src/cpu/dsc_cpu_impl.o: dsc/src/cpu/dsc_cpu.cpp
-#	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-#$(CUDA_OBJS): $(CUDA_SRCS)
-#	$(NVCC) $(NVCCFLAGS) -c $< -o $@
-#
-#$(OBJS): $(FILTERED_SRCS)
 #	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 %.o: %.cu

@@ -3,14 +3,18 @@
 #
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
+from ctypes import c_uint
 
 from ._bindings import (
     _DscTensor_p,
     _OptionalTensor,
     _DSC_MAX_DIMS,
     _DSC_VALUE_NONE,
+    _DSC_DEVICE_DEFAULT,
+    _DSC_DEVICE_CPU,
     _DscSlice,
     _dsc_cast,
+    _dsc_to,
     _dsc_reshape,
     _dsc_concat,
     _dsc_transpose,
@@ -93,6 +97,7 @@ def _unwrap(x: 'Tensor') -> Union[float, complex, 'Tensor']:
     if x.n_dim != 1 or len(x) != 1:
         return x
 
+    # TODO: fix this
     x_ptr = x._c_ptr.contents.data
     if x.dtype == Dtype.F32 or x.dtype == Dtype.F64:
         return ctypes.cast(x_ptr, DTYPE_TO_CTYPE[x.dtype]).contents.value
@@ -297,8 +302,10 @@ class Tensor:
         return power(other, self)
 
     def __bytes__(self) -> bytes:
+        tensor = _dsc_to(_get_ctx(), self, _DSC_DEVICE_CPU)
+        # TODO: explicitly free tensor?
         byte_array = (ctypes.c_byte * self.ne * DTYPE_SIZE[self.dtype]).from_address(
-            self._c_ptr.contents.data
+            tensor._c_ptr.contents.buf.contents.data
         )
         return bytes(byte_array)
 
@@ -307,9 +314,11 @@ class Tensor:
         # that is a view of some data managed by DSC. It can happen that the underlying DSC buffer is freed before
         # the NumPy array itself. For now, since we are using this basically just to verify that two arrays match, it's
         # not a problem but it's worth keeping an eye out for future bugs.
-        raw_tensor = self._c_ptr.contents
+        tensor = _dsc_to(_get_ctx(), _c_ptr(self), _DSC_DEVICE_CPU)
+        # TODO: explicitly free tensor?
+        raw_data = tensor.contents.buf.contents.data
 
-        typed_data = ctypes.cast(raw_tensor.data, DTYPE_TO_CTYPE[self.dtype])
+        typed_data = ctypes.cast(raw_data, DTYPE_TO_CTYPE[self.dtype])
 
         # Create a view of the underlying data buffer
         np_array = np.ctypeslib.as_array(typed_data, shape=self.shape)
@@ -612,12 +621,16 @@ def min(
     )
 
 
-def arange(n: int, dtype: Dtype = Dtype.F32) -> Tensor:
-    return Tensor(_dsc_arange(_get_ctx(), n, dtype))
+def arange(
+    n: int, dtype: Dtype = Dtype.F32, device: int = _DSC_DEVICE_DEFAULT
+) -> Tensor:
+    return Tensor(_dsc_arange(_get_ctx(), n, dtype, device))
 
 
-def randn(*shape: int, dtype: Dtype = Dtype.F32) -> Tensor:
-    return Tensor(_dsc_randn(_get_ctx(), shape, dtype))
+def randn(
+    *shape: int, dtype: Dtype = Dtype.F32, device: int = _DSC_DEVICE_DEFAULT
+) -> Tensor:
+    return Tensor(_dsc_randn(_get_ctx(), shape, dtype, device))
 
 
 # In the xx_like methods if dtype is not specified it will be the same as x

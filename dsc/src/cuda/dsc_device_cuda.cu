@@ -9,9 +9,19 @@
 
 #define DSC_DEVICE_CUDA_ALIGN ((usize) 1024)
 
+static constexpr cudaMemcpyKind DSC_CUDA_MEMCPY_DIRECTIONS[DSC_MEMCPY_DIRECTIONS] = {
+    cudaMemcpyDeviceToHost,
+    cudaMemcpyHostToDevice,
+    cudaMemcpyDeviceToDevice,
+};
+
 static DSC_CUDA_KERNEL void k_init_random(curandState *state) {
     DSC_CUDA_TID();
     curand_init(clock64(), tid, 0, &state[tid]);
+}
+
+static void cuda_memcpy(void *dst, const void *src, const usize nb, const dsc_memcpy_dir dir) {
+    DSC_CUDA_FAIL_ON_ERROR(cudaMemcpy(dst, src, nb, DSC_CUDA_MEMCPY_DIRECTIONS[dir]));
 }
 
 static void cuda_dispose(dsc_device *dev) {
@@ -19,43 +29,52 @@ static void cuda_dispose(dsc_device *dev) {
 
     const dsc_cuda_dev_info *info = (dsc_cuda_dev_info *) dev->extra_info;
 
-    DSC_LOG_INFO("%s:%d device (%s) disposed",
+    DSC_LOG_INFO("%s:%d device %s disposed",
                  DSC_DEVICE_NAMES[dev->type],
                  info->dev_idx,
                  info->name);
 }
 
-static void cuda_memcpy(void *dst, const void *src, const usize nb, const dsc_copy_direction direction) {
-    DSC_CUDA_FAIL_ON_ERROR(cudaMemcpy(dst, src, nb, direction == FROM_DEVICE ? cudaMemcpyDeviceToHost : cudaMemcpyHostToDevice));
-}
-
 dsc_device *dsc_cuda_device(const usize mem_size, const int cuda_dev) {
     static dsc_cuda_dev_info extra = {
+        .name = {},
+        .randState = {},
         .dev_idx = cuda_dev,
     };
 
     static dsc_device dev = {
+        .used_nodes = {},
+        .free_nodes = {},
+        .head = {},
+        .fft_plans = {},
+        .device_mem = {},
         .extra_info = &extra,
         .mem_size = DSC_ALIGN(mem_size, DSC_DEVICE_CUDA_ALIGN),
         .used_mem = 0,
         .type = CUDA,
+        .memcpy = cuda_memcpy,
         .dispose = cuda_dispose,
-        .memcpy = cuda_memcpy
     };
 
     DSC_CUDA_FAIL_ON_ERROR(cudaSetDevice(cuda_dev));
 
     dsc_cuda_dev_name(cuda_dev, extra.name);
 
-    DSC_CUDA_FAIL_ON_ERROR(cudaMalloc(&extra.randState, DSC_CUDA_DEFAULT_THREADS_PER_BLOCK * sizeof(curandState)));
+    DSC_CUDA_FAIL_ON_ERROR(cudaMalloc(&extra.randState, DSC_CUDA_DEFAULT_THREADS * sizeof(curandState)));
 
-    k_init_random<<<1, DSC_CUDA_DEFAULT_THREADS_PER_BLOCK>>>(extra.randState);
+    k_init_random<<<1, DSC_CUDA_DEFAULT_THREADS>>>(extra.randState);
 
     DSC_CUDA_FAIL_ON_ERROR(cudaDeviceSynchronize());
 
     DSC_CUDA_FAIL_ON_ERROR(cudaMalloc(&dev.device_mem, dev.mem_size));
 
-    DSC_LOG_INFO("%s:%d device (%s) initialized with a buffer of %ldMB (total: %ldMB)",
+    dev.free_nodes[0].size = dev.mem_size;
+    dev.free_nodes[0].data = dev.device_mem;
+    dev.free_nodes[0].next = nullptr;
+
+    dev.head = &dev.free_nodes[0];
+
+    DSC_LOG_INFO("%s:%d device %s initialized with a buffer of %ldMB (total: %ldMB)",
                  DSC_DEVICE_NAMES[dev.type],
                  cuda_dev,
                  extra.name,
