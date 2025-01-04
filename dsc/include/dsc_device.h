@@ -8,8 +8,6 @@
 
 #include "dsc.h"
 
-#define DSC_MEMCPY_DIRECTIONS ((int) 3)
-
 struct dsc_data_buffer {
     void *data;
     usize size;
@@ -32,7 +30,6 @@ struct dsc_device {
     dsc_data_buffer used_nodes[DSC_MAX_OBJS];
     dsc_free_node free_nodes[DSC_MAX_OBJS];
     dsc_free_node *head;
-    dsc_fft_plan fft_plans[DSC_MAX_FFT_PLANS];
     void *device_mem;
 
     // Extra device-specific infos

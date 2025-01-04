@@ -24,10 +24,6 @@ class Dtype(Enum):
     def __str__(self) -> str:
         return repr(self)
 
-    @staticmethod
-    def is_complex(x: 'Dtype') -> bool:
-        return x == Dtype.C32 or x == Dtype.C64
-
 
 TYPENAME_LOOKUP = {
     Dtype.F32: 'f32',

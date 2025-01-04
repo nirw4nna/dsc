@@ -3,7 +3,6 @@
 #
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
-from ctypes import c_uint
 
 from ._bindings import (
     _DscTensor_p,
@@ -382,7 +381,9 @@ def from_numpy(x: np.ndarray) -> Tensor:
         raise RuntimeError(f'NumPy dtype {x.dtype} is not supported')
 
     out = _create_tensor(NP_TO_DTYPE[x.dtype], *x.shape)
-    ctypes.memmove(_c_ptr(out).contents.data, x.ctypes.data, x.nbytes)
+    # tensor._c_ptr.contents.buf.contents.data
+    # Todo: we need an explicit function implemented in DSC that handles the device properly
+    ctypes.memmove(_c_ptr(out).contents.buf.contents.data, x.ctypes.data, x.nbytes)
     return out
 
 

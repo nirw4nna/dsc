@@ -35,10 +35,6 @@ ifdef DSC_MAX_TRACES
 	CXXFLAGS	+= -DDSC_MAX_TRACES=$(DSC_MAX_TRACES)
 endif
 
-ifdef DSC_MAX_FFT_PLANS
-	CXXFLAGS	+= -DDSC_MAX_FFT_PLANS=$(DSC_MAX_FFT_PLANS)
-endif
-
 # If we are not compiling the shared object and are in debug mode then run in ASAN mode
 ifeq ($(MAKECMDGOALS),shared)
 	CXXFLAGS	+= -fPIC

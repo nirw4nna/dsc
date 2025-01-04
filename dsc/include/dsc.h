@@ -10,21 +10,19 @@
 #include <cstdlib>
 #include "dsc_dtype.h"
 
-// How many independent FFT plans we support. This is completely arbitrary
-#if !defined(DSC_MAX_FFT_PLANS)
-#   define DSC_MAX_FFT_PLANS ((int) 16)
-#endif
-
 // Max number of traces that can be recorded. Changing this will result in more memory
 // allocated during context initialization.
 #if !defined(DSC_MAX_TRACES)
 #   define DSC_MAX_TRACES ((u64) 1'000)
 #endif
 
-#define DSC_MAX_OBJS            ((int) 1'000)
-#define DSC_MAX_DEVICES         ((int) 2)
-#define DSC_DEFAULT_DEVICE      CPU
-#define DSC_DEVICE_USE_DEFAULT  ((int) -1)
+#if !defined(DSC_MAX_OBJS)
+#   define DSC_MAX_OBJS     ((int) 1'000)
+#endif
+#define DSC_MAX_DEVICES     ((int) 2)
+#define DSC_DEFAULT_DEVICE  CPU
+
+static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 
 #define DSC_LOG_FATAL(format, ...)                                            \
     do {                                                                      \
@@ -91,12 +89,12 @@
 static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 
 #define DSC_VALUE_NONE          INT32_MAX
-#define DSC_TWIDDLES(T, PTR)    T *DSC_RESTRICT twiddles = (T *) (PTR)->buf->data
-#define DSC_TENSOR_DATA(T, PTR) T *DSC_RESTRICT PTR##_data = (T *) (PTR)->buf->data
+#define DSC_TENSOR_DATA(T, PTR) T *PTR##_data = (T *) (PTR)->buf->data
 
 #define dsc_tensor_dim(PTR, dim)    (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (PTR)->n_dim + (dim)))
 #define dsc_new_like(CTX, PTR)      (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[dsc_tensor_dim(PTR, 0)], (PTR)->dtype, (PTR)->device))
 #define dsc_new_view(CTX, PTR)      (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[dsc_tensor_dim(PTR, 0)], (PTR)->dtype, (PTR)->device, (PTR)->buf))
+#define dsc_for(idx, X)             for (int idx = 0; idx < (X)->ne; ++idx)
 
 #if defined(__cplusplus)
 extern "C" {
@@ -111,27 +109,9 @@ enum dsc_device_type : i8 {
     CUDA
 };
 
-static constexpr const char *DSC_DEVICE_NAMES[2] = {
+static constexpr const char *DSC_DEVICE_NAMES[DSC_MAX_DEVICES] = {
         "CPU",
         "CUDA",
-};
-
-enum dsc_fft_type : u8 {
-    INVALID,
-    REAL,
-    COMPLEX,
-};
-
-struct dsc_fft_plan {
-    dsc_data_buffer *buf;
-    int n;
-    // Set to 0 when the plan is used, increment by one each time we go through the plans
-    int last_used;
-    int device;
-    dsc_dtype dtype;
-    // An RFFT plan is equal to an FFT plan with N = N/2 but with an extra set
-    // of twiddles (hence the storage requirement is the same of an order N FFT).
-    dsc_fft_type fft_type;
 };
 
 struct dsc_tensor {
@@ -157,28 +137,9 @@ struct dsc_slice {
 };
 
 // ============================================================
-// Helper Functions
-
-static DSC_INLINE DSC_STRICTLY_PURE int dsc_pow2_n(const int n) {
-    // Compute the power-of-2 closest to n (n must be a 32bit integer)
-    DSC_ASSERT(n > 0);
-    int next_pow2_n = n - 1;
-    next_pow2_n |= next_pow2_n >> 1;
-    next_pow2_n |= next_pow2_n >> 2;
-    next_pow2_n |= next_pow2_n >> 4;
-    next_pow2_n |= next_pow2_n >> 8;
-    next_pow2_n |= next_pow2_n >> 16;
-    return next_pow2_n + 1;
-}
-
-// ============================================================
 // Initialization
 
 extern dsc_ctx *dsc_ctx_init(usize mem_size);
-
-extern dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx, int n,
-                                  dsc_fft_type fft_type,
-                                  dsc_dtype dtype = F64);
 
 // ============================================================
 // Cleanup/Teardown
@@ -433,50 +394,6 @@ extern dsc_tensor *dsc_min(dsc_ctx *ctx,
                            dsc_tensor *DSC_RESTRICT out = nullptr,
                            int axis = -1,
                            bool keep_dims = true);
-
-// ============================================================
-// Fourier Transforms
-//
-// FFTs are always performed out-of-place. If the out param is provided then
-// it will be used to store the result otherwise a new tensor will be allocated.
-// The axis parameter specifies over which dimension the FFT must be performed,
-// if x is 1-dimensional it will be ignored.
-// If n is not specified then the FFT will be assumed to have the same size as the
-// selected dimension of x otherwise that dimension will be padded/cropped to the value of n
-// before performing the FFT.
-extern dsc_tensor *dsc_fft(dsc_ctx *ctx,
-                           const dsc_tensor *DSC_RESTRICT x,
-                           dsc_tensor *DSC_RESTRICT out = nullptr,
-                           int n = -1,
-                           int axis = -1);
-
-extern dsc_tensor *dsc_ifft(dsc_ctx *ctx,
-                            const dsc_tensor *DSC_RESTRICT x,
-                            dsc_tensor *DSC_RESTRICT out = nullptr,
-                            int n = -1,
-                            int axis = -1);
-
-extern dsc_tensor *dsc_rfft(dsc_ctx *ctx,
-                            const dsc_tensor *DSC_RESTRICT x,
-                            dsc_tensor *DSC_RESTRICT out = nullptr,
-                            int n = -1,
-                            int axis = -1);
-
-extern dsc_tensor *dsc_irfft(dsc_ctx *ctx,
-                             const dsc_tensor *DSC_RESTRICT x,
-                             dsc_tensor *DSC_RESTRICT out = nullptr,
-                             int n = -1,
-                             int axis = -1);
-
-extern dsc_tensor *dsc_fftfreq(dsc_ctx *ctx,
-                               int n,
-                               f64 d = 1.,
-                               dsc_dtype dtype = DSC_DEFAULT_TYPE);
-
-extern dsc_tensor *dsc_rfftfreq(dsc_ctx *ctx,
-                                int n,
-                                f64 d = 1.,
-                                dsc_dtype dtype = DSC_DEFAULT_TYPE);
 
 #if defined(__cplusplus)
 }

@@ -36,7 +36,6 @@ dsc_device *dsc_cpu_device(const usize mem_size) {
         .used_nodes = {},
         .free_nodes = {},
         .head = {},
-        .fft_plans = {},
         .device_mem = {},
         .extra_info = {},
         .mem_size = DSC_ALIGN(mem_size, DSC_DEVICE_CPU_ALIGN),

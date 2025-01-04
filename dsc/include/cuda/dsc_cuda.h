@@ -82,29 +82,29 @@ extern void dsc_cuda_randn(dsc_device *dev, dsc_tensor *DSC_RESTRICT x);
 // Binary Operations
 
 extern void dsc_cuda_add(dsc_device *,
-                         const dsc_tensor *DSC_RESTRICT xa,
-                         const dsc_tensor *DSC_RESTRICT xb,
-                         dsc_tensor *DSC_RESTRICT out);
+                         const dsc_tensor *xa,
+                         const dsc_tensor *xb,
+                         dsc_tensor *out);
 
 extern void dsc_cuda_sub(dsc_device *,
-                         const dsc_tensor *DSC_RESTRICT xa,
-                         const dsc_tensor *DSC_RESTRICT xb,
-                         dsc_tensor *DSC_RESTRICT out);
+                         const dsc_tensor *xa,
+                         const dsc_tensor *xb,
+                         dsc_tensor *out);
 
 extern void dsc_cuda_mul(dsc_device *,
-                         const dsc_tensor *DSC_RESTRICT xa,
-                         const dsc_tensor *DSC_RESTRICT xb,
-                         dsc_tensor *DSC_RESTRICT out);
+                         const dsc_tensor *xa,
+                         const dsc_tensor *xb,
+                         dsc_tensor *out);
 
 extern void dsc_cuda_div(dsc_device *,
-                         const dsc_tensor *DSC_RESTRICT xa,
-                         const dsc_tensor *DSC_RESTRICT xb,
-                         dsc_tensor *DSC_RESTRICT out);
+                         const dsc_tensor *xa,
+                         const dsc_tensor *xb,
+                         dsc_tensor *out);
 
 extern void dsc_cuda_pow(dsc_device *,
-                         const dsc_tensor *DSC_RESTRICT xa,
-                         const dsc_tensor *DSC_RESTRICT xb,
-                         dsc_tensor *DSC_RESTRICT out);
+                         const dsc_tensor *xa,
+                         const dsc_tensor *xb,
+                         dsc_tensor *out);
 
 // ============================================================
 // Unary Operations

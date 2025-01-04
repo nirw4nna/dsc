@@ -10,13 +10,13 @@
 
 struct dsc_axis_iterator {
     dsc_axis_iterator(const dsc_tensor *x, const int axis,
-                      const int axis_n = -1) noexcept :
+                      const int axis_n = -1) :
             shape_(x->shape), stride_(x->stride),
             axis_(axis), axis_n_((axis_n < 0 || axis_n > x->shape[axis]) ? x->shape[axis] : axis_n) {
 
     }
 
-    DSC_INLINE void next() noexcept {
+    DSC_INLINE void next() {
         if (++idx_[axis_] < axis_n_) [[likely]] {
             index_ += stride_[axis_];
             return;
@@ -46,11 +46,11 @@ struct dsc_axis_iterator {
             end_ = true;
     }
 
-    DSC_INLINE int index() const noexcept {
+    DSC_INLINE int index() const {
         return index_;
     }
 
-    DSC_INLINE bool has_next() const noexcept {
+    DSC_INLINE bool has_next() const {
         return !end_;
     }
 
@@ -65,14 +65,14 @@ private:
 };
 
 struct dsc_broadcast_iterator {
-    dsc_broadcast_iterator(const dsc_tensor *x, const int *out_shape) noexcept :
+    dsc_broadcast_iterator(const dsc_tensor *x, const int *out_shape) :
             x_shape_(x->shape), x_stride_(x->stride), out_shape_(out_shape) {
         for (int i = 0; i < DSC_MAX_DIMS; ++i) {
             x_broadcast_stride_[i] = x_shape_[i] < out_shape_[i] ? 0 : x_stride_[i];
         }
     }
 
-    DSC_INLINE void next() noexcept {
+    DSC_INLINE void next() {
         for (int i = DSC_MAX_DIMS - 1; i >= 0; --i) {
             if (++x_idx_[i] < out_shape_[i]) [[likely]] {
                 index_ += x_broadcast_stride_[i];
@@ -84,7 +84,7 @@ struct dsc_broadcast_iterator {
         }
     }
 
-    DSC_INLINE int index() const noexcept {
+    DSC_INLINE int index() const {
         return index_;
     }
 
@@ -96,11 +96,11 @@ private:
 
 // Todo: unify the stride iterator with the broadcast iterator?
 struct dsc_stride_iterator {
-    dsc_stride_iterator(const int *shape, const int *stride) noexcept :
+    dsc_stride_iterator(const int *shape, const int *stride) :
             shape_(shape), stride_(stride) {
     }
 
-    DSC_INLINE void next() noexcept {
+    DSC_INLINE void next() {
         for (int i = DSC_MAX_DIMS - 1; i >= 0; --i) {
             if (++x_idx_[i] < shape_[i]) [[likely]] {
                 index_ += stride_[i];
@@ -112,7 +112,7 @@ struct dsc_stride_iterator {
         }
     }
 
-    DSC_INLINE int index() const noexcept {
+    DSC_INLINE int index() const {
         return index_;
     }
 
@@ -123,7 +123,7 @@ private:
 };
 
 struct dsc_slice_iterator {
-    dsc_slice_iterator(const dsc_tensor *x, const int n_slices, const dsc_slice *slices) noexcept :
+    dsc_slice_iterator(const dsc_tensor *x, const int n_slices, const dsc_slice *slices) :
             shape_(x->shape), stride_(x->stride), n_dim_(x->n_dim) {
         for (int i = 0; i < x->n_dim; ++i) {
             const int dim_idx = dsc_tensor_dim(x, i);
@@ -141,11 +141,11 @@ struct dsc_slice_iterator {
         }
     }
 
-    DSC_INLINE bool has_next() const noexcept {
+    DSC_INLINE bool has_next() const {
         return !end_;
     }
 
-    DSC_INLINE void next() noexcept {
+    DSC_INLINE void next() {
         for (int i = DSC_MAX_DIMS - 1; i >= (DSC_MAX_DIMS - n_dim_); --i) {
             idx_[i] += step_[i];
             if ((step_[i] > 0 && idx_[i] < stop_[i]) ||
@@ -157,13 +157,13 @@ struct dsc_slice_iterator {
         end_ = true;
     }
 
-    DSC_INLINE int index() const noexcept {
+    DSC_INLINE int index() const {
         return compute_index<DSC_MAX_DIMS, 0>();
     }
 
 private:
     template<int N, int Cur = 0>
-    constexpr int compute_index() const noexcept {
+    constexpr int compute_index() const {
         // Note: computing the index on the fly is way easier than keeping track of the current index
         // and increasing/decreasing it after each step, but it requires some benchmarking!
         if constexpr (Cur == N) {

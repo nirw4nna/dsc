@@ -24,29 +24,29 @@ extern void dsc_cpu_arange(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 extern void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
 extern void dsc_cpu_add(dsc_device *,
-                        const dsc_tensor *DSC_RESTRICT xa,
-                        const dsc_tensor *DSC_RESTRICT xb,
-                        dsc_tensor *DSC_RESTRICT out);
+                        const dsc_tensor *xa,
+                        const dsc_tensor *xb,
+                        dsc_tensor *out);
 
 extern void dsc_cpu_sub(dsc_device *,
-                        const dsc_tensor *DSC_RESTRICT xa,
-                        const dsc_tensor *DSC_RESTRICT xb,
-                        dsc_tensor *DSC_RESTRICT out);
+                        const dsc_tensor *xa,
+                        const dsc_tensor *xb,
+                        dsc_tensor *out);
 
 extern void dsc_cpu_mul(dsc_device *,
-                        const dsc_tensor *DSC_RESTRICT xa,
-                        const dsc_tensor *DSC_RESTRICT xb,
-                        dsc_tensor *DSC_RESTRICT out);
+                        const dsc_tensor *xa,
+                        const dsc_tensor *xb,
+                        dsc_tensor *out);
 
 extern void dsc_cpu_div(dsc_device *,
-                        const dsc_tensor *DSC_RESTRICT xa,
-                        const dsc_tensor *DSC_RESTRICT xb,
-                        dsc_tensor *DSC_RESTRICT out);
+                        const dsc_tensor *xa,
+                        const dsc_tensor *xb,
+                        dsc_tensor *out);
 
 extern void dsc_cpu_pow(dsc_device *,
-                        const dsc_tensor *DSC_RESTRICT xa,
-                        const dsc_tensor *DSC_RESTRICT xb,
-                        dsc_tensor *DSC_RESTRICT out);
+                        const dsc_tensor *xa,
+                        const dsc_tensor *xb,
+                        dsc_tensor *out);
 
 extern void dsc_cpu_cos(dsc_device *,
                         const dsc_tensor *DSC_RESTRICT x,

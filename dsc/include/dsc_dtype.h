@@ -136,22 +136,22 @@ template <typename T>
 using real = typename real_<T>::type;
 
 template<typename Ta, typename Tb>
-static consteval bool dsc_is_type() noexcept {
+static consteval bool dsc_is_type() {
     return std::is_same_v<Ta, Tb>;
 }
 
 template<typename T>
-static consteval bool dsc_is_complex() noexcept {
+static consteval bool dsc_is_complex() {
     return dsc_is_type<T, c32>() || dsc_is_type<T, c64>();
 }
 
 template<typename T>
-static consteval bool dsc_is_real() noexcept {
+static consteval bool dsc_is_real() {
     return dsc_is_type<T, f32>() || dsc_is_type<T, f64>();
 }
 
 template<typename T>
-static consteval T dsc_pi() noexcept {
+static consteval T dsc_pi() {
     if constexpr (dsc_is_type<T, f32>()) {
         return 3.14159265358979323846f;
     } else {
@@ -160,7 +160,7 @@ static consteval T dsc_pi() noexcept {
 }
 
 template<typename T>
-static consteval T dsc_zero() noexcept {
+static consteval T dsc_zero() {
     if constexpr (dsc_is_type<T, f32>()) {
         return 0.f;
     } else if constexpr (dsc_is_type<T, f64>()) {
@@ -175,7 +175,7 @@ static consteval T dsc_zero() noexcept {
 }
 
 template<typename T, bool positive = true>
-static consteval T dsc_inf() noexcept {
+static consteval T dsc_inf() {
     constexpr real<T> sign = positive ? 1 : -1;
     if constexpr (dsc_is_type<T, f32>()) {
         return sign * std::numeric_limits<f32>::infinity();

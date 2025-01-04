@@ -10,7 +10,6 @@
 #include "dsc_iter.h"
 #include <random>
 
-#define dsc_for(idx, X) for (int idx = 0; idx < (X)->ne; ++idx)
 
 // ============================================================
 // CPU-specific operations
@@ -191,37 +190,37 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
 }
 
 void dsc_cpu_add(dsc_device *,
-                 const dsc_tensor *DSC_RESTRICT xa,
-                 const dsc_tensor *DSC_RESTRICT xb,
-                 dsc_tensor *DSC_RESTRICT out) {
+                 const dsc_tensor *xa,
+                 const dsc_tensor *xb,
+                 dsc_tensor *out) {
     binary_op(xa, xb, out, cpu_add_op());
 }
 
 void dsc_cpu_sub(dsc_device *,
-                 const dsc_tensor *DSC_RESTRICT xa,
-                 const dsc_tensor *DSC_RESTRICT xb,
-                 dsc_tensor *DSC_RESTRICT out) {
+                 const dsc_tensor *xa,
+                 const dsc_tensor *xb,
+                 dsc_tensor *out) {
     binary_op(xa, xb, out, cpu_sub_op());
 }
 
 void dsc_cpu_mul(dsc_device *,
-                 const dsc_tensor *DSC_RESTRICT xa,
-                 const dsc_tensor *DSC_RESTRICT xb,
-                 dsc_tensor *DSC_RESTRICT out) {
+                 const dsc_tensor *xa,
+                 const dsc_tensor *xb,
+                 dsc_tensor *out) {
     binary_op(xa, xb, out, cpu_mul_op());
 }
 
 void dsc_cpu_div(dsc_device *,
-                 const dsc_tensor *DSC_RESTRICT xa,
-                 const dsc_tensor *DSC_RESTRICT xb,
-                 dsc_tensor *DSC_RESTRICT out) {
+                 const dsc_tensor *xa,
+                 const dsc_tensor *xb,
+                 dsc_tensor *out) {
     binary_op(xa, xb, out, cpu_div_op());
 }
 
 void dsc_cpu_pow(dsc_device *,
-                        const dsc_tensor *DSC_RESTRICT xa,
-                        const dsc_tensor *DSC_RESTRICT xb,
-                        dsc_tensor *DSC_RESTRICT out) {
+                 const dsc_tensor *xa,
+                 const dsc_tensor *xb,
+                 dsc_tensor *out) {
     binary_op(xa, xb, out, cpu_pow_op());
 }
 

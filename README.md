@@ -57,13 +57,14 @@ make clean; make shared DSC_FAST=1
 This will compile DSC without any debug information, you can specify different options
 to enable/disable specific features:
 
-| Option             | Description                                                      |
-|--------------------|------------------------------------------------------------------|
-| DSC_DEBUG          | Compile with debug information and verbose logging (**default**) |
-| DSC_FAST           | Turn off logging and compile with the highest optimisation level |
-| DSC_ENABLE_TRACING | Enable tracing for all operations                                |
-| DSC_MAX_FFT_PLANS  | Max number of FFT plans that can be cached (**default=16**)      |
-| DSC_MAX_TRACES     | Max number of traces that can be recorded (**default=1K**)       |
+| Option             | Description                                                                  |
+|--------------------|------------------------------------------------------------------------------|
+| DSC_DEBUG          | Compile with debug information and verbose logging (**default**)             |
+| DSC_FAST           | Turn off logging and compile with the highest optimisation level             |
+| DSC_ENABLE_TRACING | Enable tracing for all operations                                            |
+| DSC_MAX_FFT_PLANS  | Max number of FFT plans that can be cached (**default=16**)                  |
+| DSC_MAX_TRACES     | Max number of traces that can be recorded (**default=1K**)                   |
+| DSC_MAX_OBJS       | Max number of DSC tensors that can be used at the same time (**default=1K**) |
 
 To verify that everything worked out as expected try a simple operation:
 ```bash

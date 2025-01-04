@@ -8,6 +8,7 @@
 #include "cuda/dsc_cuda.h"
 
 #define DSC_DEVICE_CUDA_ALIGN ((usize) 1024)
+#define DSC_MEMCPY_DIRECTIONS ((int) 3)
 
 static constexpr cudaMemcpyKind DSC_CUDA_MEMCPY_DIRECTIONS[DSC_MEMCPY_DIRECTIONS] = {
     cudaMemcpyDeviceToHost,
@@ -46,7 +47,6 @@ dsc_device *dsc_cuda_device(const usize mem_size, const int cuda_dev) {
         .used_nodes = {},
         .free_nodes = {},
         .head = {},
-        .fft_plans = {},
         .device_mem = {},
         .extra_info = &extra,
         .mem_size = DSC_ALIGN(mem_size, DSC_DEVICE_CUDA_ALIGN),
