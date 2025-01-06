@@ -61,8 +61,8 @@ to enable/disable specific features:
 |--------------------|------------------------------------------------------------------------------|
 | DSC_DEBUG          | Compile with debug information and verbose logging (**default**)             |
 | DSC_FAST           | Turn off logging and compile with the highest optimisation level             |
+| DSC_CUDA           | Enable CUDA support (**default=OFF**)                                        |
 | DSC_ENABLE_TRACING | Enable tracing for all operations                                            |
-| DSC_MAX_FFT_PLANS  | Max number of FFT plans that can be cached (**default=16**)                  |
 | DSC_MAX_TRACES     | Max number of traces that can be recorded (**default=1K**)                   |
 | DSC_MAX_OBJS       | Max number of DSC tensors that can be used at the same time (**default=1K**) |
 

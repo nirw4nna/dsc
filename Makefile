@@ -1,13 +1,12 @@
 CUDA		?=	/usr/local/cuda
-CC			?=	gcc
-CXX			?=	g++
-NVCC		?=	nvcc
+CXX			=	g++
+NVCC		=	nvcc
 NVCCFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -ccbin=$(CXX) -code=sm_60 -arch=compute_60 \
 				--forward-unknown-to-host-compiler -Wall -Wextra -Wformat -Wnoexcept \
 				-Wcast-qual -Wunused -Wdouble-promotion -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti
-CXXFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -I./dsc/api/ -Wall -Wextra -Wformat -Wnoexcept  \
+CXXFLAGS	=	-std=c++20 -I./dsc/include/ -I./dsc/api/ -Wall -Wextra -Wformat -Wnoexcept  \
  				-Wcast-qual -Wunused -Wdouble-promotion -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti -pthread
-LDFLAGS		=	-lm -L$(CUDA)/lib64 -lcudart
+LDFLAGS		=	-lm
 
 UNAME_M		=	$(shell uname -m)
 UNAME_S		=	$(shell uname -s)
@@ -46,20 +45,38 @@ else
 	endif
 endif
 
+CUDA_SRCS	= $(wildcard dsc/src/cuda/*.cu)
+CUDA_OBJS	= $(CUDA_SRCS:.cu=.o)
+
+# Enable CUDA support
+ifdef DSC_CUDA
+	CXXFLAGS	+= -I$(CUDA)/include -DDSC_CUDA
+	NVCCFLAGS	+= -DDSC_CUDA
+	LDFLAGS		+= -L$(CUDA)/lib64 -lcudart
+
+	OBJS		+= $(CUDA_OBJS)
+%.o: %.cu
+	$(NVCC) $(NVCCFLAGS) -c $< -o $@
+endif
+
+
 $(info dsc build info: )
 $(info   OS:		$(UNAME_S))
 $(info   ARCH:		$(UNAME_M))
-$(info   CXXFLAGS:	$(CXXFLAGS))
-$(info   LDFLAGS:	$(LDFLAGS))
 $(info   CXX:		$(shell $(CXX) --version | head -n 1))
-$(info   CUDA:		$(DSC_CUDA))
+$(info   CXXFLAGS:	$(CXXFLAGS))
+
+ifdef DSC_CUDA
+$(info   NVCC:		$(shell $(NVCC) --version | head -n 4 | tail -n 1))
+$(info   NVCCFLAGS:	$(NVCCFLAGS))
+endif
+
+$(info   LDFLAGS:	$(LDFLAGS))
 $(info )
 
 SRCS		= $(wildcard dsc/src/*.cpp)
 SRCS		+= $(wildcard dsc/src/cpu/*.cpp)
-CUDA_SRCS	= $(wildcard dsc/src/cuda/*.cu)
-OBJS		= $(SRCS:.cpp=.o)
-CUDA_OBJS	= $(CUDA_SRCS:.cu=.o)
+OBJS		+= $(SRCS:.cpp=.o)
 
 SHARED_LIB	= python/dsc/libdsc.so
 
@@ -68,22 +85,13 @@ SHARED_LIB	= python/dsc/libdsc.so
 clean:
 	rm -rf *.o *.so *.old $(OBJS) $(CUDA_OBJS) $(SHARED_LIB)
 
-shared: $(OBJS) $(CUDA_OBJS)
-	$(CXX) $(CXXFLAGS) -shared $(OBJS) $(CUDA_OBJS) -o $(SHARED_LIB) $(LDFLAGS)
-
-#test_simple: dsc/tests/test_simple.cpp $(OBJS)
-#	$(CXX) $(CXXFLAGS) $< -o $@ $(OBJS) $(LDFLAGS)
+shared: $(OBJS)
+	$(CXX) $(CXXFLAGS) -shared $(OBJS) -o $(SHARED_LIB) $(LDFLAGS)
 
 #test_src: dsc/tests/test_src.cpp $(OBJS)
 #	$(CXX) $(CXXFLAGS) -sEXPORTED_FUNCTIONS='["_dsc_src","_malloc","_free"]' -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=2200MB -sMAXIMUM_MEMORY=2200MB -sENVIRONMENT=web $< -o dsrc.js $(OBJS) $(LDFLAGS)
 #	cp dsrc.js /home/lowl/Scrivania/projects/dspcraft/website/src/
 #	cp dsrc.wasm /home/lowl/Scrivania/projects/dspcraft/website/src/
-
-#dsc/src/cpu/dsc_cpu_impl.o: dsc/src/cpu/dsc_cpu.cpp
-#	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-%.o: %.cu
-	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@

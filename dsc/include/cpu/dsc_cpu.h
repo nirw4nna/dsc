@@ -1,4 +1,4 @@
-// Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+// Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 // All rights reserved.
 //
 // This code is licensed under the terms of the 3-clause BSD license
@@ -109,3 +109,10 @@ extern void dsc_cpu_clip(dsc_device *,
                          dsc_tensor *DSC_RESTRICT out,
                          f64 x_min, f64 x_max);
 
+// ============================================================
+// Unary Operations Along Axis
+
+extern void dsc_cpu_sum(dsc_device *,
+                        const dsc_tensor *DSC_RESTRICT x,
+                        dsc_tensor *DSC_RESTRICT out,
+                        int axis_idx);

@@ -1,4 +1,4 @@
-// Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+// Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 // All rights reserved.
 //
 // This code is licensed under the terms of the 3-clause BSD license
@@ -193,4 +193,12 @@ static DSC_INLINE void dsc_data_free(dsc_device *dev, dsc_data_buffer *ptr) {
 
 extern dsc_device *dsc_cpu_device(usize mem_size);
 
-extern dsc_device *dsc_cuda_device(usize mem_size, int cuda_dev);
+#if defined(DSC_CUDA)
+    extern dsc_device *dsc_cuda_device(usize mem_size, int cuda_dev);
+#else
+    static DSC_INLINE dsc_device *dsc_cuda_device(const usize mem_size, const int cuda_dev) {
+        DSC_UNUSED(mem_size);
+        DSC_UNUSED(cuda_dev);
+        return nullptr;
+    }
+#endif

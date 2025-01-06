@@ -1,4 +1,4 @@
-# Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+# Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 # All rights reserved.
 #
 # This code is licensed under the terms of the 3-clause BSD license
@@ -9,8 +9,6 @@ from ._bindings import (
     _OptionalTensor,
     _DSC_MAX_DIMS,
     _DSC_VALUE_NONE,
-    _DSC_DEVICE_DEFAULT,
-    _DSC_DEVICE_CPU,
     _DscSlice,
     _dsc_cast,
     _dsc_to,
@@ -38,13 +36,6 @@ from ._bindings import (
     _dsc_mul,
     _dsc_div,
     _dsc_pow,
-    _dsc_plan_fft,
-    _dsc_fft,
-    _dsc_ifft,
-    _dsc_rfft,
-    _dsc_irfft,
-    _dsc_fftfreq,
-    _dsc_rfftfreq,
     _dsc_arange,
     _dsc_randn,
     _dsc_cos,
@@ -71,24 +62,17 @@ from .dtype import (
     DTYPE_CONVERSION_TABLES,
     DTYPE_SIZE,
     DTYPE_TO_CTYPE,
-    ScalarType,
+    ScalarType
 )
+from .device import Device, DeviceType, _get_device
 import numpy as np
 from .context import _get_ctx
 import ctypes
 import sys
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Optional
 
 
 TensorType = Union['Tensor', np.ndarray]
-
-
-def _c_ptr_or_none(x: Union['Tensor', None]) -> _OptionalTensor:
-    return x._c_ptr if x else None
-
-
-def _c_ptr(x: 'Tensor') -> _DscTensor_p:
-    return x._c_ptr
 
 
 def _unwrap(x: 'Tensor') -> Union[float, complex, 'Tensor']:
@@ -96,19 +80,19 @@ def _unwrap(x: 'Tensor') -> Union[float, complex, 'Tensor']:
     if x.n_dim != 1 or len(x) != 1:
         return x
 
-    # TODO: fix this
-    x_ptr = x._c_ptr.contents.data
+    x_cpu = x.to(Device.CPU)
+    
     if x.dtype == Dtype.F32 or x.dtype == Dtype.F64:
-        return ctypes.cast(x_ptr, DTYPE_TO_CTYPE[x.dtype]).contents.value
+        return ctypes.cast(x_cpu.data, DTYPE_TO_CTYPE[x.dtype]).contents.value
     elif x.dtype == Dtype.C32 or x.dtype == Dtype.C64:
-        complex_arr = ctypes.cast(x_ptr, DTYPE_TO_CTYPE[x.dtype]).contents
+        complex_arr = ctypes.cast(x_cpu.data, DTYPE_TO_CTYPE[x.dtype]).contents
         return complex(complex_arr[0], complex_arr[1])
     else:
         raise RuntimeError(f'unknown dtype {x.dtype}')
 
 
 def _c_slice(x: Union[slice, int]) -> _DscSlice:
-    def _sanitize(i: Union[int, None]) -> int:
+    def _sanitize(i: Optional[int]) -> int:
         if i is None:
             return _DSC_VALUE_NONE
         return i
@@ -123,8 +107,9 @@ def _c_slice(x: Union[slice, int]) -> _DscSlice:
 
 
 def _wrap(
-    x: Union[ScalarType, 'Tensor', np.ndarray], dtype: Union[Dtype, None] = None
+    x: Union[ScalarType, 'Tensor', np.ndarray], dtype: Optional[Dtype] = None, device: Optional[Device] = None
 ) -> 'Tensor':
+    device = device if device is not None else Device.DEFAULT
     # Default dtype is f32 or c32, depending on float or complex
     if isinstance(x, np.ndarray):
         # The conversion from (and to) NumPy is not free, so it's better to do that once and then work with DSC tensors.
@@ -134,24 +119,24 @@ def _wrap(
         return x
     elif isinstance(x, float):
         if dtype == Dtype.F64:
-            return Tensor(_dsc_wrap_f64(_get_ctx(), x))
+            return Tensor(_dsc_wrap_f64(_get_ctx(), x, device))
         else:
-            return Tensor(_dsc_wrap_f32(_get_ctx(), x))
+            return Tensor(_dsc_wrap_f32(_get_ctx(), x, device))
     elif isinstance(x, complex):
         if dtype == Dtype.C64:
-            return Tensor(_dsc_wrap_c64(_get_ctx(), x))
+            return Tensor(_dsc_wrap_c64(_get_ctx(), x, device))
         else:
-            return Tensor(_dsc_wrap_c32(_get_ctx(), x))
+            return Tensor(_dsc_wrap_c32(_get_ctx(), x, device))
     else:
         # Simply cast x to dtype, if any
         if dtype == Dtype.F32 or dtype is None:
-            return Tensor(_dsc_wrap_f32(_get_ctx(), float(x)))
+            return Tensor(_dsc_wrap_f32(_get_ctx(), float(x), device))
         elif dtype == Dtype.F64:
-            return Tensor(_dsc_wrap_f64(_get_ctx(), float(x)))
+            return Tensor(_dsc_wrap_f64(_get_ctx(), float(x), device))
         elif dtype == Dtype.C32:
-            return Tensor(_dsc_wrap_c32(_get_ctx(), complex(x, 0)))
+            return Tensor(_dsc_wrap_c32(_get_ctx(), complex(x, 0), device))
         elif dtype == Dtype.C64:
-            return Tensor(_dsc_wrap_c64(_get_ctx(), complex(x, 0)))
+            return Tensor(_dsc_wrap_c64(_get_ctx(), complex(x, 0), device))
 
 
 def _pointers_are_equals(xa: _DscTensor_p, xb: _DscTensor_p) -> bool:
@@ -164,17 +149,22 @@ class Tensor:
     def __init__(self, c_ptr: _DscTensor_p, view: bool = False):  # pyright: ignore[reportInvalidTypeForm]
         c_ptr = c_ptr if not view else _dsc_view(_get_ctx(), c_ptr)
         self._dtype = Dtype(c_ptr.contents.dtype)
+        self._device = Device(c_ptr.contents.device)
         self._shape = c_ptr.contents.shape
         self._n_dim = c_ptr.contents.n_dim
         self._ne = c_ptr.contents.ne
         self._c_ptr = c_ptr
 
     def __del__(self):
-        _dsc_tensor_free(_get_ctx(), _c_ptr(self))
+        _dsc_tensor_free(_get_ctx(), self.c_ptr)
 
     @property
     def dtype(self) -> Dtype:
         return self._dtype
+
+    @property
+    def device(self) -> Device:
+        return self._device
 
     @property
     def shape(self) -> tuple[int]:
@@ -188,6 +178,16 @@ class Tensor:
     def ne(self) -> int:
         return self._ne
 
+    @property
+    def data(self) -> int:
+        if self.device is not Device.CPU:
+            raise RuntimeError('can\'t access _data field for a non-CPU tensor')
+        return self.c_ptr.contents.buf.contents.data
+
+    @property
+    def c_ptr(self) -> _DscTensor_p:
+        return self._c_ptr
+    
     def __len__(self):
         return self.shape[0]
 
@@ -205,20 +205,20 @@ class Tensor:
         ],
     ) -> Union[float, complex, 'Tensor']:
         if isinstance(item, int):
-            return _unwrap(Tensor(_dsc_tensor_get_idx(_get_ctx(), _c_ptr(self), item)))
+            return _unwrap(Tensor(_dsc_tensor_get_idx(_get_ctx(), self.c_ptr, item)))
         elif isinstance(item, Tuple) and all(isinstance(i, int) for i in item):
             return _unwrap(
                 Tensor(
                     _dsc_tensor_get_idx(
                         _get_ctx(),
-                        _c_ptr(self),
+                        self.c_ptr,
                         *tuple(i for i in item),  # pyright: ignore[reportArgumentType]
                     )
                 )
             )
         elif isinstance(item, slice):
             return Tensor(
-                _dsc_tensor_get_slice(_get_ctx(), _c_ptr(self), _c_slice(item))
+                _dsc_tensor_get_slice(_get_ctx(), self.c_ptr, _c_slice(item))
             )
         elif (isinstance(item, Tuple) and all(isinstance(s, slice) for s in item)) or (
             isinstance(item, Tuple)
@@ -226,7 +226,7 @@ class Tensor:
         ):
             return Tensor(
                 _dsc_tensor_get_slice(
-                    _get_ctx(), _c_ptr(self), *tuple(_c_slice(s) for s in item)
+                    _get_ctx(), self.c_ptr, *tuple(_c_slice(s) for s in item)
                 )
             )
         else:
@@ -243,19 +243,19 @@ class Tensor:
         ],
         value: Union[ScalarType, 'Tensor', np.ndarray],
     ):
-        wrapped_val = _wrap(value, self.dtype)
+        wrapped_val = _wrap(value, self.dtype, self.device)
         if isinstance(key, int):
-            _dsc_tensor_set_idx(_get_ctx(), _c_ptr(self), _c_ptr(wrapped_val), key)
+            _dsc_tensor_set_idx(_get_ctx(), self.c_ptr, wrapped_val._c_ptr, key)
         elif isinstance(key, Tuple) and all(isinstance(i, int) for i in key):
             _dsc_tensor_set_idx(
                 _get_ctx(),
-                _c_ptr(self),
-                _c_ptr(wrapped_val),
+                self.c_ptr,
+                wrapped_val._c_ptr,
                 *tuple(i for i in key),  # pyright: ignore[reportArgumentType]
             )
         elif isinstance(key, slice):
             _dsc_tensor_set_slice(
-                _get_ctx(), _c_ptr(self), _c_ptr(wrapped_val), _c_slice(key)
+                _get_ctx(), self.c_ptr, wrapped_val._c_ptr, _c_slice(key)
             )
         elif (isinstance(key, Tuple) and all(isinstance(s, slice) for s in key)) or (
             isinstance(key, Tuple)
@@ -263,8 +263,8 @@ class Tensor:
         ):
             _dsc_tensor_set_slice(
                 _get_ctx(),
-                _c_ptr(self),
-                _c_ptr(wrapped_val),
+                self.c_ptr,
+                wrapped_val._c_ptr,
                 *tuple(_c_slice(s) for s in key),
             )
         else:
@@ -301,27 +301,17 @@ class Tensor:
         return power(other, self)
 
     def __bytes__(self) -> bytes:
-        tensor = _dsc_to(_get_ctx(), self, _DSC_DEVICE_CPU)
-        # TODO: explicitly free tensor?
-        byte_array = (ctypes.c_byte * self.ne * DTYPE_SIZE[self.dtype]).from_address(
-            tensor._c_ptr.contents.buf.contents.data
-        )
+        tensor = self.to(Device.CPU)
+        byte_array = (ctypes.c_byte * self.ne * DTYPE_SIZE[self.dtype]).from_address(tensor.data)
         return bytes(byte_array)
 
     def numpy(self) -> np.ndarray:
-        # Note: this method could become the source of some nasty bugs. Here, we are creating a NumPy array
-        # that is a view of some data managed by DSC. It can happen that the underlying DSC buffer is freed before
-        # the NumPy array itself. For now, since we are using this basically just to verify that two arrays match, it's
-        # not a problem but it's worth keeping an eye out for future bugs.
-        tensor = _dsc_to(_get_ctx(), _c_ptr(self), _DSC_DEVICE_CPU)
-        # TODO: explicitly free tensor?
-        raw_data = tensor.contents.buf.contents.data
+        tensor = self.to(Device.CPU)
 
-        typed_data = ctypes.cast(raw_data, DTYPE_TO_CTYPE[self.dtype])
+        typed_data = ctypes.cast(tensor.data, DTYPE_TO_CTYPE[self.dtype])
 
-        # Create a view of the underlying data buffer
-        np_array = np.ctypeslib.as_array(typed_data, shape=self.shape)
-
+        # Create a copy of the underlying data buffer
+        np_array = np.ctypeslib.as_array(typed_data, shape=self.shape).copy()
         # If it's a complex number, change the np dtype
         if self.dtype == Dtype.C32:
             np_array = np_array.view(np.complex64)
@@ -331,10 +321,17 @@ class Tensor:
         return np_array.reshape(self.shape)
 
     def cast(self, dtype: Dtype) -> 'Tensor':
-        x_ptr = _c_ptr(self)
-        out_ptr = _dsc_cast(_get_ctx(), x_ptr, dtype)
-        return Tensor(out_ptr, _pointers_are_equals(x_ptr, out_ptr))
-
+        if self.dtype == dtype:
+            return self
+        out_ptr = _dsc_cast(_get_ctx(), self.c_ptr, dtype)
+        return Tensor(out_ptr, _pointers_are_equals(self.c_ptr, out_ptr))
+    
+    def to(self, device: DeviceType) -> 'Tensor':
+        device = _get_device(device)
+        if self.device == device:
+            return self
+        return Tensor(_dsc_to(_get_ctx(), self.c_ptr, device))
+    
     def tobytes(self) -> bytes:
         return bytes(self)
 
@@ -342,7 +339,7 @@ class Tensor:
         return reshape(self, *shape)
 
 
-def _create_tensor(dtype: Dtype, *dims: int) -> Tensor:
+def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device) -> Tensor:
     n_dims = len(dims)
     if n_dims > _DSC_MAX_DIMS or n_dims < 1:
         raise RuntimeError(
@@ -350,9 +347,9 @@ def _create_tensor(dtype: Dtype, *dims: int) -> Tensor:
         )
 
     if n_dims == 1:
-        return Tensor(_dsc_tensor_1d(_get_ctx(), dtype, dims[0]))
+        return Tensor(_dsc_tensor_1d(_get_ctx(), dtype, dims[0], device))
     elif n_dims == 2:
-        return Tensor(_dsc_tensor_2d(_get_ctx(), dtype, dims[0], dims[1]))
+        return Tensor(_dsc_tensor_2d(_get_ctx(), dtype, dims[0], dims[1], device))
     elif n_dims == 3:
         return Tensor(
             _dsc_tensor_3d(
@@ -361,6 +358,7 @@ def _create_tensor(dtype: Dtype, *dims: int) -> Tensor:
                 dims[0],
                 dims[1],
                 dims[2],
+                device
             )
         )
     else:
@@ -372,6 +370,7 @@ def _create_tensor(dtype: Dtype, *dims: int) -> Tensor:
                 dims[1],
                 dims[2],
                 dims[3],
+                device
             )
         )
 
@@ -380,10 +379,8 @@ def from_numpy(x: np.ndarray) -> Tensor:
     if x.dtype not in NP_TO_DTYPE:
         raise RuntimeError(f'NumPy dtype {x.dtype} is not supported')
 
-    out = _create_tensor(NP_TO_DTYPE[x.dtype], *x.shape)
-    # tensor._c_ptr.contents.buf.contents.data
-    # Todo: we need an explicit function implemented in DSC that handles the device properly
-    ctypes.memmove(_c_ptr(out).contents.buf.contents.data, x.ctypes.data, x.nbytes)
+    out = _create_tensor(NP_TO_DTYPE[x.dtype], x.shape, Device.CPU)
+    ctypes.memmove(out.data, x.ctypes.data, x.nbytes)
     return out
 
 
@@ -398,16 +395,16 @@ def reshape(x: Tensor, *shape: Union[int, Tuple[int, ...], List[int]]) -> Tensor
         shape_tuple = shape
     else:
         raise RuntimeError(f'cannot reshape tensor with shape {shape}')
-    return Tensor(_dsc_reshape(_get_ctx(), _c_ptr(x), *shape_tuple))  # pyright: ignore[reportArgumentType]
+    return Tensor(_dsc_reshape(_get_ctx(), x._c_ptr, *shape_tuple))  # pyright: ignore[reportArgumentType]
 
 
 def concat(
-    tensors: Union[Tuple[Tensor, ...], List[Tensor]], axis: Union[int, None] = 0
+    tensors: Union[Tuple[Tensor, ...], List[Tensor]], axis: Optional[int] = 0
 ) -> Tensor:
     if isinstance(tensors, (Tuple, List)) and all(
         isinstance(t, Tensor) for t in tensors
     ):
-        tensors_tuple = tuple(_c_ptr(t) for t in tensors)
+        tensors_tuple = tuple(t._c_ptr for t in tensors)
         axis = axis if axis is not None else _DSC_VALUE_NONE
         return Tensor(_dsc_concat(_get_ctx(), axis, *tensors_tuple))
     else:
@@ -421,22 +418,26 @@ def transpose(
         axes is None
     ):
         axes_tuple = tuple(axes) if axes is not None else tuple()
-        return Tensor(_dsc_transpose(_get_ctx(), _c_ptr(x), *axes_tuple))
+        return Tensor(_dsc_transpose(_get_ctx(), x._c_ptr, *axes_tuple))
     else:
         raise RuntimeError(f'cannot transpose axes {axes}')
 
 
-def _has_out(out: Union[Tensor, None]) -> bool:
+def _c_ptr_or_none(x: Optional['Tensor']) -> _OptionalTensor:
+    return x.c_ptr if x else None
+
+
+def _has_out(out: Optional[Tensor]) -> bool:
     return True if out is not None else False
 
 
 def _tensor_op(
-    xa: Tensor, xb: Tensor, out: Union[Tensor, None], op_name: str
+    xa: Tensor, xb: Tensor, out: Optional[Tensor], op_name: str
 ) -> Tensor:
     if hasattr(sys.modules[__name__], op_name):
         op = getattr(sys.modules[__name__], op_name)
         return Tensor(
-            op(_get_ctx(), _c_ptr(xa), _c_ptr(xb), _c_ptr_or_none(out)), _has_out(out)
+            op(_get_ctx(), xa.c_ptr, xb.c_ptr, _c_ptr_or_none(out)), _has_out(out)
         )
     else:
         raise RuntimeError(f'tensor operation "{op_name}" doesn\'t exist in module')
@@ -454,22 +455,34 @@ def _wrap_operands(
             return Dtype.F32
         else:
             return Dtype.C32
-
+    
+    def _device(x: Union[ScalarType, TensorType]) -> Optional[Device]:
+        if isinstance(x, Tensor):
+            return x.device
+        elif isinstance(x, np.ndarray):
+            return Device.CPU
+        else:
+            return None
+    
     if (isinstance(xa, Tensor) and isinstance(xb, Tensor)) or (
         isinstance(xa, np.ndarray) and isinstance(xb, np.ndarray)
     ):
         return _wrap(xa), _wrap(xb)
 
+    xa_device = _device(xa)
+    xb_device = _device(xb)
+    target_device = xa_device if xa_device is not None else xb_device
+
     xa_dtype = _dtype(xa)
     xb_dtype = _dtype(xb)
     wrap_dtype = DTYPE_CONVERSION_TABLES[xa_dtype.value][xb_dtype.value]
-    return _wrap(xa, wrap_dtype), _wrap(xb, wrap_dtype)
+    return _wrap(xa, wrap_dtype, target_device), _wrap(xb, wrap_dtype, target_device)
 
 
 def add(
     xa: Union[ScalarType, TensorType],
     xb: Union[ScalarType, TensorType],
-    out: Union[Tensor, None] = None,
+    out: Optional[Tensor] = None,
 ) -> Tensor:
     xa, xb = _wrap_operands(xa, xb)
     return _tensor_op(xa, xb, out, op_name='_dsc_add')
@@ -478,7 +491,7 @@ def add(
 def sub(
     xa: Union[ScalarType, TensorType],
     xb: Union[ScalarType, TensorType],
-    out: Union[Tensor, None] = None,
+    out: Optional[Tensor] = None,
 ) -> Tensor:
     xa, xb = _wrap_operands(xa, xb)
     return _tensor_op(xa, xb, out, op_name='_dsc_sub')
@@ -487,7 +500,7 @@ def sub(
 def mul(
     xa: Union[ScalarType, TensorType],
     xb: Union[ScalarType, TensorType],
-    out: Union[Tensor, None] = None,
+    out: Optional[Tensor] = None,
 ) -> Tensor:
     xa, xb = _wrap_operands(xa, xb)
     return _tensor_op(xa, xb, out, op_name='_dsc_mul')
@@ -496,7 +509,7 @@ def mul(
 def true_div(
     xa: Union[ScalarType, TensorType],
     xb: Union[ScalarType, TensorType],
-    out: Union[Tensor, None] = None,
+    out: Optional[Tensor] = None,
 ) -> Tensor:
     xa, xb = _wrap_operands(xa, xb)
     return _tensor_op(xa, xb, out, op_name='_dsc_div')
@@ -505,169 +518,170 @@ def true_div(
 def power(
     xa: Union[ScalarType, TensorType],
     xb: Union[ScalarType, TensorType],
-    out: Union[Tensor, None] = None,
+    out: Optional[Tensor] = None,
 ) -> Tensor:
     xa, xb = _wrap_operands(xa, xb)
     return _tensor_op(xa, xb, out, op_name='_dsc_pow')
 
 
-def cos(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_cos(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
+def cos(x: Tensor, out: Optional[Tensor] = None) -> Tensor:
+    return Tensor(_dsc_cos(_get_ctx(), x.c_ptr, _c_ptr_or_none(out)), _has_out(out))
 
 
-def sin(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_sin(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
+def sin(x: Tensor, out: Optional[Tensor] = None) -> Tensor:
+    return Tensor(_dsc_sin(_get_ctx(), x.c_ptr, _c_ptr_or_none(out)), _has_out(out))
 
 
-def sinc(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_sinc(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
+def sinc(x: Tensor, out: Optional[Tensor] = None) -> Tensor:
+    return Tensor(_dsc_sinc(_get_ctx(), x.c_ptr, _c_ptr_or_none(out)), _has_out(out))
 
 
-def logn(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_logn(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
+def logn(x: Tensor, out: Optional[Tensor] = None) -> Tensor:
+    return Tensor(_dsc_logn(_get_ctx(), x.c_ptr, _c_ptr_or_none(out)), _has_out(out))
 
 
-def log2(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_log2(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
+def log2(x: Tensor, out: Optional[Tensor] = None) -> Tensor:
+    return Tensor(_dsc_log2(_get_ctx(), x.c_ptr, _c_ptr_or_none(out)), _has_out(out))
 
 
-def log10(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_log10(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
+def log10(x: Tensor, out: Optional[Tensor] = None) -> Tensor:
+    return Tensor(_dsc_log10(_get_ctx(), x.c_ptr, _c_ptr_or_none(out)), _has_out(out))
 
 
-def exp(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_exp(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
+def exp(x: Tensor, out: Optional[Tensor] = None) -> Tensor:
+    return Tensor(_dsc_exp(_get_ctx(), x.c_ptr, _c_ptr_or_none(out)), _has_out(out))
 
 
-def sqrt(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_sqrt(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
+def sqrt(x: Tensor, out: Optional[Tensor] = None) -> Tensor:
+    return Tensor(_dsc_sqrt(_get_ctx(), x.c_ptr, _c_ptr_or_none(out)), _has_out(out))
 
 
-def absolute(x: Tensor, out: Union[Tensor, None] = None) -> Tensor:
-    return Tensor(_dsc_abs(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out)), _has_out(out))
+def absolute(x: Tensor, out: Optional[Tensor] = None) -> Tensor:
+    return Tensor(_dsc_abs(_get_ctx(), x.c_ptr, _c_ptr_or_none(out)), _has_out(out))
 
 
 def angle(x: Tensor) -> Tensor:
-    return Tensor(_dsc_angle(_get_ctx(), _c_ptr(x)))
+    return Tensor(_dsc_angle(_get_ctx(), x.c_ptr))
 
 
 def conj(x: Tensor) -> Tensor:
-    x_ptr = _c_ptr(x)
+    x_ptr = x.c_ptr
     out_ptr = _dsc_conj(_get_ctx(), x_ptr)
     return Tensor(out_ptr, _pointers_are_equals(x_ptr, out_ptr))
 
 
 def real(x: Tensor) -> Tensor:
-    x_ptr = _c_ptr(x)
+    x_ptr = x.c_ptr
     out_ptr = _dsc_real(_get_ctx(), x_ptr)
     return Tensor(out_ptr, _pointers_are_equals(x_ptr, out_ptr))
 
 
 def imag(x: Tensor) -> Tensor:
-    return Tensor(_dsc_imag(_get_ctx(), _c_ptr(x)))
+    return Tensor(_dsc_imag(_get_ctx(), x.c_ptr))
 
 
 def i0(x: Union[int, float, Tensor], dtype: Dtype = Dtype.F32) -> Tensor:
     x = _wrap(x, dtype)
-    return Tensor(_dsc_i0(_get_ctx(), _c_ptr(x)))
+    return Tensor(_dsc_i0(_get_ctx(), x.c_ptr))
 
 
 def clip(
     x: Tensor,
-    x_min: Union[float, None] = None,
-    x_max: Union[float, None] = None,
-    out: Union[Tensor, None] = None,
+    x_min: Optional[float] = None,
+    x_max: Optional[float] = None,
+    out: Optional[Tensor] = None,
 ) -> Tensor:
     x_min = x_min if x_min is not None else float('-inf')
     x_max = x_max if x_max is not None else float('+inf')
     return Tensor(
-        _dsc_clip(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), x_min, x_max),
+        _dsc_clip(_get_ctx(), x.c_ptr, _c_ptr_or_none(out), x_min, x_max),
         _has_out(out),
     )
 
 
 def sum(
-    x: Tensor, out: Union[Tensor, None] = None, axis: int = -1, keepdims: bool = True
+    x: Tensor, out: Optional[Tensor] = None, axis: int = -1, keepdims: bool = True
 ) -> Tensor:
     return Tensor(
-        _dsc_sum(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims),
+        _dsc_sum(_get_ctx(), x.c_ptr, _c_ptr_or_none(out), axis, keepdims),
         _has_out(out),
     )
 
 
 def mean(
-    x: Tensor, out: Union[Tensor, None] = None, axis: int = -1, keepdims: bool = True
+    x: Tensor, out: Optional[Tensor] = None, axis: int = -1, keepdims: bool = True
 ) -> Tensor:
     return Tensor(
-        _dsc_mean(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims),
+        _dsc_mean(_get_ctx(), x.c_ptr, _c_ptr_or_none(out), axis, keepdims),
         _has_out(out),
     )
 
 
 def max(
-    x: Tensor, out: Union[Tensor, None] = None, axis: int = -1, keepdims: bool = True
+    x: Tensor, out: Optional[Tensor] = None, axis: int = -1, keepdims: bool = True
 ) -> Tensor:
     return Tensor(
-        _dsc_max(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims),
+        _dsc_max(_get_ctx(), x.c_ptr, _c_ptr_or_none(out), axis, keepdims),
         _has_out(out),
     )
 
 
 def min(
-    x: Tensor, out: Union[Tensor, None] = None, axis: int = -1, keepdims: bool = True
+    x: Tensor, out: Optional[Tensor] = None, axis: int = -1, keepdims: bool = True
 ) -> Tensor:
     return Tensor(
-        _dsc_min(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), axis, keepdims),
+        _dsc_min(_get_ctx(), x.c_ptr, _c_ptr_or_none(out), axis, keepdims),
         _has_out(out),
     )
 
 
 def arange(
-    n: int, dtype: Dtype = Dtype.F32, device: int = _DSC_DEVICE_DEFAULT
+    n: int, dtype: Dtype = Dtype.F32, device: DeviceType = Device.DEFAULT
 ) -> Tensor:
-    return Tensor(_dsc_arange(_get_ctx(), n, dtype, device))
+    return Tensor(_dsc_arange(_get_ctx(), n, dtype, _get_device(device)))
 
 
 def randn(
-    *shape: int, dtype: Dtype = Dtype.F32, device: int = _DSC_DEVICE_DEFAULT
+    *shape: int, dtype: Dtype = Dtype.F32, device: DeviceType = Device.DEFAULT
 ) -> Tensor:
-    return Tensor(_dsc_randn(_get_ctx(), shape, dtype, device))
+    return Tensor(_dsc_randn(_get_ctx(), shape, dtype, _get_device(device)))
 
 
 # In the xx_like methods if dtype is not specified it will be the same as x
 def ones(
-    shape: Union[int, Tuple[int, ...], List[int]], dtype: Dtype = Dtype.F32
+    shape: Union[int, Tuple[int, ...], List[int]], dtype: Dtype = Dtype.F32, device: DeviceType = Device.DEFAULT
 ) -> Tensor:
-    return full(shape, fill_value=1, dtype=dtype)
+    return full(shape, 1, dtype, device)
 
 
-def ones_like(x: TensorType, dtype: Union[Dtype, None] = None) -> Tensor:
-    return full_like(x, 1, dtype)
+def ones_like(x: TensorType, dtype: Optional[Dtype] = None, device: DeviceType = Device.DEFAULT) -> Tensor:
+    return full_like(x, 1, dtype, device)
 
 
 def zeros(
-    shape: Union[int, Tuple[int, ...], List[int]], dtype: Dtype = Dtype.F32
+    shape: Union[int, Tuple[int, ...], List[int]], dtype: Dtype = Dtype.F32, device: DeviceType = Device.DEFAULT
 ) -> Tensor:
-    return full(shape, fill_value=0, dtype=dtype)
+    return full(shape, 0, dtype, device)
 
 
-def zeros_like(x: TensorType, dtype: Union[Dtype, None] = None) -> Tensor:
-    return full_like(x, fill_value=0, dtype=dtype)
+def zeros_like(x: TensorType, dtype: Optional[Dtype] = None, device: DeviceType = Device.DEFAULT) -> Tensor:
+    return full_like(x, 0, dtype, device)
 
 
 def full(
     shape: Union[int, Tuple[int, ...], List[int]],
     fill_value: ScalarType,
     dtype: Dtype = Dtype.F32,
+    device: DeviceType = Device.DEFAULT
 ) -> Tensor:
     shape = (shape,) if isinstance(shape, int) else tuple(i for i in shape)
-    out = _create_tensor(dtype, *shape)
+    out = _create_tensor(dtype, shape, _get_device(device))
     out[:] = fill_value
     return out
 
 
 def full_like(
-    x: TensorType, fill_value: ScalarType, dtype: Union[Dtype, None] = None
+    x: TensorType, fill_value: ScalarType, dtype: Optional[Dtype] = None, device: DeviceType = Device.DEFAULT
 ) -> Tensor:
     shape = x.shape
     dtype = (
@@ -675,74 +689,21 @@ def full_like(
         if dtype is not None
         else (x.dtype if isinstance(x, Tensor) else NP_TO_DTYPE[x.dtype])
     )
-    return full(shape, fill_value=fill_value, dtype=dtype)
+    return full(shape, fill_value, dtype, device)
 
 
 def empty(
-    shape: Union[int, Tuple[int, ...], List[int]], dtype: Dtype = Dtype.F32
+    shape: Union[int, Tuple[int, ...], List[int]], dtype: Dtype = Dtype.F32, device: DeviceType = Device.DEFAULT
 ) -> Tensor:
     shape = (shape,) if isinstance(shape, int) else tuple(i for i in shape)
-    return _create_tensor(dtype, *shape)
+    return _create_tensor(dtype, shape, _get_device(device))
 
 
-def empty_like(x: TensorType, dtype: Union[Dtype, None] = None) -> Tensor:
+def empty_like(x: TensorType, dtype: Optional[Dtype] = None, device: DeviceType = Device.DEFAULT) -> Tensor:
     shape = x.shape
     dtype = (
         dtype
         if dtype is not None
         else (x.dtype if isinstance(x, Tensor) else NP_TO_DTYPE[x.dtype])
     )
-    return empty(shape, dtype=dtype)
-
-
-def plan_fft(n: int, dtype: Dtype = Dtype.F64):
-    """
-    Create the plan for a one-dimensional FFT/IFFT of size N using dtype for the twiddle factors.
-    If this function is not executed before calling either `dsc.fft` or `dsc.ifft` then it will be
-    called automatically before doing the first transform causing a slowdown.
-    """
-    return _dsc_plan_fft(_get_ctx(), n, dtype)
-
-
-def fft(
-    x: Tensor, out: Union[Tensor, None] = None, n: int = -1, axis: int = -1
-) -> Tensor:
-    return Tensor(
-        _dsc_fft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis),
-        _has_out(out),
-    )
-
-
-def ifft(
-    x: Tensor, out: Union[Tensor, None] = None, n: int = -1, axis: int = -1
-) -> Tensor:
-    return Tensor(
-        _dsc_ifft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis),
-        _has_out(out),
-    )
-
-
-def rfft(
-    x: Tensor, out: Union[Tensor, None] = None, n: int = -1, axis: int = -1
-) -> Tensor:
-    return Tensor(
-        _dsc_rfft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis),
-        _has_out(out),
-    )
-
-
-def irfft(
-    x: Tensor, out: Union[Tensor, None] = None, n: int = -1, axis: int = -1
-) -> Tensor:
-    return Tensor(
-        _dsc_irfft(_get_ctx(), _c_ptr(x), _c_ptr_or_none(out), n=n, axis=axis),
-        _has_out(out),
-    )
-
-
-def fftfreq(n: int, d: float = 1.0, dtype: Dtype = Dtype.F32) -> Tensor:
-    return Tensor(_dsc_fftfreq(_get_ctx(), n, d, dtype))
-
-
-def rfftfreq(n: int, d: float = 1.0, dtype: Dtype = Dtype.F32) -> Tensor:
-    return Tensor(_dsc_rfftfreq(_get_ctx(), n, d, dtype))
+    return empty(shape, dtype, device)

@@ -1,4 +1,4 @@
-# Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+# Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 # All rights reserved.
 #
 # This code is licensed under the terms of the 3-clause BSD license
@@ -21,15 +21,11 @@ from ctypes import (
 )
 from typing import Union
 from .dtype import Dtype
+from .device import Device
 
 
 _DSC_MAX_DIMS = 4
 _DSC_VALUE_NONE = 2**31 - 1
-
-_DSC_DEVICE_DEFAULT = c_int8(-1)
-_DSC_DEVICE_CPU = c_int8(0)
-_DSC_DEVICE_CUDA = c_int8(1)
-_DSC_DEFAULT_DEVICE = _DSC_DEVICE_DEFAULT
 
 _DscCtx = c_void_p
 
@@ -89,17 +85,6 @@ _lib.dsc_ctx_init.argtypes = [c_size_t]
 _lib.dsc_ctx_init.restype = _DscCtx
 
 
-# extern dsc_fft_plan *dsc_plan_fft(dsc_ctx *ctx,
-#                                   const int n,
-#                                   const dsc_dtype dtype);
-def _dsc_plan_fft(ctx: _DscCtx, n: int, dtype: Dtype):
-    return _lib.dsc_plan_fft(ctx, c_int(n), c_uint8(dtype.value))
-
-
-_lib.dsc_plan_fft.argtypes = [_DscCtx, c_int, c_uint8]
-_lib.dsc_plan_fft.restype = c_void_p
-
-
 # extern void dsc_ctx_free(dsc_ctx *ctx);
 def _dsc_ctx_free(ctx: _DscCtx):
     _lib.dsc_ctx_free(ctx)
@@ -137,12 +122,65 @@ _lib.dsc_print_mem_usage.restype = None
 
 
 # extern void dsc_set_default_device(dsc_ctx *ctx, dsc_device_type device);
-def _dsc_set_default_device(ctx: _DscCtx, device: c_int8):
-    _lib.dsc_set_default_device(ctx, device)
+def _dsc_set_default_device(ctx: _DscCtx, device: Device):
+    _lib.dsc_set_default_device(ctx, c_int8(device.value))
 
 
 _lib.dsc_set_default_device.argtypes = [_DscCtx, c_int8]
 _lib.dsc_set_default_device.restype = None
+
+
+# extern void dsc_cuda_set_device(dsc_ctx *ctx, int device);
+def _dsc_cuda_set_device(ctx: _DscCtx, device: int):
+    _lib.dsc_cuda_set_device(ctx, c_int(device))
+
+
+_lib.dsc_cuda_set_device.argtypes = [_DscCtx, c_int]
+_lib.dsc_cuda_set_device.restype = None
+ 
+# extern bool dsc_cuda_available(dsc_ctx *);
+def _dsc_cuda_available(ctx: _DscCtx) -> bool:
+    return _lib.dsc_cuda_available(ctx)
+
+
+_lib.dsc_cuda_available.argtypes = [_DscCtx]
+_lib.dsc_cuda_available.restype = c_bool
+
+
+# extern int dsc_cuda_devices(dsc_ctx *);
+def _dsc_cuda_devices(ctx: _DscCtx) -> int:
+    return _lib.dsc_cuda_devices(ctx)
+
+
+_lib.dsc_cuda_devices.argtypes = [_DscCtx]
+_lib.dsc_cuda_devices.restype = c_int
+
+
+# extern int dsc_cuda_dev_capability(dsc_ctx *, int device);
+def _dsc_cuda_dev_capability(ctx: _DscCtx, device: int) -> int:
+    return _lib.dsc_cuda_dev_capability(ctx, c_int(device))
+
+
+_lib.dsc_cuda_dev_capability.argtypes = [_DscCtx]
+_lib.dsc_cuda_dev_capability.restype = c_int
+
+
+# extern usize dsc_cuda_dev_mem(dsc_ctx *, int device);
+def _dsc_cuda_dev_mem(ctx: _DscCtx, device: int) -> int:
+    return _lib.dsc_cuda_dev_mem(ctx, c_int(device))
+
+
+_lib.dsc_cuda_dev_mem.argtypes = [_DscCtx, c_int]
+_lib.dsc_cuda_dev_mem.restype = c_size_t
+
+
+# extern usize dsc_cuda_sync(dsc_ctx *);
+def _dsc_cuda_sync(ctx: _DscCtx):
+    _lib.dsc_cuda_sync(ctx)
+
+
+_lib.dsc_cuda_sync.argtypes = [_DscCtx]
+_lib.dsc_cuda_sync.restype = None
 
 
 # extern void dsc_traces_record(dsc_ctx *ctx, bool record);
@@ -186,9 +224,9 @@ _lib.dsc_view.restype = _DscTensor_p
 #                                  dsc_dtype dtype,
 #                                  int dim1);
 def _dsc_tensor_1d(
-    ctx: _DscCtx, dtype: Dtype, dim1: int, device: c_int8 = _DSC_DEFAULT_DEVICE
+    ctx: _DscCtx, dtype: Dtype, dim1: int, device: Device
 ) -> _DscTensor_p:
-    return _lib.dsc_tensor_1d(ctx, c_uint8(dtype.value), c_int(dim1), device)
+    return _lib.dsc_tensor_1d(ctx, c_uint8(dtype.value), c_int(dim1), c_int8(device.value))
 
 
 _lib.dsc_tensor_1d.argtypes = [_DscCtx, c_uint8, c_int, c_int8]
@@ -203,10 +241,10 @@ def _dsc_tensor_2d(
     dtype: Dtype,
     dim1: int,
     dim2: int,
-    device: c_int8 = _DSC_DEFAULT_DEVICE,
+    device: Device
 ) -> _DscTensor_p:
     return _lib.dsc_tensor_2d(
-        ctx, c_uint8(dtype.value), c_int(dim1), c_int(dim2), device
+        ctx, c_uint8(dtype.value), c_int(dim1), c_int(dim2), c_int8(device.value)
     )
 
 
@@ -224,10 +262,10 @@ def _dsc_tensor_3d(
     dim1: int,
     dim2: int,
     dim3: int,
-    device: c_int8 = _DSC_DEFAULT_DEVICE,
+    device: Device
 ) -> _DscTensor_p:
     return _lib.dsc_tensor_3d(
-        ctx, c_uint8(dtype.value), c_int(dim1), c_int(dim2), c_int(dim3), device
+        ctx, c_uint8(dtype.value), c_int(dim1), c_int(dim2), c_int(dim3), c_int8(device.value)
     )
 
 
@@ -246,7 +284,7 @@ def _dsc_tensor_4d(
     dim2: int,
     dim3: int,
     dim4: int,
-    device: c_int8 = _DSC_DEFAULT_DEVICE,
+    device: Device
 ) -> _DscTensor_p:
     return _lib.dsc_tensor_4d(
         ctx,
@@ -255,7 +293,7 @@ def _dsc_tensor_4d(
         c_int(dim2),
         c_int(dim3),
         c_int(dim4),
-        device,
+        c_int8(device.value),
     )
 
 
@@ -266,9 +304,9 @@ _lib.dsc_tensor_4d.restype = _DscTensor_p
 # extern dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx,
 #                                 f32 val);
 def _dsc_wrap_f32(
-    ctx: _DscCtx, val: float, device: c_int8 = _DSC_DEFAULT_DEVICE
+    ctx: _DscCtx, val: float, device: Device
 ) -> _DscTensor_p:
-    return _lib.dsc_wrap_f32(ctx, c_float(val), device)
+    return _lib.dsc_wrap_f32(ctx, c_float(val), c_int8(device.value))
 
 
 _lib.dsc_wrap_f32.argtypes = [_DscCtx, c_float, c_int8]
@@ -278,9 +316,9 @@ _lib.dsc_wrap_f32.restype = _DscTensor_p
 # extern dsc_tensor *dsc_wrap_f64(dsc_ctx *ctx,
 #                                 f64 val);
 def _dsc_wrap_f64(
-    ctx: _DscCtx, val: float, device: c_int8 = _DSC_DEFAULT_DEVICE
+    ctx: _DscCtx, val: float, device: Device
 ) -> _DscTensor_p:
-    return _lib.dsc_wrap_f64(ctx, c_double(val), device)
+    return _lib.dsc_wrap_f64(ctx, c_double(val), c_int8(device.value))
 
 
 _lib.dsc_wrap_f64.argtypes = [_DscCtx, c_double, c_int8]
@@ -290,9 +328,9 @@ _lib.dsc_wrap_f64.restype = _DscTensor_p
 # extern dsc_tensor *dsc_wrap_c32(dsc_ctx *ctx,
 #                                 c32 val);
 def _dsc_wrap_c32(
-    ctx: _DscCtx, val: complex, device: c_int8 = _DSC_DEFAULT_DEVICE
+    ctx: _DscCtx, val: complex, device: Device
 ) -> _DscTensor_p:
-    return _lib.dsc_wrap_c32(ctx, _C32(c_float(val.real), c_float(val.imag)), device)
+    return _lib.dsc_wrap_c32(ctx, _C32(c_float(val.real), c_float(val.imag)), c_int8(device.value))
 
 
 _lib.dsc_wrap_c32.argtypes = [_DscCtx, _C32, c_int8]
@@ -302,9 +340,9 @@ _lib.dsc_wrap_c32.restype = _DscTensor_p
 # extern dsc_tensor *dsc_wrap_c64(dsc_ctx *ctx,
 #                                 c64 val);
 def _dsc_wrap_c64(
-    ctx: _DscCtx, val: complex, device: c_int8 = _DSC_DEFAULT_DEVICE
+    ctx: _DscCtx, val: complex, device: Device
 ) -> _DscTensor_p:
-    return _lib.dsc_wrap_c64(ctx, _C64(c_double(val.real), c_double(val.imag)), device)
+    return _lib.dsc_wrap_c64(ctx, _C64(c_double(val.real), c_double(val.imag)), c_int8(device.value))
 
 
 _lib.dsc_wrap_c64.argtypes = [_DscCtx, _C64, c_int8]
@@ -315,9 +353,9 @@ _lib.dsc_wrap_c64.restype = _DscTensor_p
 #                               int n,
 #                               dsc_dtype dtype = DSC_DEFAULT_TYPE);
 def _dsc_arange(
-    ctx: _DscCtx, n: int, dtype: Dtype, device: c_int8 = _DSC_DEFAULT_DEVICE
+    ctx: _DscCtx, n: int, dtype: Dtype, device: Device
 ) -> _DscTensor_p:
-    return _lib.dsc_arange(ctx, c_int(n), c_uint8(dtype.value), device)
+    return _lib.dsc_arange(ctx, c_int(n), c_uint8(dtype.value), c_int8(device.value))
 
 
 _lib.dsc_arange.argtypes = [_DscCtx, c_int, c_uint8, c_int8]
@@ -332,11 +370,11 @@ def _dsc_randn(
     ctx: _DscCtx,
     shape: tuple[int, ...],
     dtype: Dtype,
-    device: c_int8 = _DSC_DEFAULT_DEVICE,
+    device: Device,
 ) -> _DscTensor_p:
     shape_type = c_int * len(shape)
     return _lib.dsc_randn(
-        ctx, len(shape), shape_type(*shape), c_uint8(dtype.value), device
+        ctx, len(shape), shape_type(*shape), c_uint8(dtype.value), c_int8(device.value)
     )
 
 
@@ -429,9 +467,9 @@ _lib.dsc_cast.restype = _DscTensor_p
 #                           dsc_tensor *__restrict x,
 #                           dsc_device_type new_device = DSC_DEFAULT_DEVICE);
 def _dsc_to(
-    ctx: _DscCtx, x: _DscTensor_p, device: c_int8 = _DSC_DEFAULT_DEVICE
+    ctx: _DscCtx, x: _DscTensor_p, device: Device
 ) -> _DscTensor_p:
-    return _lib.dsc_to(ctx, x, device)
+    return _lib.dsc_to(ctx, x, c_int8(device.value))
 
 
 _lib.dsc_to.argtypes = [_DscCtx, _DscTensor_p, c_int8]
@@ -745,87 +783,3 @@ def _dsc_min(
 
 _lib.dsc_min.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_bool]
 _lib.dsc_min.restype = _DscTensor_p
-
-
-# extern dsc_tensor *dsc_fft(dsc_ctx *ctx,
-#                            const dsc_tensor *DSC_RESTRICT x,
-#                            dsc_tensor *DSC_RESTRICT out,
-#                            int n = -1,
-#                            int axis = -1);
-def _dsc_fft(
-    ctx: _DscCtx, x: _DscTensor_p, out: _OptionalTensor, n: int, axis: int
-) -> _DscTensor_p:
-    return _lib.dsc_fft(ctx, x, out, c_int(n), c_int(axis))
-
-
-_lib.dsc_fft.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_int]
-_lib.dsc_fft.restype = _DscTensor_p
-
-
-# extern dsc_tensor *dsc_ifft(dsc_ctx *ctx,
-#                             const dsc_tensor *DSC_RESTRICT x,
-#                             dsc_tensor *DSC_RESTRICT out,
-#                             int n = -1,
-#                             int axis = -1);
-def _dsc_ifft(
-    ctx: _DscCtx, x: _DscTensor_p, out: _OptionalTensor, n: int, axis: int
-) -> _DscTensor_p:
-    return _lib.dsc_ifft(ctx, x, out, c_int(n), c_int(axis))
-
-
-_lib.dsc_ifft.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_int]
-_lib.dsc_ifft.restype = _DscTensor_p
-
-
-# extern dsc_tensor *dsc_rfft(dsc_ctx *ctx,
-#                             const dsc_tensor *DSC_RESTRICT x,
-#                             dsc_tensor *DSC_RESTRICT out,
-#                             int n = -1,
-#                             int axis = -1);
-def _dsc_rfft(
-    ctx: _DscCtx, x: _DscTensor_p, out: _OptionalTensor, n: int, axis: int
-) -> _DscTensor_p:
-    return _lib.dsc_rfft(ctx, x, out, c_int(n), c_int(axis))
-
-
-_lib.dsc_rfft.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_int]
-_lib.dsc_rfft.restype = _DscTensor_p
-
-
-# extern dsc_tensor *dsc_irfft(dsc_ctx *ctx,
-#                              const dsc_tensor *DSC_RESTRICT x,
-#                              dsc_tensor *DSC_RESTRICT out,
-#                              int n = -1,
-#                              int axis = -1);
-def _dsc_irfft(
-    ctx: _DscCtx, x: _DscTensor_p, out: _OptionalTensor, n: int, axis: int
-) -> _DscTensor_p:
-    return _lib.dsc_irfft(ctx, x, out, c_int(n), c_int(axis))
-
-
-_lib.dsc_irfft.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_int]
-_lib.dsc_irfft.restype = _DscTensor_p
-
-
-# extern dsc_tensor *dsc_fftfreq(dsc_ctx *ctx,
-#                                int n,
-#                                f64 d = 1.,
-#                                dsc_dtype dtype = DSC_DEFAULT_TYPE);
-def _dsc_fftfreq(ctx: _DscCtx, n: int, d: float, dtype: Dtype) -> _DscTensor_p:
-    return _lib.dsc_fftfreq(ctx, c_int(n), c_double(d), c_uint8(dtype.value))
-
-
-_lib.dsc_fftfreq.argtypes = [_DscCtx, c_int, c_double, c_uint8]
-_lib.dsc_fftfreq.restype = _DscTensor_p
-
-
-# extern dsc_tensor *dsc_rfftfreq(dsc_ctx *ctx,
-#                                 int n,
-#                                 f64 d = 1.,
-#                                 dsc_dtype dtype = DSC_DEFAULT_TYPE);
-def _dsc_rfftfreq(ctx: _DscCtx, n: int, d: float, dtype: Dtype) -> _DscTensor_p:
-    return _lib.dsc_rfftfreq(ctx, c_int(n), c_double(d), c_uint8(dtype.value))
-
-
-_lib.dsc_rfftfreq.argtypes = [_DscCtx, c_int, c_double, c_uint8]
-_lib.dsc_rfftfreq.restype = _DscTensor_p

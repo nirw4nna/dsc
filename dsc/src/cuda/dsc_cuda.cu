@@ -1,4 +1,4 @@
-// Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+// Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 // All rights reserved.
 //
 // This code is licensed under the terms of the 3-clause BSD license
@@ -169,7 +169,8 @@ struct binary_params {
 };
 
 template<int N, int Cur = 0>
-DSC_CUDA_FUNC DSC_INLINE void unroll_index(const int i, int *unrolled, const int *shape, const int prod = 1) {
+static DSC_CUDA_FUNC DSC_INLINE void unroll_index(const int i, int *unrolled,
+                                                  const int *shape, const int prod = 1) {
     if constexpr (Cur == N - 1) {
         unrolled[Cur] = i / prod;
     } else {
@@ -179,7 +180,7 @@ DSC_CUDA_FUNC DSC_INLINE void unroll_index(const int i, int *unrolled, const int
 }
 
 template<int N, int Cur = 0>
-DSC_CUDA_FUNC DSC_INLINE int compute_index(const int *unrolled_i, const int *stride) {
+static DSC_CUDA_FUNC DSC_INLINE int compute_index(const int *unrolled_i, const int *stride) {
     if constexpr (Cur == N) {
         return 0;
     } else {
@@ -187,12 +188,12 @@ DSC_CUDA_FUNC DSC_INLINE int compute_index(const int *unrolled_i, const int *str
     }
 }
 
-template<typename T, typename Op, bool xa_scalar = false, bool xb_scalar = false, bool shape_matches = false>
-static DSC_CUDA_KERNEL void k_binary_op(const T *xa,
-                                        const T *xb,
-                                        T *out,
-                                        const int n,
-                                        Op op,
+template<typename T, typename Op,
+         bool xa_scalar = false,
+         bool xb_scalar = false,
+         bool shape_matches = false>
+static DSC_CUDA_KERNEL void k_binary_op(const T *xa, const T *xb, T *out,
+                                        const int n, Op op,
                                         const binary_params params = {}) {
     DSC_CUDA_TID();
     DSC_CUDA_STRIDE();
@@ -208,7 +209,7 @@ static DSC_CUDA_KERNEL void k_binary_op(const T *xa,
             // In this case we need to apply broadcasting
             int unrolled_i[DSC_MAX_DIMS];
 
-            unroll_index<DSC_MAX_DIMS>(i, unrolled_i, params.out_shape);
+            unroll_index<DSC_MAX_DIMS>((int) i, unrolled_i, params.out_shape);
             const int xa_idx = compute_index<DSC_MAX_DIMS>(unrolled_i, params.xa_stride);
             const int xb_idx = compute_index<DSC_MAX_DIMS>(unrolled_i, params.xb_stride);
 
@@ -661,3 +662,32 @@ void dsc_cuda_clip(dsc_device *,
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
     }
 }
+
+// ============================================================
+// Unary Operations Along Axis
+
+void dsc_cuda_sum(dsc_device *,
+                  const dsc_tensor *DSC_RESTRICT x,
+                  dsc_tensor *DSC_RESTRICT out,
+                  const int axis_idx) {
+    switch (out->dtype) {
+        case F32: {
+    
+            break;
+        }
+        case F64: {
+
+            break;
+        }
+        case C32: {
+
+            break;
+        }
+        case C64: {
+
+            break;
+        }
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
+    }
+}
+

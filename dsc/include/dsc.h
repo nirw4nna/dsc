@@ -1,4 +1,4 @@
-// Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+// Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 // All rights reserved.
 //
 // This code is licensed under the terms of the 3-clause BSD license
@@ -88,8 +88,9 @@ static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 
 static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 
-#define DSC_VALUE_NONE          INT32_MAX
-#define DSC_TENSOR_DATA(T, PTR) T *PTR##_data = (T *) (PTR)->buf->data
+#define DSC_VALUE_NONE            INT32_MAX
+#define DSC_TENSOR_DATA(T, PTR)   T *PTR##_data = (T *) (PTR)->buf->data
+#define DSC_TENSOR_DATA_R(T, PTR) T *DSC_RESTRICT PTR##_data = (T *) (PTR)->buf->data
 
 #define dsc_tensor_dim(PTR, dim)    (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (PTR)->n_dim + (dim)))
 #define dsc_new_like(CTX, PTR)      (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[dsc_tensor_dim(PTR, 0)], (PTR)->dtype, (PTR)->device))
@@ -156,6 +157,18 @@ extern usize dsc_used_mem(dsc_ctx *ctx);
 extern void dsc_print_mem_usage(dsc_ctx *ctx);
 
 extern void dsc_set_default_device(dsc_ctx *ctx, dsc_device_type device);
+
+extern void dsc_cuda_set_device(dsc_ctx *ctx, int device);
+
+extern bool dsc_cuda_available(dsc_ctx *);
+
+extern int dsc_cuda_devices(dsc_ctx *);
+
+extern int dsc_cuda_dev_capability(dsc_ctx *, int device);
+
+extern usize dsc_cuda_dev_mem(dsc_ctx *, int device);
+
+extern void dsc_cuda_sync(dsc_ctx *);
 
 // ============================================================
 // Tracing

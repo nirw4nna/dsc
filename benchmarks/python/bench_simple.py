@@ -1,4 +1,4 @@
-# Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+# Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 # All rights reserved.
 #
 # This code is licensed under the terms of the 3-clause BSD license
@@ -76,13 +76,13 @@ def bench(op, *args, **kwargs) -> float:
 def bench_binary(show_plot: bool = True):
     ops = {
         'add': (np.add, dsc.add),
-        'addc': (np.add, dsc.add),
+        # 'addc': (np.add, dsc.add),
         'sub': (np.subtract, dsc.sub),
-        'subc': (np.subtract, dsc.sub),
+        # 'subc': (np.subtract, dsc.sub),
         'mul': (np.multiply, dsc.mul),
-        'mulc': (np.multiply, dsc.mul),
+        # 'mulc': (np.multiply, dsc.mul),
         'true_div': (np.true_divide, dsc.true_div),
-        'true_divc': (np.true_divide, dsc.true_div),
+        # 'true_divc': (np.true_divide, dsc.true_div),
         # For plotting purposes, it's better not to include pow with the other functions as the time it takes to evaluate
         # it is way higher than all the other functions. This will cause the graph not to show the actual variance
         # between the two implementations in a meaningful way for all the other functions.
@@ -95,15 +95,16 @@ def bench_binary(show_plot: bool = True):
         np_op, dsc_op = ops[op_name]
         is_scalar = op_name.endswith('c')
         for dtype in DTYPES:
-            shape = [60, 60_000]
-            a = random_nd(shape, dtype)
+            shape_a = [60, 60_000]
+            shape_b = [1, 60_000]
+            a = random_nd(shape_a, dtype)
             if is_scalar:
                 if dtype == np.complex64 or dtype == np.complex128:
                     b = complex(random.random(), random.random())
                 else:
                     b = random.random()
             else:
-                b = random_nd(shape, dtype)
+                b = random_nd(shape_b, dtype)
             out = np.empty_like(a)
 
             a_dsc = dsc.from_numpy(a)
@@ -194,6 +195,6 @@ def bench_unary_along_axis(show_plot: bool = True):
 
 
 if __name__ == '__main__':
-    # bench_binary(show_plot=True)
+    bench_binary(show_plot=True)
     # bench_unary(show_plot=True)
-    bench_unary_along_axis(show_plot=True)
+    # bench_unary_along_axis(show_plot=True)

@@ -1,4 +1,4 @@
-// Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+// Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 // All rights reserved.
 //
 // This code is licensed under the terms of the 3-clause BSD license
@@ -7,6 +7,8 @@
 #pragma once
 
 #include "dsc.h"
+
+#if defined(DSC_CUDA)
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshadow"
@@ -31,7 +33,6 @@
         } \
     } while (0)
 
-#define dsc_cuda_sync()                     DSC_CUDA_FAIL_ON_ERROR(cudaDeviceSynchronize())
 #define dsc_cuda_copy_from(DST, SRC, nb)    DSC_CUDA_FAIL_ON_ERROR(cudaMemcpy((DST), (SRC), (nb), cudaMemcpyDeviceToHost))
 #define dsc_cuda_copy_to(DST, SRC, nb)      DSC_CUDA_FAIL_ON_ERROR(cudaMemcpy((DST), (SRC), (nb), cudaMemcpyHostToDevice))
 
@@ -53,7 +54,7 @@ static DSC_INLINE int dsc_cuda_devices() {
     return devices;
 }
 
-static DSC_INLINE int dsc_cuda_dev_capabilities(const int dev) {
+static DSC_INLINE int dsc_cuda_dev_capability(const int dev) {
     cudaDeviceProp prop{};
     DSC_CUDA_FAIL_ON_ERROR(cudaGetDeviceProperties(&prop, dev));
     return prop.major * 100 + prop.minor * 10;
@@ -69,6 +70,10 @@ static DSC_INLINE usize dsc_cuda_dev_mem(const int dev) {
     cudaDeviceProp prop{};
     DSC_CUDA_FAIL_ON_ERROR(cudaGetDeviceProperties(&prop, dev));
     return prop.totalGlobalMem;
+}
+
+static DSC_INLINE void dsc_cuda_sync() {
+    DSC_CUDA_FAIL_ON_ERROR(cudaDeviceSynchronize());
 }
 
 extern void dsc_cuda_cast(dsc_device *, const dsc_tensor *DSC_RESTRICT x,
@@ -169,3 +174,34 @@ extern void dsc_cuda_clip(dsc_device *,
                           const dsc_tensor *DSC_RESTRICT x,
                           dsc_tensor *DSC_RESTRICT out,
                           f64 x_min, f64 x_max);
+
+// ============================================================
+// Unary Operations Along Axis
+
+extern void dsc_cuda_sum(dsc_device *,
+                         const dsc_tensor *DSC_RESTRICT x,
+                         dsc_tensor *DSC_RESTRICT out,
+                         int axis_idx);
+#else
+
+static DSC_INLINE int dsc_cuda_devices() {
+    return 0;
+}
+
+static DSC_INLINE int dsc_cuda_dev_capability(const int dev) {
+    DSC_UNUSED(dev);
+    return 0;
+}
+
+static DSC_INLINE void dsc_cuda_dev_name(const int dev, char *) {
+    DSC_UNUSED(dev);
+}
+
+static DSC_INLINE usize dsc_cuda_dev_mem(const int dev) {
+    DSC_UNUSED(dev);
+    return 0;
+}
+
+static DSC_INLINE void dsc_cuda_sync() {}
+
+#endif // DSC_CUDA

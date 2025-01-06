@@ -1,4 +1,4 @@
-// Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+// Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 // All rights reserved.
 //
 // This code is licensed under the terms of the 3-clause BSD license
@@ -30,19 +30,23 @@ static void cuda_dispose(dsc_device *dev) {
 
     const dsc_cuda_dev_info *info = (dsc_cuda_dev_info *) dev->extra_info;
 
+    DSC_CUDA_FAIL_ON_ERROR(cudaFree(info->randState));
+
     DSC_LOG_INFO("%s:%d device %s disposed",
                  DSC_DEVICE_NAMES[dev->type],
                  info->dev_idx,
                  info->name);
 }
 
-dsc_device *dsc_cuda_device(const usize mem_size, const int cuda_dev) {
+dsc_device *dsc_cuda_device(usize mem_size, const int cuda_dev) {
     static dsc_cuda_dev_info extra = {
         .name = {},
         .randState = {},
         .dev_idx = cuda_dev,
     };
-
+    // Allocate 90% of the device memory at most (is this too much?)
+    const usize max_mem = (usize) (0.9 * (f64) dsc_cuda_dev_mem(cuda_dev));
+    mem_size = mem_size < max_mem ? mem_size : DSC_ALIGN(max_mem - (DSC_DEVICE_CUDA_ALIGN - 1), DSC_DEVICE_CUDA_ALIGN);
     static dsc_device dev = {
         .used_nodes = {},
         .free_nodes = {},
@@ -64,7 +68,7 @@ dsc_device *dsc_cuda_device(const usize mem_size, const int cuda_dev) {
 
     k_init_random<<<1, DSC_CUDA_DEFAULT_THREADS>>>(extra.randState);
 
-    DSC_CUDA_FAIL_ON_ERROR(cudaDeviceSynchronize());
+    dsc_cuda_sync();
 
     DSC_CUDA_FAIL_ON_ERROR(cudaMalloc(&dev.device_mem, dev.mem_size));
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+// Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 // All rights reserved.
 //
 // This code is licensed under the terms of the 3-clause BSD license
@@ -10,7 +10,7 @@
 #include "dsc_device.h"
 #include "dsc_tracing.h"
 #include <cstdarg> // va_xxx
-
+#include <cstring> // memset, memcpy
 
 // This needs to be a macro otherwise the pointer assignments to out, xa and xb
 // would not work unless I pass them as pointers to pointers which is very ugly.
@@ -109,6 +109,7 @@
             DSC_LOG_FATAL("device %d is null", (CTX)->default_device);                \
     } while (0)
 
+#if defined(DSC_CUDA)
 #define DSC_DISPATCH(device, func, ...)                                      \
     do {                                                                     \
         const dsc_device_type dev_id = DSC_GET_DEV_ID(ctx, device);          \
@@ -120,6 +121,17 @@
         else                                                                 \
             DSC_LOG_FATAL("cannot dispatch to unknown device %d", (device)); \
     } while (0)
+#else
+#define DSC_DISPATCH(device, func, ...)                                      \
+    do {                                                                     \
+        const dsc_device_type dev_id = DSC_GET_DEV_ID(ctx, device);          \
+        DSC_GET_DEVICE(ctx, device);                                         \
+        if (dev_id == CPU)                                                   \
+            dsc_cpu_##func(dev, ##__VA_ARGS__);                              \
+        else                                                                 \
+            DSC_LOG_FATAL("cannot dispatch to unknown device %d", (device)); \
+    } while (0)
+#endif
 
 #define dsc_tensor_invalid(PTR)     (PTR)->ne <= 0
 #define dsc_tensor_set_invalid(PTR) (PTR)->ne = -1
@@ -144,14 +156,13 @@ dsc_ctx *dsc_ctx_init(const usize mem_size) {
 
     ctx->devices[0] = dsc_cpu_device(mem_size);
     ctx->device_lookup[CPU] = 0;
-
     // DSC supports a single CUDA device so for now the device with ID=1 will be the CUDA
-    // device with the highest compute capabilities (if any).
+    // device with the highest compute capability (if any).
     if (const int cuda_devices = dsc_cuda_devices(); cuda_devices > 0) {
-        int max_compute = dsc_cuda_dev_capabilities(0);
+        int max_compute = dsc_cuda_dev_capability(0);
         int max_dev = 0;
         for (int dev = 1; dev < cuda_devices; ++dev) {
-            if (const int dev_compute = dsc_cuda_dev_capabilities(dev); dev_compute > max_compute) {
+            if (const int dev_compute = dsc_cuda_dev_capability(dev); dev_compute > max_compute) {
                 max_compute = dev_compute;
                 max_dev = dev;
             }
@@ -221,6 +232,47 @@ void dsc_set_default_device(dsc_ctx *ctx,
                             const dsc_device_type device) {
     // Passing DEFAULT here restores the system settings
     ctx->default_device = device == DEFAULT ? DSC_DEFAULT_DEVICE : device;
+}
+
+void dsc_cuda_set_device(dsc_ctx *ctx, const int device) {
+    // To change the CUDA device I first have to go through all the tensors
+    // allocated on a CUDA device and mark them as invalid, then I have to dispose
+    // the old device and allocate a new one.
+    DSC_ASSERT(device < dsc_cuda_devices());
+
+    const int dev_idx = ctx->device_lookup[CUDA];
+    dsc_device *old_dev = ctx->devices[dev_idx];
+
+    for (int i = 0; i < DSC_MAX_OBJS; ++i) {
+        if (dsc_tensor *x = &ctx->tensors[i]; !(dsc_tensor_invalid(x)) && x->device == CUDA) {
+            // Note: changing device will invalidate ALL the tensors previously allocated on it.
+            dsc_tensor_set_invalid(x);
+        }
+    }
+
+    old_dev->dispose(old_dev);
+
+    ctx->devices[dev_idx] = dsc_cuda_device(old_dev->mem_size, device);
+}
+
+bool dsc_cuda_available(dsc_ctx *) {
+    return dsc_cuda_devices() > 0;
+}
+
+int dsc_cuda_devices(dsc_ctx *) {
+    return dsc_cuda_devices();
+}
+
+int dsc_cuda_dev_capability(dsc_ctx *, const int device) {
+    return dsc_cuda_dev_capability(device);
+}
+
+usize dsc_cuda_dev_mem(dsc_ctx *, const int device) {
+    return dsc_cuda_dev_mem(device);
+}
+
+void dsc_cuda_sync(dsc_ctx *) {
+    dsc_cuda_sync();
 }
 
 // ============================================================
@@ -415,8 +467,6 @@ dsc_tensor *dsc_to(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
     if (x->device == new_device) return x;
 
     if (x->device == CUDA) dsc_cuda_sync();
-    // Note: if we need to guard against CUDA this will not be possible, this functionality
-    // must either become a void macro or this must be a function of the device
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim,
                                      &x->shape[dsc_tensor_dim(x, 0)],
                                      x->dtype, new_device);
@@ -1322,53 +1372,19 @@ dsc_tensor *dsc_clip(dsc_ctx *ctx, const dsc_tensor *DSC_RESTRICT x,
 // ============================================================
 // Unary Operations Along Axis
 
-template <typename T>
-static DSC_INLINE void sum(const dsc_tensor *DSC_RESTRICT x,
-                           dsc_tensor *DSC_RESTRICT out,
-                           int axis_idx) {
-    // DSC_TENSOR_DATA(T, x);
-    // DSC_TENSOR_DATA(T, out);
-    //
-    // const int axis_n = x->shape[axis_idx];
-    // dsc_axis_iterator x_it(x, axis_idx, axis_n);
-    // dsc_for(i, out) {
-    //     T acc = dsc_zero<T>();
-    //     for (int j = 0; j < axis_n; ++j) {
-    //         acc = add_op()(acc, x_data[x_it.index()]);
-    //         x_it.next();
-    //     }
-    //     out_data[i] = acc;
-    // }
-}
 
 dsc_tensor *dsc_sum(dsc_ctx *ctx,
                     const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out,
                     const int axis,
                     const bool keep_dims) {
-    // Fixme: keepdims=false won't work if x->n_dim = 1 because a scalar cannot be returned
-    //  from this function, for now probably it makes sense to emulate this in Python
-    DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
+    // DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
 
     validate_reduce_params();
 
     const int axis_idx = dsc_tensor_dim(x, axis);
 
-    switch (out->dtype) {
-        case F32:
-            sum<f32>(x, out, axis_idx);
-            break;
-        case F64:
-            sum<f64>(x, out, axis_idx);
-            break;
-        case C32:
-            sum<c32>(x, out, axis_idx);
-            break;
-        case C64:
-            sum<c64>(x, out, axis_idx);
-            break;
-        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
-    }
+    DSC_DISPATCH(x->device, sum, x, out, axis_idx);
 
     return out;
 }

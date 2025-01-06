@@ -1,4 +1,4 @@
-# Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+# Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 # All rights reserved.
 #
 # This code is licensed under the terms of the 3-clause BSD license
@@ -26,13 +26,6 @@ from dsc.tensor import (
     conj,
     real,
     imag,
-    plan_fft,
-    fft,
-    ifft,
-    rfft,
-    irfft,
-    fftfreq,
-    rfftfreq,
     add,
     sub,
     mul,
@@ -55,3 +48,5 @@ from dsc.tensor import (
 )
 from dsc.dtype import Dtype
 from dsc.profiler import profile, start_recording, stop_recording
+from dsc.device import Device
+import dsc.cuda as cuda

@@ -1,4 +1,4 @@
-// Copyright (c) 2024, Christian Gilli <christian.gilli@dspcraft.com>
+// Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
 // All rights reserved.
 //
 // This code is licensed under the terms of the 3-clause BSD license
@@ -432,6 +432,50 @@ void dsc_cpu_clip(dsc_device *,
             unary_op<c64>(x, out,
                      cpu_clip_op(dsc_complex(c64, x_min, dsc_zero<f64>()),
                                  dsc_complex(c64, x_max, dsc_zero<f64>())));
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
+    }
+}
+
+// ============================================================
+// Unary Operations Along Axis
+
+template <typename T>
+static DSC_INLINE void sum(const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT out,
+                           const int axis_idx) {
+    DSC_TENSOR_DATA_R(T, x);
+    DSC_TENSOR_DATA_R(T, out);
+
+    const int axis_n = x->shape[axis_idx];
+    dsc_axis_iterator x_it(x, axis_idx, axis_n);
+    dsc_for(i, out) {
+        T acc = dsc_zero<T>();
+        for (int j = 0; j < axis_n; ++j) {
+            acc = cpu_add_op()(acc, x_data[x_it.index()]);
+            x_it.next();
+        }
+        out_data[i] = acc;
+    }
+}
+
+void dsc_cpu_sum(dsc_device *,
+                 const dsc_tensor *DSC_RESTRICT x,
+                 dsc_tensor *DSC_RESTRICT out,
+                 const int axis_idx) {
+    // TODO: I'd like to have a generic 'reduce' routine instead of defining each reduction explicitly
+    switch (out->dtype) {
+        case F32:
+            sum<f32>(x, out, axis_idx);
+            break;
+        case F64:
+            sum<f64>(x, out, axis_idx);
+            break;
+        case C32:
+            sum<c32>(x, out, axis_idx);
+            break;
+        case C64:
+            sum<c64>(x, out, axis_idx);
             break;
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
     }
