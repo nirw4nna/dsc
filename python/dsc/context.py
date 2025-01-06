@@ -5,7 +5,7 @@
 # (https://opensource.org/license/bsd-3-clause).
 
 from ._bindings import _dsc_ctx_init, _dsc_ctx_free, _dsc_set_default_device
-from .device import Device
+from .device import DeviceType, _get_device
 import psutil
 
 _ctx_instance = None
@@ -43,5 +43,5 @@ def init(mem_size: int):
         raise RuntimeWarning('Context already initialized')
 
 
-def set_default_device(device: Device):
-    _dsc_set_default_device(_get_ctx(), device)
+def set_default_device(device: DeviceType):
+    _dsc_set_default_device(_get_ctx(), _get_device(device))
