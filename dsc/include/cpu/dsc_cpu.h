@@ -23,6 +23,26 @@ extern void dsc_cpu_arange(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
 extern void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
+// ============================================================
+// Indexing and Slicing
+//
+
+extern void dsc_cpu_get_slice(dsc_device *,
+                              const dsc_tensor *DSC_RESTRICT x,
+                              dsc_tensor *DSC_RESTRICT out,
+                              int n_slices, const dsc_slice *slices);
+
+extern void dsc_cpu_set_slice(dsc_device *,
+                              dsc_tensor *DSC_RESTRICT xa,
+                              bool xa_scalar,
+                              const dsc_tensor *DSC_RESTRICT xb,
+                              bool xb_scalar,
+                              int n_slices,
+                              const dsc_slice *slices);
+
+// ============================================================
+// Binary Operations
+
 extern void dsc_cpu_add(dsc_device *,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
@@ -47,6 +67,9 @@ extern void dsc_cpu_pow(dsc_device *,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
+
+// ============================================================
+// Unary Operations
 
 extern void dsc_cpu_cos(dsc_device *,
                         const dsc_tensor *DSC_RESTRICT x,

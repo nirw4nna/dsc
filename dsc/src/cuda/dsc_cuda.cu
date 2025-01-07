@@ -5,6 +5,7 @@
 // (https://opensource.org/license/bsd-3-clause).
 
 #include "cuda/dsc_cuda.h"
+#include "cuda/dsc_iter.h"
 #include "cuda/dsc_ops.h"
 #include "dsc_device.h"
 
@@ -14,7 +15,7 @@ static DSC_CUDA_KERNEL void k_cast_op(const Tx *DSC_RESTRICT x,
     DSC_CUDA_TID();
     DSC_CUDA_STRIDE();
 
-    for (size i = tid; i < n; i += stride) {
+    for (int i = tid; i < n; i += stride) {
         out[i] = cuda_cast_op().operator()<Tx, To>(x[i]);
     }
 }
@@ -78,7 +79,7 @@ static DSC_CUDA_KERNEL void k_assign_op(T *DSC_RESTRICT x, const int n,
     DSC_CUDA_TID();
     DSC_CUDA_STRIDE();
 
-    for (size i = tid; i < n; i += stride) {
+    for (int i = tid; i < n; i += stride) {
         x[i] = cuda_add_op()(start, cuda_mul_op()(step, (T) i));
     }
 }
@@ -129,7 +130,7 @@ static DSC_CUDA_KERNEL void k_randn(curandState *state,
 
     curandState s = state[tid];
 
-    for (size i = tid; i < n; i += stride) {
+    for (int i = tid; i < n; i += stride) {
         if constexpr (dsc_is_type<T, f32>()) {
             x[i] = curand_normal(&s);
         } else if constexpr (dsc_is_type<T, f64>()) {
@@ -157,6 +158,169 @@ void dsc_cuda_randn(dsc_device *dev, dsc_tensor *DSC_RESTRICT x) {
             break;
         }
         DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
+    }
+}
+
+// ============================================================
+// Indexing and Slicing
+
+struct slicing_params {
+    dsc_slice slices[DSC_MAX_DIMS]{};
+    int shape[DSC_MAX_DIMS]{};
+    int stride[DSC_MAX_DIMS]{};
+    int n_dim, n_slices;
+};
+
+template<typename T>
+static DSC_CUDA_KERNEL void k_get_slice(const T *DSC_RESTRICT x,
+                                        T *DSC_RESTRICT out,
+                                        const int n,
+                                        slicing_params params) {
+    DSC_CUDA_TID();
+    DSC_CUDA_STRIDE();
+
+    if (tid >= n) return;
+
+    dsc_slice_iterator it(params.shape, params.stride,
+                            params.n_dim, params.n_slices,
+                            params.slices);
+
+    it.advance(tid);
+
+    if (!it.has_next()) return;
+    
+    for (int i = tid; i < n && it.has_next(); i += stride) {
+        out[i] = x[it.index()];
+        it.advance(stride);
+    }
+}
+
+void dsc_cuda_get_slice(dsc_device *,
+                        const dsc_tensor *DSC_RESTRICT x,
+                        dsc_tensor *DSC_RESTRICT out,
+                        const int n_slices, const dsc_slice *slices) {
+    slicing_params params{.n_dim = x->n_dim, .n_slices = n_slices};
+    memcpy(params.shape, x->shape, DSC_MAX_DIMS * sizeof(*x->shape));
+    memcpy(params.stride, x->stride, DSC_MAX_DIMS * sizeof(*x->stride));
+    memcpy(params.slices, slices, n_slices * sizeof(*slices));
+
+    const int n = out->ne;
+    switch (out->dtype) {
+        case F32: {
+            DSC_TENSOR_DATA_R(f32, x);
+            DSC_TENSOR_DATA_R(f32, out);
+            k_get_slice<f32><<<DSC_CUDA_BLOCKS(n),
+                               DSC_CUDA_DEFAULT_THREADS>>>(x_data, out_data, n, params);
+            break;
+        }
+        case F64: {
+            DSC_TENSOR_DATA_R(f64, x);
+            DSC_TENSOR_DATA_R(f64, out);
+            k_get_slice<f64><<<DSC_CUDA_BLOCKS(n),
+                               DSC_CUDA_DEFAULT_THREADS>>>(x_data, out_data, n, params);
+            break;
+        }
+        case C32: {
+            DSC_TENSOR_DATA_R(c32, x);
+            DSC_TENSOR_DATA_R(c32, out);
+            k_get_slice<c32><<<DSC_CUDA_BLOCKS(n),
+                               DSC_CUDA_DEFAULT_THREADS>>>(x_data, out_data, n, params);
+            break;
+        }
+        case C64: {
+            DSC_TENSOR_DATA_R(c64, x);
+            DSC_TENSOR_DATA_R(c64, out);
+            k_get_slice<c64><<<DSC_CUDA_BLOCKS(n),
+                               DSC_CUDA_DEFAULT_THREADS>>>(x_data, out_data, n, params);
+            break;
+        }
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
+    }
+
+}
+
+template<typename T>
+static DSC_CUDA_KERNEL void k_set_slice(T *DSC_RESTRICT xa,
+                                        const T *DSC_RESTRICT xb,
+                                        const bool xb_scalar,
+                                        const int n, slicing_params params) {
+    DSC_CUDA_TID();
+    DSC_CUDA_STRIDE();
+
+    if (tid >= n) return;
+
+    dsc_slice_iterator it(params.shape, params.stride,
+                          params.n_dim, params.n_slices,
+                          params.slices);
+
+    it.advance(tid);
+
+    if (!it.has_next()) return;
+
+    for (int i = tid; i < n && it.has_next(); i += stride) {
+        if (xb_scalar) {
+            // TODO: (1)
+            xa[it.index()] = xb[0];
+        } else {
+            xa[it.index()] = xb[i];
+        }
+        it.advance(stride);
+    }
+}
+
+void dsc_cuda_set_slice(dsc_device *dev,
+                        dsc_tensor *DSC_RESTRICT xa,
+                        const bool xa_scalar,
+                        const dsc_tensor *DSC_RESTRICT xb,
+                        const bool xb_scalar,
+                        const int n_slices, const dsc_slice *slices) {
+    if (xa_scalar) {
+        int offset = 0;
+        for (int i = 0; i < n_slices; ++i)
+            offset += (slices[i].start * xa->stride[dsc_tensor_dim(xa, i)]);
+
+        DSC_TENSOR_DATA_R(byte, xa);
+        DSC_TENSOR_DATA_R(void, xb);
+        dev->memcpy(xa_data + (offset * DSC_DTYPE_SIZE[xa->dtype]),
+                    xb_data, DSC_DTYPE_SIZE[xa->dtype], ON_DEVICE);
+    } else {
+        slicing_params params{.n_dim = xa->n_dim, .n_slices = n_slices};
+        memcpy(params.shape, xa->shape, DSC_MAX_DIMS * sizeof(*xa->shape));
+        memcpy(params.stride, xa->stride, DSC_MAX_DIMS * sizeof(*xa->stride));
+        memcpy(params.slices, slices, n_slices * sizeof(*slices));
+
+        const int n = xa->ne;
+        switch (xa->dtype) {
+            case F32: {
+                DSC_TENSOR_DATA_R(f32, xa);
+                DSC_TENSOR_DATA_R(f32, xb);
+                k_set_slice<f32><<<DSC_CUDA_BLOCKS(n),
+                                   DSC_CUDA_DEFAULT_THREADS>>>(xa_data, xb_data, xb_scalar, n, params);
+                break;
+            }
+            case F64: {
+                DSC_TENSOR_DATA_R(f64, xa);
+                DSC_TENSOR_DATA_R(f64, xb);
+                k_set_slice<f64><<<DSC_CUDA_BLOCKS(n),
+                                   DSC_CUDA_DEFAULT_THREADS>>>(xa_data, xb_data, xb_scalar, n, params);
+                break;
+            }
+            case C32: {
+                DSC_TENSOR_DATA_R(c32, xa);
+                DSC_TENSOR_DATA_R(c32, xb);
+                k_set_slice<c32><<<DSC_CUDA_BLOCKS(n),
+                                   DSC_CUDA_DEFAULT_THREADS>>>(xa_data, xb_data, xb_scalar, n, params);
+                break;
+            }
+            case C64: {
+                DSC_TENSOR_DATA_R(c64, xa);
+                DSC_TENSOR_DATA_R(c64, xb);
+                k_set_slice<c64><<<DSC_CUDA_BLOCKS(n),
+                                   DSC_CUDA_DEFAULT_THREADS>>>(xa_data, xb_data, xb_scalar, n, params);
+                break;
+            }
+            DSC_INVALID_CASE("unknown dtype=%d", xa->dtype);
+        }
     }
 }
 
@@ -198,7 +362,7 @@ static DSC_CUDA_KERNEL void k_binary_op(const T *xa, const T *xb, T *out,
     DSC_CUDA_TID();
     DSC_CUDA_STRIDE();
 
-    for (size i = tid; i < n; i += stride) {
+    for (int i = tid; i < n; i += stride) {
         if constexpr (xa_scalar) {
             out[i] = op(xa[0], xb[i]);
         } else if constexpr (xb_scalar) {
@@ -346,7 +510,7 @@ static DSC_CUDA_KERNEL void k_unary_op(const Tx *DSC_RESTRICT x,
     DSC_CUDA_TID();
     DSC_CUDA_STRIDE();
 
-    for (size i = tid; i < n; i += stride) {
+    for (int i = tid; i < n; i += stride) {
         out[i] = op(x[i]);
     }
 }

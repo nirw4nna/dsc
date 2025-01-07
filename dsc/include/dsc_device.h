@@ -196,9 +196,7 @@ extern dsc_device *dsc_cpu_device(usize mem_size);
 #if defined(DSC_CUDA)
     extern dsc_device *dsc_cuda_device(usize mem_size, int cuda_dev);
 #else
-    static DSC_INLINE dsc_device *dsc_cuda_device(const usize mem_size, const int cuda_dev) {
-        DSC_UNUSED(mem_size);
-        DSC_UNUSED(cuda_dev);
+    static DSC_INLINE dsc_device *dsc_cuda_device(usize, int) {
         return nullptr;
     }
 #endif

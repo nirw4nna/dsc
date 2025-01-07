@@ -23,8 +23,8 @@
 #define DSC_CUDA_MAX_BLOCKS         ((int) 256)
 
 #define DSC_CUDA_BLOCKS(n)    DSC_MIN(DSC_CUDA_MAX_BLOCKS, (((n) + (DSC_CUDA_DEFAULT_THREADS - 1)) / DSC_CUDA_DEFAULT_THREADS))
-#define DSC_CUDA_TID()        const size tid = threadIdx.x + blockIdx.x * blockDim.x
-#define DSC_CUDA_STRIDE()     const size stride = blockDim.x * gridDim.x
+#define DSC_CUDA_TID()        const int tid = (int) (threadIdx.x + blockIdx.x * blockDim.x)
+#define DSC_CUDA_STRIDE()     const int stride = (int) (blockDim.x * gridDim.x)
 
 #define DSC_CUDA_FAIL_ON_ERROR(err) \
     do { \
@@ -82,6 +82,23 @@ extern void dsc_cuda_cast(dsc_device *, const dsc_tensor *DSC_RESTRICT x,
 extern void dsc_cuda_arange(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
 extern void dsc_cuda_randn(dsc_device *dev, dsc_tensor *DSC_RESTRICT x);
+
+
+// ============================================================
+// Indexing and Slicing
+
+extern void dsc_cuda_get_slice(dsc_device *,
+                               const dsc_tensor *DSC_RESTRICT x,
+                               dsc_tensor *DSC_RESTRICT out,
+                               int n_slices, const dsc_slice *slices);
+
+extern void dsc_cuda_set_slice(dsc_device *,
+                               dsc_tensor *DSC_RESTRICT xa,
+                               bool xa_scalar,
+                               const dsc_tensor *DSC_RESTRICT xb,
+                               bool xb_scalar,
+                               int n_slices,
+                               const dsc_slice *slices);
 
 // ============================================================
 // Binary Operations
@@ -188,17 +205,13 @@ static DSC_INLINE int dsc_cuda_devices() {
     return 0;
 }
 
-static DSC_INLINE int dsc_cuda_dev_capability(const int dev) {
-    DSC_UNUSED(dev);
+static DSC_INLINE int dsc_cuda_dev_capability(int) {
     return 0;
 }
 
-static DSC_INLINE void dsc_cuda_dev_name(const int dev, char *) {
-    DSC_UNUSED(dev);
-}
+static DSC_INLINE void dsc_cuda_dev_name(int, char *) {}
 
-static DSC_INLINE usize dsc_cuda_dev_mem(const int dev) {
-    DSC_UNUSED(dev);
+static DSC_INLINE usize dsc_cuda_dev_mem(int) {
     return 0;
 }
 

@@ -7,7 +7,7 @@
 #include "cpu/dsc_cpu.h"
 #include "dsc_device.h"
 #include "cpu/dsc_ops.h"
-#include "dsc_iter.h"
+#include "cpu/dsc_iter.h"
 #include <random>
 
 
@@ -122,6 +122,103 @@ void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x) {
             fill_randn<f64>(x);
             break;
         DSC_INVALID_CASE("dtype must be real");
+    }
+}
+
+// ============================================================
+// Indexing and Slicing
+//
+
+template <typename T>
+static DSC_INLINE void copy_slice(const dsc_tensor *DSC_RESTRICT x,
+                                  dsc_tensor *DSC_RESTRICT out,
+                                  const int n_slices,
+                                  const dsc_slice *slices) {
+    DSC_TENSOR_DATA_R(T, out);
+    DSC_TENSOR_DATA_R(T, x);
+    dsc_slice_iterator x_it(x, n_slices, slices);
+
+    dsc_for(i, out) {
+        out_data[i] = x_data[x_it.index()];
+
+        x_it.next();
+    }
+}
+
+void dsc_cpu_get_slice(dsc_device *,
+                       const dsc_tensor *DSC_RESTRICT x,
+                       dsc_tensor *DSC_RESTRICT out,
+                       const int n_slices, const dsc_slice *slices) {
+    switch (out->dtype) {
+        case F32:
+            copy_slice<f32>(x, out, n_slices, slices);
+            break;
+        case F64:
+            copy_slice<f64>(x, out, n_slices, slices);
+            break;
+        case C32:
+            copy_slice<c32>(x, out, n_slices, slices);
+            break;
+        case C64:
+            copy_slice<c64>(x, out, n_slices, slices);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
+    }
+}
+
+template <typename T>
+static DSC_INLINE void set_slice(dsc_tensor *DSC_RESTRICT xa,
+                                 const bool xa_scalar,
+                                 const dsc_tensor *DSC_RESTRICT xb,
+                                 const bool xb_scalar,
+                                 const int n_slices, const dsc_slice *slices) {
+    DSC_TENSOR_DATA_R(T, xa);
+    DSC_TENSOR_DATA_R(T, xb);
+    if (xa_scalar) {
+        int offset = 0;
+        for (int i = 0; i < n_slices; ++i)
+            offset += (slices[i].start * xa->stride[dsc_tensor_dim(xa, i)]);
+
+        xa_data[offset] = xb_data[0];
+    } else if (xb_scalar) {
+        const T el = xb_data[0];
+
+        // TODO: (1)
+        for (dsc_slice_iterator xa_it(xa, n_slices, slices);
+             xa_it.has_next();
+             xa_it.next()) {
+            xa_data[xa_it.index()] = el;
+        }
+    } else {
+        int xb_idx = 0;
+        for (dsc_slice_iterator xa_it(xa, n_slices, slices);
+             xa_it.has_next();
+             xa_it.next()) {
+            xa_data[xa_it.index()] = xb_data[xb_idx++];
+        }
+    }
+}
+
+void dsc_cpu_set_slice(dsc_device *,
+                       dsc_tensor *DSC_RESTRICT xa,
+                       const bool xa_scalar,
+                       const dsc_tensor *DSC_RESTRICT xb,
+                       const bool xb_scalar,
+                       const int n_slices, const dsc_slice *slices) {
+    switch (xa->dtype) {
+        case F32:
+            set_slice<f32>(xa, xa_scalar, xb, xb_scalar, n_slices, slices);
+            break;
+        case F64:
+            set_slice<f64>(xa, xa_scalar, xb, xb_scalar, n_slices, slices);
+            break;
+        case C32:
+            set_slice<c32>(xa, xa_scalar, xb, xb_scalar, n_slices, slices);
+            break;
+        case C64:
+            set_slice<c64>(xa, xa_scalar, xb, xb_scalar, n_slices, slices);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", xa->dtype);
     }
 }
 

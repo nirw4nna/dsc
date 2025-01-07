@@ -6,6 +6,15 @@
 
 #pragma once
 
+// =============================================================== //
+// =========================== Notepad =========================== //
+// =============================================================== //
+// (1) When xb is scalar xa_data[xa_it.index()] = el; can sometime //
+//     be optimized as a simple memcpy (e.g. fill).                //
+// (2) Use the 'iterator' pattern also in CUDA (requires some      //
+//     benchmarking!).                                             //
+// =============================================================== //
+
 #include <cstdio>
 #include <cstdlib>
 #include "dsc_dtype.h"
@@ -89,13 +98,14 @@ static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 
 #define DSC_VALUE_NONE            INT32_MAX
-#define DSC_TENSOR_DATA(T, PTR)   T *PTR##_data = (T *) (PTR)->buf->data
-#define DSC_TENSOR_DATA_R(T, PTR) T *DSC_RESTRICT PTR##_data = (T *) (PTR)->buf->data
+#define DSC_TENSOR_DATA(T, X)   T *X##_data = (T *) (X)->buf->data
+#define DSC_TENSOR_DATA_R(T, X) T *DSC_RESTRICT X##_data = (T *) (X)->buf->data
 
-#define dsc_tensor_dim(PTR, dim)    (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (PTR)->n_dim + (dim)))
-#define dsc_new_like(CTX, PTR)      (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[dsc_tensor_dim(PTR, 0)], (PTR)->dtype, (PTR)->device))
-#define dsc_new_view(CTX, PTR)      (dsc_new_tensor((CTX), (PTR)->n_dim, &(PTR)->shape[dsc_tensor_dim(PTR, 0)], (PTR)->dtype, (PTR)->device, (PTR)->buf))
-#define dsc_for(idx, X)             for (int idx = 0; idx < (X)->ne; ++idx)
+#define dsc_tensor_dim(X, dim)    (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (X)->n_dim + (dim)))
+#define dsc_new_like(CTX, X)      (dsc_new_tensor((CTX), (X)->n_dim, &(X)->shape[dsc_tensor_dim(X, 0)], (X)->dtype, (X)->device))
+#define dsc_new_view(CTX, X)      (dsc_new_tensor((CTX), (X)->n_dim, &(X)->shape[dsc_tensor_dim(X, 0)], (X)->dtype, (X)->device, (X)->buf))
+#define dsc_for(idx, X)           for (int idx = 0; idx < (X)->ne; ++idx)
+#define dsc_is_scalar(X)          (X)->n_dim == 1 && (X)->shape[dsc_tensor_dim((X), -1)] == 1
 
 #if defined(__cplusplus)
 extern "C" {
@@ -278,12 +288,12 @@ extern dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
                                         const dsc_tensor *DSC_RESTRICT x,
                                         int slices...);
 
-extern void dsc_tensor_set_idx(dsc_ctx *,
+extern void dsc_tensor_set_idx(dsc_ctx *ctx,
                                dsc_tensor *DSC_RESTRICT xa,
                                const dsc_tensor *DSC_RESTRICT xb,
                                int indexes...);
 
-extern void dsc_tensor_set_slice(dsc_ctx *,
+extern void dsc_tensor_set_slice(dsc_ctx *ctx,
                                  dsc_tensor *DSC_RESTRICT xa,
                                  const dsc_tensor *DSC_RESTRICT xb,
                                  int slices...);

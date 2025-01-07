@@ -728,74 +728,62 @@ dsc_tensor *dsc_transpose(dsc_ctx *ctx,
 dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
                                const dsc_tensor *DSC_RESTRICT x,
                                const int indexes...) {
-    // DSC_ASSERT(x != nullptr);
-    // DSC_ASSERT((unsigned) indexes <= DSC_MAX_DIMS);
-    //
-    // if (indexes > x->n_dim) {
-    //     DSC_LOG_FATAL("too many indexes");
-    // }
-    //
-    // int el_idx[DSC_MAX_DIMS];
-    //
-    // std::va_list args;
-    // va_start(args, indexes);
-    // for (int i = 0; i < indexes; ++i) {
-    //     int idx = va_arg(args, int);
-    //     const int x_dim_i = x->shape[dsc_tensor_dim(x, i)];
-    //     // Negative indexes mean accessing from the end
-    //     if (idx < 0) idx += x_dim_i;
-    //
-    //     DSC_ASSERT((unsigned) idx < (unsigned) x_dim_i);
-    //
-    //     el_idx[i] = idx;
-    // }
-    // va_end(args);
-    //
-    // DSC_TRACE_GET_IDX(x, el_idx, indexes);
-    //
-    // // Since we are wrapping scalars the resulting tensor will be always at least 1D
-    // const int out_n_dim = x->n_dim == indexes ? 1 : x->n_dim - indexes;
-    // // If we are indexing a single element then of course the output shape will be just 1
-    // int out_shape[DSC_MAX_DIMS] = {1};
-    // if (x->n_dim > indexes) {
-    //     memcpy(out_shape, &x->shape[DSC_MAX_DIMS - out_n_dim], out_n_dim * sizeof(*x->shape));
-    // }
-    //
-    // dsc_tensor *out = dsc_new_tensor(ctx, out_n_dim, out_shape, x->dtype);
-    //
-    // int offset = 0;
-    // for (int i = 0; i < indexes; ++i) {
-    //     offset += (x->stride[dsc_tensor_dim(x, i)] * el_idx[i]);
-    // }
-    // const int stride = x->stride[dsc_tensor_dim(x, (indexes - 1))];
-    //
-    // memcpy(out->data, ((byte *) x->data) + (offset * DSC_DTYPE_SIZE[x->dtype]), stride * DSC_DTYPE_SIZE[x->dtype]);
-    //
-    // return out;
-    return nullptr;
-}
+    DSC_ASSERT(x != nullptr);
+    DSC_ASSERT((unsigned) indexes <= DSC_MAX_DIMS);
 
-template <typename T>
-static DSC_INLINE void copy_slice(const dsc_tensor *DSC_RESTRICT x,
-                                  dsc_tensor *DSC_RESTRICT out,
-                                  const int n_slices,
-                                  dsc_slice *slices) {
-    // DSC_TENSOR_DATA(T, out);
-    // DSC_TENSOR_DATA(T, x);
-    // dsc_slice_iterator x_it(x, n_slices, slices);
-    //
-    // dsc_for(i, out) {
-    //     out_data[i] = x_data[x_it.index()];
-    //
-    //     x_it.next();
-    // }
+    if (indexes > x->n_dim) {
+        DSC_LOG_FATAL("too many indexes");
+    }
+
+    int el_idx[DSC_MAX_DIMS];
+
+    std::va_list args;
+    va_start(args, indexes);
+    for (int i = 0; i < indexes; ++i) {
+        int idx = va_arg(args, int);
+        const int x_dim_i = x->shape[dsc_tensor_dim(x, i)];
+        // Negative indexes mean accessing from the end
+        if (idx < 0) idx += x_dim_i;
+
+        DSC_ASSERT((unsigned) idx < (unsigned) x_dim_i);
+
+        el_idx[i] = idx;
+    }
+    va_end(args);
+
+    // DSC_TRACE_GET_IDX(x, el_idx, indexes);
+
+    // Since we are wrapping scalars the resulting tensor will be always at least 1D
+    const int out_n_dim = x->n_dim == indexes ? 1 : x->n_dim - indexes;
+    // If we are indexing a single element then of course the output shape will be just 1
+    int out_shape[DSC_MAX_DIMS] = {1};
+    if (x->n_dim > indexes) {
+        memcpy(out_shape, &x->shape[DSC_MAX_DIMS - out_n_dim], out_n_dim * sizeof(*x->shape));
+    }
+
+    dsc_tensor *out = dsc_new_tensor(ctx, out_n_dim, out_shape, x->dtype, x->device);
+
+    int offset = 0;
+    for (int i = 0; i < indexes; ++i) {
+        offset += (x->stride[dsc_tensor_dim(x, i)] * el_idx[i]);
+    }
+
+    DSC_GET_DEVICE(ctx, x->device);
+
+    DSC_TENSOR_DATA(void, out);
+    DSC_TENSOR_DATA(byte, x);
+
+    dev->memcpy(out_data, x_data + (offset * DSC_DTYPE_SIZE[x->dtype]),
+                out->ne * DSC_DTYPE_SIZE[out->dtype], ON_DEVICE);
+
+    return out;
 }
 
 static DSC_INLINE void parse_slices(const dsc_tensor *DSC_RESTRICT x,
                                     dsc_slice *parsed_slices,
                                     bool *collapse_dim,
                                     const int slices,
-                                    std::va_list args) {
+                                    const std::va_list args) {
     for (int i = 0; i < slices; ++i) {
         dsc_slice slice = va_arg(args, dsc_slice);
         const int x_dim_i = x->shape[dsc_tensor_dim(x, i)];
@@ -861,7 +849,7 @@ dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
     parse_slices(x, el_slices, collapse_dim, slices, args);
     va_end(args);
 
-    DSC_TRACE_GET_SLICE(x, el_slices, slices);
+    // DSC_TRACE_GET_SLICE(x, el_slices, slices);
 
     int out_shape[DSC_MAX_DIMS];
     int out_n_dim = x->n_dim;
@@ -881,63 +869,14 @@ dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
         out_idx += 1;
     }
 
-    dsc_tensor *out = dsc_new_tensor(ctx, out_n_dim, out_shape, x->dtype);
+    dsc_tensor *out = dsc_new_tensor(ctx, out_n_dim, out_shape, x->dtype, x->device);
 
-    switch (out->dtype) {
-        case F32:
-            copy_slice<f32>(x, out, slices, el_slices);
-            break;
-        case F64:
-            copy_slice<f64>(x, out, slices, el_slices);
-            break;
-        case C32:
-            copy_slice<c32>(x, out, slices, el_slices);
-            break;
-        case C64:
-            copy_slice<c64>(x, out, slices, el_slices);
-            break;
-        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
-    }
+    DSC_DISPATCH(out->device, get_slice, x, out, slices, el_slices);
 
     return out;
 }
 
-template <typename T>
-static DSC_INLINE void tensor_set(dsc_tensor *DSC_RESTRICT xa,
-                                  const bool xa_scalar,
-                                  const dsc_tensor *DSC_RESTRICT xb,
-                                  const int n_slices,
-                                  const dsc_slice *slices) {
-    // DSC_TENSOR_DATA(T, xa);
-    // DSC_TENSOR_DATA(T, xb);
-    // // Todo: macro is_scalar
-    // if (xa_scalar) {
-    //     int offset = 0;
-    //     for (int i = 0; i < n_slices; ++i)
-    //         offset += (slices[i].start * xa->stride[dsc_tensor_dim(xa, i)]);
-    //
-    //     xa_data[offset] = xb_data[0];
-    // } else if (xb->n_dim == 1 && xb->shape[dsc_tensor_dim(xb, -1)] == 1) {
-    //     const T el = xb_data[0];
-    //
-    //     for (dsc_slice_iterator xa_it(xa, n_slices, slices);
-    //          xa_it.has_next();
-    //          xa_it.next()) {
-    //         xa_data[xa_it.index()] = el;
-    //     }
-    // } else {
-    //     int xb_idx = 0;
-    //     for (dsc_slice_iterator xa_it(xa, n_slices, slices);
-    //          xa_it.has_next();
-    //          xa_it.next()) {
-    //         xa_data[xa_it.index()] = xb_data[xb_idx];
-    //
-    //         xb_idx = (xb_idx + 1) % xb->ne;
-    //     }
-    // }
-}
-
-void dsc_tensor_set_idx(dsc_ctx *,
+void dsc_tensor_set_idx(dsc_ctx *ctx,
                         dsc_tensor *DSC_RESTRICT xa,
                         const dsc_tensor *DSC_RESTRICT xb,
                         const int indexes...) {
@@ -945,6 +884,7 @@ void dsc_tensor_set_idx(dsc_ctx *,
     DSC_ASSERT(xb != nullptr);
     DSC_ASSERT((unsigned) indexes <= (unsigned) xa->n_dim);
     DSC_ASSERT(xa->dtype == xb->dtype);
+    DSC_ASSERT(xa->device == xb->device);
 
     // Use slices so it's easier to iterate
     dsc_slice el_slices[DSC_MAX_DIMS];
@@ -965,7 +905,7 @@ void dsc_tensor_set_idx(dsc_ctx *,
     }
     va_end(args);
 
-    DSC_TRACE_SET_IDX(xa, xb, el_slices, indexes);
+    // DSC_TRACE_SET_IDX(xa, xb, el_slices, indexes);
 
     // If we do something like xa[2] and xa has more than one dimension then, the remaining
     // dimensions of xa and xb must be broadcastable together
@@ -973,7 +913,7 @@ void dsc_tensor_set_idx(dsc_ctx *,
     for (int i = indexes; i < xa->n_dim; ++i)
         xa_sub_shape[i - indexes] = xa->shape[dsc_tensor_dim(xa, i - indexes)];
 
-    const bool xb_scalar = xb->n_dim == 1 && xb->shape[dsc_tensor_dim(xb, -1)] == 1;
+    const bool xb_scalar = dsc_is_scalar(xb);
     const int xa_sub_ndim = xa->n_dim - indexes;
 
     if (xa_sub_ndim == 0) DSC_ASSERT(xb_scalar);
@@ -984,24 +924,10 @@ void dsc_tensor_set_idx(dsc_ctx *,
         for (int i = 0; i < xa_sub_ndim; ++i) DSC_ASSERT(xa_sub_shape[i] == xb->shape[dsc_tensor_dim(xb, i)]);
     }
 
-    switch (xa->dtype) {
-        case F32:
-            tensor_set<f32>(xa, xa_sub_ndim == 0, xb, indexes, el_slices);
-            break;
-        case F64:
-            tensor_set<f64>(xa, xa_sub_ndim == 0, xb, indexes, el_slices);
-            break;
-        case C32:
-            tensor_set<c32>(xa, xa_sub_ndim == 0, xb, indexes, el_slices);
-            break;
-        case C64:
-            tensor_set<c64>(xa, xa_sub_ndim == 0, xb, indexes, el_slices);
-            break;
-        DSC_INVALID_CASE("unknown dtype=%d", xa->dtype);
-    }
+    DSC_DISPATCH(xa->device, set_slice, xa, xa_sub_ndim == 0, xb, xb_scalar, indexes, el_slices);
 }
 
-void dsc_tensor_set_slice(dsc_ctx *,
+void dsc_tensor_set_slice(dsc_ctx *ctx,
                           dsc_tensor *DSC_RESTRICT xa,
                           const dsc_tensor *DSC_RESTRICT xb,
                           const int slices...) {
@@ -1009,6 +935,7 @@ void dsc_tensor_set_slice(dsc_ctx *,
     DSC_ASSERT(xb != nullptr);
     DSC_ASSERT((unsigned) slices <= (unsigned) xa->n_dim);
     DSC_ASSERT(xa->dtype == xb->dtype);
+    DSC_ASSERT(xa->device == xb->device);
 
     dsc_slice el_slices[DSC_MAX_DIMS];
 
@@ -1017,7 +944,7 @@ void dsc_tensor_set_slice(dsc_ctx *,
     parse_slices(xa, el_slices, nullptr, slices, args);
     va_end(args);
 
-    DSC_TRACE_SET_SLICE(xa, xb, el_slices, slices);
+    // DSC_TRACE_SET_SLICE(xa, xb, el_slices, slices);
 
     int xa_slice_shape[DSC_MAX_DIMS];
     for (int i = 0; i < xa->n_dim; ++i) {
@@ -1030,9 +957,7 @@ void dsc_tensor_set_slice(dsc_ctx *,
             xa_slice_shape[i] = xa->shape[dsc_tensor_dim(xa, i)];
         }
     }
-
-    const bool xb_scalar = xb->n_dim == 1 && xb->shape[dsc_tensor_dim(xb, -1)] == 1;
-
+    const bool xb_scalar = dsc_is_scalar(xb);
     if (!xb_scalar) {
         // Check whether xb is broadcastable with xa
         const int dims_to_compare = DSC_MIN(xa->n_dim, xb->n_dim);
@@ -1047,21 +972,7 @@ void dsc_tensor_set_slice(dsc_ctx *,
     for (int i = 0; i < xa->n_dim && xa_scalar; ++i)
         xa_scalar &= xa_slice_shape[i] == 1;
 
-    switch (xa->dtype) {
-        case F32:
-            tensor_set<f32>(xa, xa_scalar, xb, slices, el_slices);
-            break;
-        case F64:
-            tensor_set<f64>(xa, xa_scalar, xb, slices, el_slices);
-            break;
-        case C32:
-            tensor_set<c32>(xa, xa_scalar, xb, slices, el_slices);
-            break;
-        case C64:
-            tensor_set<c64>(xa, xa_scalar, xb, slices, el_slices);
-            break;
-        DSC_INVALID_CASE("unknown dtype=%d", xa->dtype);
-    }
+    DSC_DISPATCH(xa->device, set_slice, xa, xa_scalar, xb, xb_scalar, slices, el_slices);
 }
 
 // ============================================================

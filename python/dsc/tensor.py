@@ -245,17 +245,17 @@ class Tensor:
     ):
         wrapped_val = _wrap(value, self.dtype, self.device)
         if isinstance(key, int):
-            _dsc_tensor_set_idx(_get_ctx(), self.c_ptr, wrapped_val._c_ptr, key)
+            _dsc_tensor_set_idx(_get_ctx(), self.c_ptr, wrapped_val.c_ptr, key)
         elif isinstance(key, Tuple) and all(isinstance(i, int) for i in key):
             _dsc_tensor_set_idx(
                 _get_ctx(),
                 self.c_ptr,
-                wrapped_val._c_ptr,
+                wrapped_val.c_ptr,
                 *tuple(i for i in key),  # pyright: ignore[reportArgumentType]
             )
         elif isinstance(key, slice):
             _dsc_tensor_set_slice(
-                _get_ctx(), self.c_ptr, wrapped_val._c_ptr, _c_slice(key)
+                _get_ctx(), self.c_ptr, wrapped_val.c_ptr, _c_slice(key)
             )
         elif (isinstance(key, Tuple) and all(isinstance(s, slice) for s in key)) or (
             isinstance(key, Tuple)
@@ -264,7 +264,7 @@ class Tensor:
             _dsc_tensor_set_slice(
                 _get_ctx(),
                 self.c_ptr,
-                wrapped_val._c_ptr,
+                wrapped_val.c_ptr,
                 *tuple(_c_slice(s) for s in key),
             )
         else:
