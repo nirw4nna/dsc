@@ -328,56 +328,45 @@ void dsc_cuda_set_slice(dsc_device *dev,
 // Binary Operations
 
 struct binary_params {
-    int out_shape[DSC_MAX_DIMS];
-    int xa_stride[DSC_MAX_DIMS], xb_stride[DSC_MAX_DIMS];
+    int out_shape[DSC_MAX_DIMS]{};
+    int xa_stride[DSC_MAX_DIMS]{}, xb_stride[DSC_MAX_DIMS]{};
+    int n_dim;
 };
 
-template<int N, int Cur = 0>
-static DSC_CUDA_FUNC DSC_INLINE void unroll_index(const int i, int *unrolled,
-                                                  const int *shape, const int prod = 1) {
-    if constexpr (Cur == N - 1) {
-        unrolled[Cur] = i / prod;
-    } else {
-        unrolled[Cur] = (i / prod) % shape[Cur];
-        unroll_index<N, Cur + 1>(i, unrolled, shape, prod * shape[Cur]);
-    }
-}
-
-template<int N, int Cur = 0>
-static DSC_CUDA_FUNC DSC_INLINE int compute_index(const int *unrolled_i, const int *stride) {
-    if constexpr (Cur == N) {
-        return 0;
-    } else {
-        return unrolled_i[Cur] * stride[Cur] + compute_index<N, Cur + 1>(unrolled_i, stride);
-    }
-}
-
 template<typename T, typename Op,
-         bool xa_scalar = false,
-         bool xb_scalar = false,
-         bool shape_matches = false>
+         bool xa_scalar, bool xb_scalar, bool shape_matches>
 static DSC_CUDA_KERNEL void k_binary_op(const T *xa, const T *xb, T *out,
                                         const int n, Op op,
                                         const binary_params params = {}) {
     DSC_CUDA_TID();
     DSC_CUDA_STRIDE();
 
-    for (int i = tid; i < n; i += stride) {
-        if constexpr (xa_scalar) {
-            out[i] = op(xa[0], xb[i]);
-        } else if constexpr (xb_scalar) {
-            out[i] = op(xa[i], xb[0]);
-        } else if constexpr (shape_matches) {
-            out[i] = op(xa[i], xb[i]);
-        } else {
-            // In this case we need to apply broadcasting
-            int unrolled_i[DSC_MAX_DIMS];
+    if (tid >= n) return;
 
-            unroll_index<DSC_MAX_DIMS>((int) i, unrolled_i, params.out_shape);
-            const int xa_idx = compute_index<DSC_MAX_DIMS>(unrolled_i, params.xa_stride);
-            const int xb_idx = compute_index<DSC_MAX_DIMS>(unrolled_i, params.xb_stride);
+    if constexpr (!xa_scalar && !xb_scalar && !shape_matches) {
+        for (int i = tid; i < n; i += stride) {
+            int flat_idx = i;
+            int xa_offset = 0, xb_offset = 0;
 
-            out[i] = op(xa[xa_idx], xb[xb_idx]);
+            for (int idx = DSC_MAX_DIMS - 1; idx >= DSC_MAX_DIMS - params.n_dim; --idx) {
+                const int dim_idx = flat_idx % params.out_shape[idx];
+                flat_idx /= params.out_shape[idx];
+
+                xa_offset += dim_idx * params.xa_stride[idx];
+                xb_offset += dim_idx * params.xb_stride[idx];
+            }
+
+            out[i] = op(xa[xa_offset], xb[xb_offset]);
+        }
+    } else {
+        for (int i = tid; i < n; i += stride) {
+            if constexpr (xa_scalar) {
+                out[i] = op(xa[0], xb[i]);
+            } else if constexpr (xb_scalar) {
+                out[i] = op(xa[i], xb[0]);
+            } else if constexpr (shape_matches) {
+                out[i] = op(xa[i], xb[i]);
+            }
         }
     }
 }
@@ -420,7 +409,7 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
                                                                              n,
                                                                              op);
     } else {
-        binary_params params{};
+        binary_params params{.n_dim = out->n_dim};
         memcpy(params.out_shape, out->shape, DSC_MAX_DIMS * sizeof(*out->shape));
         memcpy(params.xa_stride, xa->stride, DSC_MAX_DIMS * sizeof(*xa->stride));
         memcpy(params.xb_stride, xb->stride, DSC_MAX_DIMS * sizeof(*xb->stride));

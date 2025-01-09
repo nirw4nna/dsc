@@ -783,7 +783,7 @@ static DSC_INLINE void parse_slices(const dsc_tensor *DSC_RESTRICT x,
                                     dsc_slice *parsed_slices,
                                     bool *collapse_dim,
                                     const int slices,
-                                    const std::va_list args) {
+                                    std::va_list args) {
     for (int i = 0; i < slices; ++i) {
         dsc_slice slice = va_arg(args, dsc_slice);
         const int x_dim_i = x->shape[dsc_tensor_dim(x, i)];
