@@ -339,7 +339,7 @@ class Tensor:
         return reshape(self, *shape)
 
 
-def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device) -> Tensor:
+def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device, data: ctypes.c_void_p = None) -> Tensor:
     n_dims = len(dims)
     if n_dims > _DSC_MAX_DIMS or n_dims < 1:
         raise RuntimeError(
@@ -347,9 +347,9 @@ def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device) -> Tenso
         )
 
     if n_dims == 1:
-        return Tensor(_dsc_tensor_1d(_get_ctx(), dtype, dims[0], device))
+        return Tensor(_dsc_tensor_1d(_get_ctx(), dtype, dims[0], device, data, Device.CPU))
     elif n_dims == 2:
-        return Tensor(_dsc_tensor_2d(_get_ctx(), dtype, dims[0], dims[1], device))
+        return Tensor(_dsc_tensor_2d(_get_ctx(), dtype, dims[0], dims[1], device, data, Device.CPU))
     elif n_dims == 3:
         return Tensor(
             _dsc_tensor_3d(
@@ -358,7 +358,9 @@ def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device) -> Tenso
                 dims[0],
                 dims[1],
                 dims[2],
-                device
+                device,
+                data,
+                Device.CPU
             )
         )
     else:
@@ -370,17 +372,19 @@ def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device) -> Tenso
                 dims[1],
                 dims[2],
                 dims[3],
-                device
+                device,
+                data,
+                Device.CPU
             )
         )
 
 
-def from_numpy(x: np.ndarray) -> Tensor:
+def from_numpy(x: np.ndarray, device: DeviceType = Device.DEFAULT) -> Tensor:
     if x.dtype not in NP_TO_DTYPE:
         raise RuntimeError(f'NumPy dtype {x.dtype} is not supported')
 
-    out = _create_tensor(NP_TO_DTYPE[x.dtype], x.shape, Device.CPU)
-    ctypes.memmove(out.data, x.ctypes.data, x.nbytes)
+    x_ptr = ctypes.cast(x.ctypes.data, ctypes.c_void_p)
+    out = _create_tensor(NP_TO_DTYPE[x.dtype], x.shape, _get_device(device), x_ptr)
     return out
 
 

@@ -54,6 +54,18 @@ struct cuda_add_op {
     }
 };
 
+struct cuda_atomic_add_op {
+    template<typename T>
+    DSC_CUDA_FUNC DSC_INLINE void operator()(T *x, const T val) const {
+        if constexpr (dsc_is_complex<T>()) {
+            atomicAdd(&x->real, val.real);
+            atomicAdd(&x->imag, val.imag);
+        } else {
+            atomicAdd(x, val);
+        }
+    }
+};
+
 struct cuda_sub_op {
     template<typename T>
     DSC_CUDA_FUNC DSC_INLINE DSC_STRICTLY_PURE T operator()(const T xa, const T xb) const {

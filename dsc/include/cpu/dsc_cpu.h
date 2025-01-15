@@ -30,7 +30,8 @@ extern void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 extern void dsc_cpu_get_slice(dsc_device *,
                               const dsc_tensor *DSC_RESTRICT x,
                               dsc_tensor *DSC_RESTRICT out,
-                              int n_slices, const dsc_slice *slices);
+                              int n_slices, const dsc_slice *slices,
+                              bool whole);
 
 extern void dsc_cpu_set_slice(dsc_device *,
                               dsc_tensor *DSC_RESTRICT xa,
@@ -38,7 +39,8 @@ extern void dsc_cpu_set_slice(dsc_device *,
                               const dsc_tensor *DSC_RESTRICT xb,
                               bool xb_scalar,
                               int n_slices,
-                              const dsc_slice *slices);
+                              const dsc_slice *slices,
+                              bool whole);
 
 // ============================================================
 // Binary Operations

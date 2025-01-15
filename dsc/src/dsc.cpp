@@ -58,38 +58,38 @@
         }                                                                                        \
     } while (0)
 
-#define validate_reduce_params()                                                                    \
-    do {                                                                                            \
-        DSC_ASSERT(x != nullptr);                                                                   \
-                                                                                                    \
-        const int axis_idx = dsc_tensor_dim(x, axis);                                               \
-        DSC_ASSERT(axis_idx < DSC_MAX_DIMS);                                                        \
-                                                                                                    \
-        int out_shape[DSC_MAX_DIMS];                                                                \
-        int out_ndim = x->n_dim;                                                                    \
-        if (keep_dims) {                                                                            \
-            memcpy(out_shape, x->shape, DSC_MAX_DIMS * sizeof(*out_shape));                         \
-            out_shape[axis_idx] = 1;                                                                \
-        } else {                                                                                    \
-            out_ndim--;                                                                             \
-            const int out_offset = DSC_MAX_DIMS - out_ndim;                                         \
-            memset(out_shape, 1, out_offset * sizeof(*out_shape));                                  \
-            for (int x_idx = DSC_MAX_DIMS - x->n_dim, out_idx = 0; x_idx < DSC_MAX_DIMS; ++x_idx) { \
-                if (x_idx == axis_idx)                                                              \
-                    continue;                                                                       \
-                                                                                                    \
-                out_shape[out_offset + out_idx] = x->shape[x_idx];                                  \
-                out_idx++;                                                                          \
-            }                                                                                       \
-        }                                                                                           \
-                                                                                                    \
-        if (out == nullptr) {                                                                       \
-            out = dsc_new_tensor(ctx, out_ndim, &out_shape[DSC_MAX_DIMS - out_ndim], x->dtype);     \
-        } else {                                                                                    \
-            DSC_ASSERT(out->dtype == x->dtype);                                                     \
-            DSC_ASSERT(out->n_dim == out_ndim);                                                     \
-            DSC_ASSERT(memcmp(out->shape, out_shape, DSC_MAX_DIMS * sizeof(*out_shape)) == 0);      \
-        }                                                                                           \
+#define validate_reduce_params()                                                                           \
+    do {                                                                                                   \
+        DSC_ASSERT(x != nullptr);                                                                          \
+                                                                                                           \
+        const int axis_idx = dsc_tensor_dim(x, axis);                                                      \
+        DSC_ASSERT(axis_idx < DSC_MAX_DIMS);                                                               \
+                                                                                                           \
+        int out_shape[DSC_MAX_DIMS];                                                                       \
+        int out_ndim = x->n_dim;                                                                           \
+        if (keep_dims) {                                                                                   \
+            memcpy(out_shape, x->shape, DSC_MAX_DIMS * sizeof(*out_shape));                                \
+            out_shape[axis_idx] = 1;                                                                       \
+        } else {                                                                                           \
+            out_ndim--;                                                                                    \
+            const int out_offset = DSC_MAX_DIMS - out_ndim;                                                \
+            memset(out_shape, 1, out_offset * sizeof(*out_shape));                                         \
+            for (int x_idx = DSC_MAX_DIMS - x->n_dim, out_idx = 0; x_idx < DSC_MAX_DIMS; ++x_idx) {        \
+                if (x_idx == axis_idx)                                                                     \
+                    continue;                                                                              \
+                                                                                                           \
+                out_shape[out_offset + out_idx] = x->shape[x_idx];                                         \
+                out_idx++;                                                                                 \
+            }                                                                                              \
+        }                                                                                                  \
+                                                                                                           \
+        if (out == nullptr) {                                                                              \
+            out = dsc_new_tensor(ctx, out_ndim, &out_shape[DSC_MAX_DIMS - out_ndim], x->dtype, x->device); \
+        } else {                                                                                           \
+            DSC_ASSERT(out->dtype == x->dtype);                                                            \
+            DSC_ASSERT(out->n_dim == out_ndim);                                                            \
+            DSC_ASSERT(memcmp(out->shape, out_shape, DSC_MAX_DIMS * sizeof(*out_shape)) == 0);             \
+        }                                                                                                  \
     } while (0)
 
 
@@ -307,7 +307,9 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                            const int *shape,
                            const dsc_dtype dtype,
                            const dsc_device_type device,
-                           dsc_data_buffer *buf) {
+                           dsc_data_buffer *buf,
+                           const void *DSC_RESTRICT data,
+                           const dsc_device_type data_device) {
     DSC_ASSERT((unsigned) n_dim <= DSC_MAX_DIMS);
 
     DSC_GET_DEVICE(ctx, device);
@@ -325,6 +327,13 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
     } else {
         new_tensor->buf = buf;
         new_tensor->buf->refs++;
+    }
+
+    if (data != nullptr) {
+        // Copy from data to this tensor buffer. Only support moving on device (cuda -> cuda) or from the cpu otherwise
+        // we risk making a copy from cuda when cuda is not supported.
+        DSC_ASSERT(data_device == CPU || data_device == device);
+        dev->memcpy(new_tensor->buf->data, data, ne * DSC_DTYPE_SIZE[dtype], data_device == device ? ON_DEVICE : TO_DEVICE);
     }
 
     new_tensor->dtype = dtype;
@@ -360,32 +369,40 @@ dsc_tensor *dsc_view(dsc_ctx *ctx, const dsc_tensor *x) {
 }
 
 dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx, const dsc_dtype dtype,
-                          const int dim1, const dsc_device_type device) {
+                          const int dim1, const dsc_device_type device,
+                          const void *DSC_RESTRICT data,
+                          const dsc_device_type data_device) {
     const int shape[DSC_MAX_DIMS] = {dim1};
-    return dsc_new_tensor(ctx, 1, shape, dtype, device);
+    return dsc_new_tensor(ctx, 1, shape, dtype, device, nullptr, data, data_device);
 }
 
 dsc_tensor *dsc_tensor_2d(dsc_ctx *ctx, const dsc_dtype dtype,
                           const int dim1, const int dim2,
-                          const dsc_device_type device) {
+                          const dsc_device_type device,
+                          const void *DSC_RESTRICT data,
+                          const dsc_device_type data_device) {
     const int shape[DSC_MAX_DIMS] = {dim1, dim2};
-    return dsc_new_tensor(ctx, 2, shape, dtype, device);
+    return dsc_new_tensor(ctx, 2, shape, dtype, device, nullptr, data, data_device);
 }
 
 dsc_tensor *dsc_tensor_3d(dsc_ctx *ctx, const dsc_dtype dtype,
                           const int dim1, const int dim2,
                           const int dim3,
-                          const dsc_device_type device) {
+                          const dsc_device_type device,
+                          const void *DSC_RESTRICT data,
+                          const dsc_device_type data_device) {
     const int shape[DSC_MAX_DIMS] = {dim1, dim2, dim3};
-    return dsc_new_tensor(ctx, 3, shape, dtype, device);
+    return dsc_new_tensor(ctx, 3, shape, dtype, device, nullptr, data, data_device);
 }
 
 dsc_tensor *dsc_tensor_4d(dsc_ctx *ctx, const dsc_dtype dtype,
                           const int dim1, const int dim2,
                           const int dim3, const int dim4,
-                          const dsc_device_type device) {
+                          const dsc_device_type device,
+                          const void *DSC_RESTRICT data,
+                          const dsc_device_type data_device) {
     const int shape[DSC_MAX_DIMS] = {dim1, dim2, dim3, dim4};
-    return dsc_new_tensor(ctx, 4, shape, dtype, device);
+    return dsc_new_tensor(ctx, 4, shape, dtype, device, nullptr, data, data_device);
 }
 
 dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx, const f32 val,
@@ -683,7 +700,7 @@ dsc_tensor *dsc_transpose(dsc_ctx *ctx,
         }
         va_end(args);
     }
-    DSC_TRACE_TRANSPOSE_OP(x, swap_axes);
+    // DSC_TRACE_TRANSPOSE_OP(x, swap_axes);
 
     int swapped_shape[DSC_MAX_DIMS], swapped_stride[DSC_MAX_DIMS];
     for (int i = 0; i < DSC_MAX_DIMS - x->n_dim; ++i) {
@@ -779,11 +796,13 @@ dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
     return out;
 }
 
-static DSC_INLINE void parse_slices(const dsc_tensor *DSC_RESTRICT x,
+static DSC_INLINE bool parse_slices(const dsc_tensor *DSC_RESTRICT x,
                                     dsc_slice *parsed_slices,
                                     bool *collapse_dim,
                                     const int slices,
                                     std::va_list args) {
+    bool whole = true;
+
     for (int i = 0; i < slices; ++i) {
         dsc_slice slice = va_arg(args, dsc_slice);
         const int x_dim_i = x->shape[dsc_tensor_dim(x, i)];
@@ -807,6 +826,10 @@ static DSC_INLINE void parse_slices(const dsc_tensor *DSC_RESTRICT x,
 
         DSC_ASSERT(slice.step != 0);
 
+        // If all the slices are in the form (:, :, :) the operation will be a simple 'whole tensor' operation
+        // (either a copy or a linear set/fill) that won't require extra logic, just a simple for-loop.
+        whole &= (slice.start == DSC_VALUE_NONE && slice.stop == DSC_VALUE_NONE && slice.step == DSC_VALUE_NONE);
+
         // If a field is marked using DSC_VALUE_NONE then replace it with the 'default' behaviour.
         // The default behaviour is controlled by step (see: https://numpy.org/doc/stable/user/basics.indexing.html)
         if (slice.step == DSC_VALUE_NONE) slice.step = 1;
@@ -829,6 +852,7 @@ static DSC_INLINE void parse_slices(const dsc_tensor *DSC_RESTRICT x,
 
         parsed_slices[i] = slice;
     }
+    return whole;
 }
 
 dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
@@ -846,7 +870,7 @@ dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
 
     std::va_list args;
     va_start(args, slices);
-    parse_slices(x, el_slices, collapse_dim, slices, args);
+    const bool whole = parse_slices(x, el_slices, collapse_dim, slices, args);
     va_end(args);
 
     // DSC_TRACE_GET_SLICE(x, el_slices, slices);
@@ -871,7 +895,7 @@ dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
 
     dsc_tensor *out = dsc_new_tensor(ctx, out_n_dim, out_shape, x->dtype, x->device);
 
-    DSC_DISPATCH(out->device, get_slice, x, out, slices, el_slices);
+    DSC_DISPATCH(out->device, get_slice, x, out, slices, el_slices, whole);
 
     return out;
 }
@@ -924,7 +948,7 @@ void dsc_tensor_set_idx(dsc_ctx *ctx,
         for (int i = 0; i < xa_sub_ndim; ++i) DSC_ASSERT(xa_sub_shape[i] == xb->shape[dsc_tensor_dim(xb, i)]);
     }
 
-    DSC_DISPATCH(xa->device, set_slice, xa, xa_sub_ndim == 0, xb, xb_scalar, indexes, el_slices);
+    DSC_DISPATCH(xa->device, set_slice, xa, xa_sub_ndim == 0, xb, xb_scalar, indexes, el_slices, false);
 }
 
 void dsc_tensor_set_slice(dsc_ctx *ctx,
@@ -941,7 +965,7 @@ void dsc_tensor_set_slice(dsc_ctx *ctx,
 
     std::va_list args;
     va_start(args, slices);
-    parse_slices(xa, el_slices, nullptr, slices, args);
+    const bool whole = parse_slices(xa, el_slices, nullptr, slices, args);
     va_end(args);
 
     // DSC_TRACE_SET_SLICE(xa, xb, el_slices, slices);
@@ -972,7 +996,7 @@ void dsc_tensor_set_slice(dsc_ctx *ctx,
     for (int i = 0; i < xa->n_dim && xa_scalar; ++i)
         xa_scalar &= xa_slice_shape[i] == 1;
 
-    DSC_DISPATCH(xa->device, set_slice, xa, xa_scalar, xb, xb_scalar, slices, el_slices);
+    DSC_DISPATCH(xa->device, set_slice, xa, xa_scalar, xb, xb_scalar, slices, el_slices, whole);
 }
 
 // ============================================================

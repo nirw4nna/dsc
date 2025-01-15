@@ -224,12 +224,12 @@ _lib.dsc_view.restype = _DscTensor_p
 #                                  dsc_dtype dtype,
 #                                  int dim1);
 def _dsc_tensor_1d(
-    ctx: _DscCtx, dtype: Dtype, dim1: int, device: Device
+    ctx: _DscCtx, dtype: Dtype, dim1: int, device: Device, data: c_void_p, data_device: Device
 ) -> _DscTensor_p:
-    return _lib.dsc_tensor_1d(ctx, c_uint8(dtype.value), c_int(dim1), c_int8(device.value))
+    return _lib.dsc_tensor_1d(ctx, c_uint8(dtype.value), c_int(dim1), c_int8(device.value), data, c_int8(data_device.value))
 
 
-_lib.dsc_tensor_1d.argtypes = [_DscCtx, c_uint8, c_int, c_int8]
+_lib.dsc_tensor_1d.argtypes = [_DscCtx, c_uint8, c_int, c_int8, c_void_p, c_int8]
 _lib.dsc_tensor_1d.restype = _DscTensor_p
 
 
@@ -241,14 +241,16 @@ def _dsc_tensor_2d(
     dtype: Dtype,
     dim1: int,
     dim2: int,
-    device: Device
+    device: Device,
+    data: c_void_p,
+    data_device: Device
 ) -> _DscTensor_p:
     return _lib.dsc_tensor_2d(
-        ctx, c_uint8(dtype.value), c_int(dim1), c_int(dim2), c_int8(device.value)
+        ctx, c_uint8(dtype.value), c_int(dim1), c_int(dim2), c_int8(device.value), data, c_int8(data_device.value)
     )
 
 
-_lib.dsc_tensor_2d.argtypes = [_DscCtx, c_uint8, c_int, c_int, c_int8]
+_lib.dsc_tensor_2d.argtypes = [_DscCtx, c_uint8, c_int, c_int, c_int8, c_void_p, c_int8]
 _lib.dsc_tensor_2d.restype = _DscTensor_p
 
 
@@ -262,14 +264,16 @@ def _dsc_tensor_3d(
     dim1: int,
     dim2: int,
     dim3: int,
-    device: Device
+    device: Device,
+    data: c_void_p,
+    data_device: Device
 ) -> _DscTensor_p:
     return _lib.dsc_tensor_3d(
-        ctx, c_uint8(dtype.value), c_int(dim1), c_int(dim2), c_int(dim3), c_int8(device.value)
+        ctx, c_uint8(dtype.value), c_int(dim1), c_int(dim2), c_int(dim3), c_int8(device.value), data, c_int8(data_device.value)
     )
 
 
-_lib.dsc_tensor_3d.argtypes = [_DscCtx, c_uint8, c_int, c_int, c_int, c_int8]
+_lib.dsc_tensor_3d.argtypes = [_DscCtx, c_uint8, c_int, c_int, c_int, c_int8, c_void_p, c_int8]
 _lib.dsc_tensor_3d.restype = _DscTensor_p
 
 
@@ -284,7 +288,9 @@ def _dsc_tensor_4d(
     dim2: int,
     dim3: int,
     dim4: int,
-    device: Device
+    device: Device,
+    data: c_void_p,
+    data_device: Device
 ) -> _DscTensor_p:
     return _lib.dsc_tensor_4d(
         ctx,
@@ -294,10 +300,12 @@ def _dsc_tensor_4d(
         c_int(dim3),
         c_int(dim4),
         c_int8(device.value),
+        data,
+        c_int8(data_device.value)
     )
 
 
-_lib.dsc_tensor_4d.argtypes = [_DscCtx, c_uint8, c_int, c_int, c_int, c_int, c_int8]
+_lib.dsc_tensor_4d.argtypes = [_DscCtx, c_uint8, c_int, c_int, c_int, c_int, c_int8, c_void_p, c_int8]
 _lib.dsc_tensor_4d.restype = _DscTensor_p
 
 

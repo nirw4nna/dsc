@@ -9,10 +9,6 @@
 // =============================================================== //
 // =========================== Notepad =========================== //
 // =============================================================== //
-// (1) When xb is scalar xa_data[xa_it.index()] = el; can sometime //
-//     be optimized as a simple memcpy (e.g. fill).                //
-// (2) Use the 'iterator' pattern also in CUDA (requires some      //
-//     benchmarking!).                                             //
 // =============================================================== //
 
 #include <cstdio>
@@ -199,7 +195,9 @@ extern dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                                   const int *shape,
                                   dsc_dtype dtype,
                                   dsc_device_type device = DEFAULT,
-                                  dsc_data_buffer *buf = nullptr);
+                                  dsc_data_buffer *buf = nullptr,
+                                  const void *DSC_RESTRICT data = nullptr,
+                                  dsc_device_type data_device = DEFAULT);
 
 extern dsc_tensor *dsc_view(dsc_ctx *ctx,
                             const dsc_tensor *x);
@@ -207,24 +205,32 @@ extern dsc_tensor *dsc_view(dsc_ctx *ctx,
 extern dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx,
                                  dsc_dtype dtype,
                                  int dim1,
-                                 dsc_device_type device = DEFAULT);
+                                 dsc_device_type device = DEFAULT,
+                                 const void *DSC_RESTRICT data = nullptr,
+                                 dsc_device_type data_device = DEFAULT);
 
 extern dsc_tensor *dsc_tensor_2d(dsc_ctx *ctx,
                                  dsc_dtype dtype,
                                  int dim1, int dim2,
-                                 dsc_device_type device = DEFAULT);
+                                 dsc_device_type device = DEFAULT,
+                                 const void *DSC_RESTRICT data = nullptr,
+                                 dsc_device_type data_device = DEFAULT);
 
 extern dsc_tensor *dsc_tensor_3d(dsc_ctx *ctx,
                                  dsc_dtype dtype,
                                  int dim1, int dim2,
                                  int dim3,
-                                 dsc_device_type device = DEFAULT);
+                                 dsc_device_type device = DEFAULT,
+                                 const void *DSC_RESTRICT data = nullptr,
+                                 dsc_device_type data_device = DEFAULT);
 
 extern dsc_tensor *dsc_tensor_4d(dsc_ctx *ctx,
                                  dsc_dtype dtype,
                                  int dim1, int dim2,
                                  int dim3, int dim4,
-                                 dsc_device_type device = DEFAULT);
+                                 dsc_device_type device = DEFAULT,
+                                 const void *DSC_RESTRICT data = nullptr,
+                                 dsc_device_type data_device = DEFAULT);
 
 extern dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx,
                                 f32 val,
