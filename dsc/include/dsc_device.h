@@ -31,6 +31,7 @@ struct dsc_device {
     dsc_free_node free_nodes[DSC_MAX_OBJS];
     dsc_free_node *head;
     void *device_mem;
+    usize alignment;
 
     // Extra device-specific infos
     void *extra_info;
@@ -105,9 +106,11 @@ DSC_INLINE dsc_free_node *next_free_node(dsc_device *dev) {
 }
 }
 
-static DSC_MALLOC DSC_INLINE dsc_data_buffer *dsc_data_alloc(dsc_device *dev, const usize nb) {
+static DSC_MALLOC DSC_INLINE dsc_data_buffer *dsc_data_alloc(dsc_device *dev, usize nb) {
     DSC_ASSERT(dev != nullptr);
     DSC_ASSERT(nb > 0);
+
+    nb = DSC_ALIGN(nb, dev->alignment);
 
     dsc_free_node *prev = nullptr;
     dsc_free_node *node = find_best(dev, nb, &prev);
@@ -115,9 +118,7 @@ static DSC_MALLOC DSC_INLINE dsc_data_buffer *dsc_data_alloc(dsc_device *dev, co
         DSC_LOG_FATAL("error allocating %.2fKB on %s", DSC_B_TO_KB(nb), DSC_DEVICE_NAMES[dev->type]);
     }
 
-    // What's the smallest size we need to accommodate on this device buffer? We can wrap single values
-    // in tensors so for now the answer in the size of a single float32.
-    if (const usize left = node->size - nb; left >= sizeof(f32)) {
+    if (const usize left = node->size - nb; left >= dev->alignment) {
         dsc_free_node *new_node = next_free_node(dev);
         node->size = nb;
         new_node->size = left;
@@ -185,7 +186,7 @@ static DSC_INLINE void dsc_data_free(dsc_device *dev, dsc_data_buffer *ptr) {
     }
 
     if (prev != nullptr && prev->next != nullptr &&
-        (uintptr_t) ((byte *) prev + prev->size) == (uintptr_t) new_node) {
+        (uintptr_t) ((byte *) prev->data + prev->size) == (uintptr_t) new_node->data) {
         prev->size += new_node->size;
         node_remove(&dev->head, prev, new_node);
     }

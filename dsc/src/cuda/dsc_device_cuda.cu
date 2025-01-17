@@ -7,7 +7,10 @@
 #include "dsc_device.h"
 #include "cuda/dsc_cuda.h"
 
-#define DSC_DEVICE_CUDA_ALIGN ((usize) 1024)
+// As per https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#device-memory-accesses
+// "Any address of a variable residing in global memory or returned by one of the memory allocation routines
+// from the driver or runtime API is always aligned to at least 256 bytes."
+#define DSC_DEVICE_CUDA_ALIGN ((usize) 256)
 #define DSC_MEMCPY_DIRECTIONS ((int) 3)
 
 static constexpr cudaMemcpyKind DSC_CUDA_MEMCPY_DIRECTIONS[DSC_MEMCPY_DIRECTIONS] = {
@@ -52,6 +55,7 @@ dsc_device *dsc_cuda_device(usize mem_size, const int cuda_dev) {
         .free_nodes = {},
         .head = {},
         .device_mem = {},
+        .alignment = DSC_DEVICE_CUDA_ALIGN,
         .extra_info = &extra,
         .mem_size = DSC_ALIGN(mem_size, DSC_DEVICE_CUDA_ALIGN),
         .used_mem = 0,

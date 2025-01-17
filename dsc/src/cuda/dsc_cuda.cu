@@ -409,10 +409,10 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
                                  const dsc_tensor *xb,
                                  dsc_tensor *out,
                                  Op op) {
-    const bool xa_scalar = xa->n_dim == 1 && xa->shape[dsc_tensor_dim(xa, -1)] == 1;
-    const bool xb_scalar = xb->n_dim == 1 && xb->shape[dsc_tensor_dim(xb, -1)] == 1;
-    const bool same_shape = xa->n_dim == xb->n_dim && memcmp(&xa->shape[dsc_tensor_dim(xa, -1)],
-                                                             &xb->shape[dsc_tensor_dim(xb, -1)],
+    const bool xa_scalar = dsc_is_scalar(xa);
+    const bool xb_scalar = dsc_is_scalar(xb);
+    const bool same_shape = xa->n_dim == xb->n_dim && memcmp(&xa->shape[dsc_tensor_dim(xa, 0)],
+                                                             &xb->shape[dsc_tensor_dim(xb, 0)],
                                                              xa->n_dim * sizeof(*xa->shape)) == 0;
     DSC_TENSOR_DATA(T, xa);
     DSC_TENSOR_DATA(T, xb);

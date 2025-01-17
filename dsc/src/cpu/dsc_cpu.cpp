@@ -252,8 +252,8 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
     T *xa_data = (T *) xa->buf->data;
     T *xb_data = (T *) xb->buf->data;
     T *out_data = (T *) out->buf->data;
-    const bool xa_scalar = xa->n_dim == 1 && xa->shape[dsc_tensor_dim(xa, -1)] == 1;
-    const bool xb_scalar = xb->n_dim == 1 && xb->shape[dsc_tensor_dim(xb, -1)] == 1;
+    const bool xa_scalar = dsc_is_scalar(xa);
+    const bool xb_scalar = dsc_is_scalar(xb);
 
     if (xa_scalar) {
         const T val = xa_data[0];
