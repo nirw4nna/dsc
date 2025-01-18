@@ -93,13 +93,6 @@
     } while (0)
 
 
-#define DSC_GET_DEFAULT_DEVICE(CTX)                                    \
-    dsc_device *dev = (CTX)->devices[(CTX)->default_device];           \
-    do {                                                               \
-        if (!dev)                                                      \
-            DSC_LOG_FATAL("device %d is null", (CTX)->default_device); \
-    } while (0)
-
 // If DEV is DEFAULT use the system default setting otherwise use the specified device
 #define DSC_GET_DEV_ID(CTX, DEV) (DEV) == DEFAULT ? (CTX)->default_device : (DEV)
 #define DSC_GET_DEVICE(CTX, DEV)                                                      \

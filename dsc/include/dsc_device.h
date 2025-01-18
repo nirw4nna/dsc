@@ -8,6 +8,14 @@
 
 #include "dsc.h"
 
+#define dsc_node_is_free(PTR) ((PTR)->data == nullptr && (PTR)->next == nullptr && (PTR)->size == 0)
+#define dsc_node_mark_free(PTR) \
+    do {                        \
+        (PTR)->data = nullptr;  \
+        (PTR)->next = nullptr;  \
+        (PTR)->size = 0;        \
+    } while (0)
+
 struct dsc_data_buffer {
     void *data;
     usize size;
@@ -92,16 +100,16 @@ DSC_INLINE void node_remove(dsc_free_node **head,
     } else {
         prev->next = to_remove->next;
     }
+
+    dsc_node_mark_free(to_remove);
 }
 
 DSC_INLINE dsc_free_node *next_free_node(dsc_device *dev) {
     for (int i = 0; i < DSC_MAX_OBJS; ++i) {
-        if (dsc_free_node *bin = &dev->free_nodes[i];
-            bin->data == nullptr && bin->size == 0) {
+        if (dsc_free_node *bin = &dev->free_nodes[i]; dsc_node_is_free(bin)) {
             return bin;
         }
     }
-
     return nullptr;
 }
 }
@@ -120,6 +128,10 @@ static DSC_MALLOC DSC_INLINE dsc_data_buffer *dsc_data_alloc(dsc_device *dev, us
 
     if (const usize left = node->size - nb; left >= dev->alignment) {
         dsc_free_node *new_node = next_free_node(dev);
+        if (new_node == nullptr) {
+            DSC_LOG_FATAL("memory reached critical fragmentation!");
+        }
+
         node->size = nb;
         new_node->size = left;
         // The data for the new bin starts after the previous one
@@ -127,12 +139,10 @@ static DSC_MALLOC DSC_INLINE dsc_data_buffer *dsc_data_alloc(dsc_device *dev, us
         node_insert(&dev->head, node, new_node);
     }
 
-    node_remove(&dev->head, prev, node);
-
     dsc_data_buffer *data_buf = nullptr;
     for (int i = 0; i < DSC_MAX_OBJS; ++i) {
-        if (dsc_data_buffer *free_buf = &dev->used_nodes[i]; free_buf->data == nullptr) {
-            data_buf = free_buf;
+        if (dsc_data_buffer *buf = &dev->used_nodes[i]; buf->refs == 0) {
+            data_buf = buf;
             break;
         }
     }
@@ -144,6 +154,8 @@ static DSC_MALLOC DSC_INLINE dsc_data_buffer *dsc_data_alloc(dsc_device *dev, us
     data_buf->refs = 1;
     data_buf->size = node->size;
     dev->used_mem += nb;
+
+    node_remove(&dev->head, prev, node);
 
     return data_buf;
 }

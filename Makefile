@@ -1,7 +1,7 @@
 CUDA		?=	/usr/local/cuda
 CXX			=	g++
 NVCC		=	nvcc
-NVCCFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -ccbin=$(CXX) -code=sm_60 -arch=compute_60 \
+NVCCFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -ccbin=$(CXX) -arch=native \
 				--forward-unknown-to-host-compiler -Wall -Wextra -Wformat -Wnoexcept \
 				-Wcast-qual -Wunused -Wdouble-promotion -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti
 CXXFLAGS	=	-std=c++20 -I./dsc/include/ -I./dsc/api/ -Wall -Wextra -Wformat -Wnoexcept  \
@@ -87,11 +87,6 @@ clean:
 
 shared: $(OBJS)
 	$(CXX) $(CXXFLAGS) -shared $(OBJS) -o $(SHARED_LIB) $(LDFLAGS)
-
-#test_src: dsc/tests/test_src.cpp $(OBJS)
-#	$(CXX) $(CXXFLAGS) -sEXPORTED_FUNCTIONS='["_dsc_src","_malloc","_free"]' -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=2200MB -sMAXIMUM_MEMORY=2200MB -sENVIRONMENT=web $< -o dsrc.js $(OBJS) $(LDFLAGS)
-#	cp dsrc.js /home/lowl/Scrivania/projects/dspcraft/website/src/
-#	cp dsrc.wasm /home/lowl/Scrivania/projects/dspcraft/website/src/
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
