@@ -8,6 +8,10 @@
 #include "cuda/dsc_ops.h"
 #include "dsc_device.h"
 
+#define init_slice_idx(ARR, SLICES) \
+    int ARR[DSC_MAX_DIMS]{};        \
+    for (int i__ = 0; i__ < DSC_MAX_DIMS; ++i__) ARR[i__] = SLICES[i__].start
+
 template<typename Tx, typename To>
 static DSC_CUDA_KERNEL void k_cast_op(const Tx *DSC_RESTRICT x,
                                       To *DSC_RESTRICT out, const int n) {
@@ -169,29 +173,52 @@ struct slicing_params {
     int stride[DSC_MAX_DIMS]{};
 };
 
-static DSC_CUDA_FUNC DSC_INLINE int compute_slice_idx(const int *idx_arr,
-                                                      const dsc_slice *slices,
-                                                      const int *stride) {
-    int idx = 0;
+static DSC_INLINE DSC_CUDA_FUNC int compute_linear_idx(const int *idx_arr,
+                                                       const int *stride) {
+    int linear_idx = 0;
     for (int i = 0; i < DSC_MAX_DIMS; ++i) {
-        idx += (slices[i].start + idx_arr[i] * slices[i].step) * stride[i];
+        linear_idx += idx_arr[i] * stride[i];
     }
-    return idx;
+    return linear_idx;
 }
 
-static DSC_INLINE DSC_CUDA_FUNC int compute_linear_idx(const int *idx_arr, const int *stride) {
-    int idx = 0;
-    for (int i = 0; i < DSC_MAX_DIMS; ++i) {
-        idx += idx_arr[i] * stride[i];
-    }
-    return idx;
-}
-
-static DSC_INLINE DSC_CUDA_FUNC void compute_idx_from_linear(int *idx_arr, int idx,
+static DSC_INLINE DSC_CUDA_FUNC void compute_idx_from_linear(int *idx_arr, int linear_idx,
                                                              const int *shape) {
     for (int i = DSC_MAX_DIMS - 1; i >= 0; i--) {
-        idx_arr[i] = idx % shape[i];
-        idx /= shape[i];
+        idx_arr[i] = linear_idx % shape[i];
+        linear_idx /= shape[i];
+    }
+}
+
+static DSC_INLINE DSC_CUDA_FUNC void compute_slice_from_linear(int *idx_arr, int linear_idx,
+                                                               const dsc_slice *slices,
+                                                               const int *shape) {
+    for (int i = DSC_MAX_DIMS - 1; i >= 0 && linear_idx > 0; i--) {
+        const int start = slices[i].start;
+        const int stop = slices[i].stop;
+        const int step = slices[i].step;
+
+        const int pos = linear_idx % shape[i];
+        idx_arr[i] += pos * step;
+        // Check if we rolled over
+        if ((step > 0 && idx_arr[i] >= stop) ||
+            (step < 0 && idx_arr[i] <= stop)) {
+            // Check how many times we rolled over the i dimension
+            int rollovers;
+            if (step > 0) {
+                const int ne = (stop - start) * step;
+                rollovers = (idx_arr[i] - start) / ne;
+                idx_arr[i] = start + (idx_arr[i] - start) % ne;
+            } else {
+                const int ne = (start - stop) * -step;
+                rollovers = (start - idx_arr[i]) / ne;
+                idx_arr[i] = start - (start - idx_arr[i]) % ne;
+            }
+
+            if (rollovers > 0 && i > 0)
+                idx_arr[i - 1] += slices[i - 1].step * rollovers;
+        }
+        linear_idx /= shape[i];
     }
 }
 
@@ -205,11 +232,25 @@ static DSC_CUDA_KERNEL void k_get_slice(const T *DSC_RESTRICT x,
 
     if (tid >= n) return;
 
-    int idx_arr[DSC_MAX_DIMS]{};
+    init_slice_idx(idx_arr, params.slices);
 
     for (int i = tid; i < n; i += stride) {
-        compute_idx_from_linear(idx_arr, i, params.shape);
-        out[i] = x[compute_slice_idx(idx_arr, params.slices, params.stride)];
+        compute_slice_from_linear(idx_arr, i, params.slices, params.shape);
+        out[i] = x[compute_linear_idx(idx_arr, params.stride)];
+    }
+}
+
+static DSC_INLINE void set_slice_params(const dsc_tensor *DSC_RESTRICT x,
+                                        const int n_slices,
+                                        const dsc_slice *slices,
+                                        slicing_params *params) {
+    for (int i = 0; i < x->n_dim; ++i) {
+        const int dim = dsc_tensor_dim(x, i);
+        if (i < n_slices) {
+            params->slices[dim] = slices[i];
+        } else {
+            params->slices[dim] = {0, x->shape[dim], 1};
+        }
     }
 }
 
@@ -226,15 +267,9 @@ void dsc_cuda_get_slice(dsc_device *,
     }
 
     slicing_params params{};
-    memcpy(params.shape, x->shape, DSC_MAX_DIMS * sizeof(*x->shape));
+    memcpy(params.shape, out->shape, DSC_MAX_DIMS * sizeof(*out->shape));
     memcpy(params.stride, x->stride, DSC_MAX_DIMS * sizeof(*x->stride));
-    // Prepare the slices, this way we don't need the number of actual slices in the kernel
-    for (int i = 0; i < DSC_MAX_DIMS - n_slices; ++i) {
-        params.slices[i].start = 0;
-        params.slices[i].stop = x->shape[i];
-        params.slices[i].step = 1;
-    }
-    memcpy(&params.slices[DSC_MAX_DIMS - n_slices], slices, n_slices * sizeof(*slices));
+    set_slice_params(x, n_slices, slices, &params);
 
     const int n = out->ne;
     switch (out->dtype) {
@@ -268,14 +303,14 @@ void dsc_cuda_get_slice(dsc_device *,
         }
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
     }
-
 }
 
 template<typename T>
 static DSC_CUDA_KERNEL void k_set_slice(T *DSC_RESTRICT xa,
                                         const T *DSC_RESTRICT xb,
                                         const bool xb_scalar,
-                                        const int n, slicing_params params,
+                                        const int n,
+                                        const slicing_params params,
                                         const bool whole) {
     DSC_CUDA_TID();
     DSC_CUDA_STRIDE();
@@ -287,10 +322,11 @@ static DSC_CUDA_KERNEL void k_set_slice(T *DSC_RESTRICT xa,
             xa[i] = xb_scalar ? xb[0] : xb[i];
         }
     } else {
-        int idx_arr[DSC_MAX_DIMS]{};
+        init_slice_idx(idx_arr, params.slices);
+
         for (int i = tid; i < n; i += stride) {
-            compute_idx_from_linear(idx_arr, i, params.shape);
-            xa[compute_slice_idx(idx_arr, params.slices, params.stride)] = xb_scalar ? xb[0] : xb[i];
+            compute_slice_from_linear(idx_arr, i, params.slices, params.shape);
+            xa[compute_linear_idx(idx_arr, params.stride)] = xb_scalar ? xb[0] : xb[i];
         }
     }
 }
@@ -313,16 +349,18 @@ void dsc_cuda_set_slice(dsc_device *,
                     xb_data, DSC_DTYPE_SIZE[xa->dtype], cudaMemcpyDeviceToDevice);
     } else {
         slicing_params params{};
-        memcpy(params.shape, xa->shape, DSC_MAX_DIMS * sizeof(*xa->shape));
         memcpy(params.stride, xa->stride, DSC_MAX_DIMS * sizeof(*xa->stride));
-        for (int i = 0; i < DSC_MAX_DIMS - n_slices; ++i) {
-            params.slices[i].start = 0;
-            params.slices[i].stop = xa->shape[i];
-            params.slices[i].step = 1;
-        }
-        memcpy(&params.slices[DSC_MAX_DIMS - n_slices], slices, n_slices * sizeof(*slices));
+        set_slice_params(xa, n_slices, slices, &params);
 
-        const int n = xa->ne;
+        int n = 1;
+        for (int i = 0; i < xa->n_dim; ++i) {
+            const int dim = dsc_tensor_dim(xa, i);
+            const int ne_i = abs(params.slices[dim].start - params.slices[dim].stop);
+            const int step_i = abs(params.slices[dim].step);
+            params.shape[dim] = (ne_i + step_i - 1) / step_i;
+            n *= params.shape[dim];
+        }
+
         switch (xa->dtype) {
             case F32: {
                 DSC_TENSOR_DATA_R(f32, xa);

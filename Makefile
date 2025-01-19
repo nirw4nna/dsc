@@ -23,7 +23,7 @@ ifdef DSC_FAST
 	NVCCFLAGS	+= -DDSC_FAST -O3 --use_fast_math
 else
 	CXXFLAGS	+= -DDSC_DEBUG -O0 -fno-omit-frame-pointer -g
-	NVCCFLAGS	+= -DDSC_DEBUG -O0 -fno-omit-frame-pointer -G
+	NVCCFLAGS	+= -DDSC_DEBUG -O0 -fno-omit-frame-pointer -g -G
 endif
 
 ifdef DSC_ENABLE_TRACING
