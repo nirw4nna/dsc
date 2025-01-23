@@ -201,6 +201,16 @@ extern void dsc_cuda_sum(dsc_device *,
                          const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out,
                          int axis_idx);
+
+extern void dsc_cuda_min(dsc_device *,
+                         const dsc_tensor *DSC_RESTRICT x,
+                         dsc_tensor *DSC_RESTRICT out,
+                         int axis_idx);
+
+extern void dsc_cuda_max(dsc_device *,
+                         const dsc_tensor *DSC_RESTRICT x,
+                         dsc_tensor *DSC_RESTRICT out,
+                         int axis_idx);
 #else
 
 static DSC_INLINE int dsc_cuda_devices() {

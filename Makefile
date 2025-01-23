@@ -1,11 +1,13 @@
 CUDA		?=	/usr/local/cuda
 CXX			=	g++
 NVCC		=	nvcc
+AR			=	ar
+
 NVCCFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -ccbin=$(CXX) -arch=native \
 				--forward-unknown-to-host-compiler -Wall -Wextra -Wformat -Wnoexcept \
 				-Wcast-qual -Wunused -Wdouble-promotion -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti
 CXXFLAGS	=	-std=c++20 -I./dsc/include/ -I./dsc/api/ -Wall -Wextra -Wformat -Wnoexcept  \
- 				-Wcast-qual -Wunused -Wdouble-promotion -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti -pthread
+ 				-Wcast-qual -Wunused -Wdouble-promotion -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti
 LDFLAGS		=	-lm
 
 UNAME_M		=	$(shell uname -m)
@@ -27,7 +29,7 @@ else
 endif
 
 ifdef DSC_ENABLE_TRACING
-	CXXFLAGS	+= -DDSC_ENABLE_TRACING
+	CXXFLAGS	+= -DDSC_ENABLE_TRACING -pthread
 endif
 
 ifdef DSC_MAX_TRACES
@@ -38,11 +40,6 @@ endif
 ifeq ($(MAKECMDGOALS),shared)
 	CXXFLAGS	+= -fPIC
 	NVCCFLAGS	+= -fPIC
-else
-	ifndef DSC_FAST
-		CXXFLAGS	+= -fsanitize=address
-		NVCCFLAGS	+= -fsanitize=address
-	endif
 endif
 
 CUDA_SRCS	= $(wildcard dsc/src/cuda/*.cu)
@@ -55,6 +52,7 @@ ifdef DSC_CUDA
 	LDFLAGS		+= -L$(CUDA)/lib64 -lcudart
 
 	OBJS		+= $(CUDA_OBJS)
+
 %.o: %.cu
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 endif
@@ -79,11 +77,15 @@ SRCS		+= $(wildcard dsc/src/cpu/*.cpp)
 OBJS		+= $(SRCS:.cpp=.o)
 
 SHARED_LIB	= python/dsc/libdsc.so
+STATIC_LIB	= libdsc.a
 
-.PHONY: clean shared
+.PHONY: clean shared static
 
 clean:
-	rm -rf *.o *.so *.old $(OBJS) $(CUDA_OBJS) $(SHARED_LIB)
+	rm -rf *.o *.so *.old $(OBJS) $(CUDA_OBJS) $(SHARED_LIB) $(STATIC_LIB)
+
+static: $(OBJS)
+	$(AR) -rcs $(STATIC_LIB) $(OBJS)
 
 shared: $(OBJS)
 	$(CXX) $(CXXFLAGS) -shared $(OBJS) -o $(SHARED_LIB) $(LDFLAGS)

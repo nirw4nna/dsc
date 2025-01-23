@@ -18,14 +18,14 @@
 // Max number of traces that can be recorded. Changing this will result in more memory
 // allocated during context initialization.
 #if !defined(DSC_MAX_TRACES)
-#   define DSC_MAX_TRACES ((u64) 1'000)
+#    define DSC_MAX_TRACES ((u64) 1'000)
 #endif
 
 #if !defined(DSC_MAX_OBJS)
-#   define DSC_MAX_OBJS     ((int) 1'000)
+#    define DSC_MAX_OBJS     ((int) 1'000)
 #endif
-#define DSC_MAX_DEVICES     ((int) 2)
-#define DSC_DEFAULT_DEVICE  CPU
+#define DSC_MAX_DEVICES      ((int) 2)
+#define DSC_DEFAULT_DEVICE   CPU
 
 static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 
@@ -46,9 +46,9 @@ static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
     } while(0)
 
 #if defined(DSC_DEBUG)
-#   define DSC_LOG_DEBUG(format, ...)  fprintf(stdout, "[DEBUG] %s: " format"\n",__func__, ##__VA_ARGS__)
+#    define DSC_LOG_DEBUG(format, ...)  fprintf(stdout, "[DEBUG] %s: " format"\n",__func__, ##__VA_ARGS__)
 #else
-#   define DSC_LOG_DEBUG(format, ...)  ((void) 0)
+#    define DSC_LOG_DEBUG(format, ...)  ((void) 0)
 #endif
 
 #define DSC_INVALID_CASE(format, ...)   \
@@ -65,37 +65,40 @@ static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 #define DSC_MB(mb)           ((usize) ((mb) * 1024l * 1024l))
 #define DSC_KB(kb)           ((usize) ((kb) * 1024l))
 
-#if defined(__GNUC__) && !defined(EMSCRIPTEN)
 // A 'strictly pure' function is a function whose return value doesn't depend on the global state of the program,
 // this means that it must not access global variables subject to change or access parameters passed by pointer
 // unless the actual value of the pointer does not change after the first invocation.
 // A 'pure' function is basically the same thing without the restriction on global state change, this means
 // that a 'pure' function can take in and read the value of parameters passed by pointer even if that value
 // changes between subsequent invocations.
-#   define DSC_STRICTLY_PURE    __attribute_const__
-#   define DSC_PURE             __attribute_pure__
-#   define DSC_INLINE           inline __attribute__((always_inline))
-#   define DSC_NOINLINE         __attribute__((noinline))
-#   define DSC_MALLOC           __attribute__((malloc))
+#if defined(__NVCC__)
+#    define DSC_INLINE           __forceinline__
+#    define DSC_STRICTLY_PURE    __attribute__((const))
+#    define DSC_PURE             __attribute__((pure))
+#    define DSC_MALLOC           __attribute__((malloc))
+#elif defined(__GNUC__)
+#    define DSC_INLINE           inline __attribute__((always_inline))
+#    define DSC_STRICTLY_PURE    __attribute__((const))
+#    define DSC_PURE             __attribute__((pure))
+#    define DSC_MALLOC           __attribute__((malloc))
 #else
-#   define DSC_STRICTLY_PURE
-#   define DSC_PURE
-#   define DSC_INLINE           inline
-#   define DSC_NOINLINE
-#   define DSC_MALLOC
+#    define DSC_INLINE           inline
+#    define DSC_STRICTLY_PURE
+#    define DSC_PURE
+#    define DSC_MALLOC
 #endif
 
-#define DSC_RESTRICT    __restrict
+#define DSC_RESTRICT __restrict
 
 #if !defined(DSC_MAX_DIMS)
-#   define DSC_MAX_DIMS ((int) 4)
+#    define DSC_MAX_DIMS ((int) 4)
 #endif
 
 static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 
-#define DSC_VALUE_NONE            INT32_MAX
-#define DSC_TENSOR_DATA(T, X)   T *X##_data = (T *) (X)->buf->data
-#define DSC_TENSOR_DATA_R(T, X) T *DSC_RESTRICT X##_data = (T *) (X)->buf->data
+#define DSC_VALUE_NONE          INT32_MAX
+#define DSC_DATA_ALIAS(T, X)    T *X##_data = (T *) (X)->buf->data
+#define DSC_DATA(T, X)          T *DSC_RESTRICT X##_data = (T *) (X)->buf->data
 
 #define dsc_tensor_dim(X, dim)    (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (X)->n_dim + (dim)))
 #define dsc_new_like(CTX, X)      (dsc_new_tensor((CTX), (X)->n_dim, &(X)->shape[dsc_tensor_dim(X, 0)], (X)->dtype, (X)->device))

@@ -151,9 +151,9 @@ class TestOps:
     def test_unary_axis(self):
         ops = {
             'sum': (np.sum, dsc.sum),
-            # 'mean': (np.mean, dsc.mean),
-            # 'max': (np.max, dsc.max),
-            # 'min': (np.min, dsc.min),
+            'mean': (np.mean, dsc.mean),
+            'max': (np.max, dsc.max),
+            'min': (np.min, dsc.min),
         }
         for op_name in ops.keys():
             np_op, dsc_op = ops[op_name]
@@ -252,7 +252,6 @@ class TestIndexing:
 
         x_2d = random_nd([5, 5], np.float32)
         x_2d_dsc = dsc.from_numpy(x_2d)
-
         for start in range(-5, 5):
             for stop in range(-5, 5):
                 for step in range(-5, 5):

@@ -9,6 +9,31 @@
 #include "cuda/dsc_cuda.h"
 #include <cmath>
 
+#define atomic_cas_f32(PTR, VAL)                                     \
+    do {                                                             \
+        uint *addr = (uint *) (PTR);                                 \
+        uint old = *addr, assumed;                                   \
+        do {                                                         \
+            assumed = old;                                           \
+            const real<T> assumed_val = __int_as_float(assumed);     \
+            const real<T> new_val = VAL;                             \
+            old = atomicCAS(addr, assumed, __float_as_int(new_val)); \
+        } while (old != assumed);                                    \
+    } while (0)
+
+#define atomic_cas_f64(PTR, VAL)                                           \
+    do {                                                                   \
+        ulonglong *addr = (ulonglong *) (PTR);                             \
+        ulonglong old = *addr, assumed;                                    \
+        do {                                                               \
+            assumed = old;                                                 \
+            const real<T> assumed_val = __longlong_as_double(assumed);     \
+            const real<T> new_val = VAL;                                   \
+            old = atomicCAS(addr, assumed, __double_as_longlong(new_val)); \
+        } while (old != assumed);                                          \
+    } while (0)
+
+
 struct cuda_cast_op {
     template<typename Tin, typename Tout>
     DSC_CUDA_FUNC DSC_INLINE DSC_STRICTLY_PURE Tout operator()(const Tin in) const {
@@ -339,6 +364,32 @@ struct cuda_max_op {
     }
 };
 
+struct cuda_atomic_max_op {
+    template<typename T>
+    DSC_CUDA_FUNC DSC_INLINE void operator()(T *x, const T val) const {
+        static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "cuda_atomic_max_op - dtype must be either float or complex");
+
+        if constexpr (dsc_is_type<T, f32>()) {
+            atomic_cas_f32(x, DSC_MAX(val, assumed_val));
+        } else if constexpr (dsc_is_type<T, f64>()) {
+            atomic_cas_f64(x, DSC_MAX(val, assumed_val));
+        } else if constexpr (dsc_is_type<T, c32>()) {
+            // Invoke the real max func
+            const real<T> old_real = x->real;
+            operator()(&x->real, val.real);
+            if (old_real < val.real) {
+                atomic_cas_f32(&x->imag, val.imag);
+            }
+        } else {
+            const real<T> old_real = x->real;
+            operator()(&x->real, val.real);
+            if (old_real < val.real) {
+                atomic_cas_f64(&x->imag, val.imag);
+            }
+        }
+    }
+};
+
 struct cuda_min_op {
     template<typename T>
     DSC_CUDA_FUNC DSC_INLINE DSC_STRICTLY_PURE T operator()(const T xa, const T xb) const {
@@ -346,6 +397,32 @@ struct cuda_min_op {
             return DSC_MIN(xa, xb);
         } else {
             return xa.real > xb.real ? xb : xa;
+        }
+    }
+};
+
+struct cuda_atomic_min_op {
+    template<typename T>
+    DSC_CUDA_FUNC DSC_INLINE void operator()(T *x, const T val) const {
+        static_assert(dsc_is_complex<T>() || dsc_is_real<T>(), "cuda_atomic_min_op - dtype must be either float or complex");
+
+        if constexpr (dsc_is_type<T, f32>()) {
+            atomic_cas_f32(x, DSC_MIN(val, assumed_val));
+        } else if constexpr (dsc_is_type<T, f64>()) {
+            atomic_cas_f64(x, DSC_MIN(val, assumed_val));
+        } else if constexpr (dsc_is_type<T, c32>()) {
+            // Invoke the real min func
+            const real<T> old_real = x->real;
+            operator()(&x->real, val.real);
+            if (old_real > val.real) {
+                atomic_cas_f32(&x->imag, val.imag);
+            }
+        } else {
+            const real<T> old_real = x->real;
+            operator()(&x->real, val.real);
+            if (old_real > val.real) {
+                atomic_cas_f64(&x->imag, val.imag);
+            }
         }
     }
 };

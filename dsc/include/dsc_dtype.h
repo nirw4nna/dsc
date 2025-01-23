@@ -31,6 +31,7 @@ using usize = size_t;
 using byte = char;
 using f32 = float;
 using f64 = double;
+using ulonglong = unsigned long long int;
 
 namespace internal {
 template<typename T>

@@ -19,8 +19,8 @@
 template<typename Tx, typename To>
 static DSC_INLINE void cast_op(const dsc_tensor *DSC_RESTRICT x,
                                dsc_tensor *DSC_RESTRICT out) {
-    DSC_TENSOR_DATA(Tx, x);
-    DSC_TENSOR_DATA(To, out);
+    DSC_DATA(Tx, x);
+    DSC_DATA(To, out);
 
     dsc_for(i, out) {
         out_data[i] = cpu_cast_op().operator()<Tx, To>(x_data[i]);
@@ -69,7 +69,7 @@ void dsc_cpu_cast(dsc_device *, const dsc_tensor *DSC_RESTRICT x,
 template<typename T>
 static DSC_INLINE void assign_op(dsc_tensor *DSC_RESTRICT x,
                                  const T start, const T step) {
-    DSC_TENSOR_DATA(T, x);
+    DSC_DATA(T, x);
 
     T val = start;
     dsc_for(i, x) {
@@ -104,7 +104,7 @@ template<typename T>
 static DSC_INLINE void fill_randn(dsc_tensor *DSC_RESTRICT x) {
     static_assert(dsc_is_real<T>(), "T must be real");
 
-    DSC_TENSOR_DATA(T, x);
+    DSC_DATA(T, x);
 
     std::mt19937 rng;
     std::normal_distribution<T> dist;
@@ -136,16 +136,14 @@ static DSC_INLINE void copy_slice(const dsc_tensor *DSC_RESTRICT x,
                                   const int n_slices,
                                   const dsc_slice *slices,
                                   const bool whole) {
-    DSC_TENSOR_DATA_R(T, out);
-    DSC_TENSOR_DATA_R(T, x);
+    DSC_DATA(T, out);
+    DSC_DATA(T, x);
     if (whole) {
         memcpy(out_data, x_data, out->ne * DSC_DTYPE_SIZE[out->dtype]);
     } else {
         dsc_slice_iterator x_it(x, n_slices, slices);
-
         dsc_for(i, out) {
             out_data[i] = x_data[x_it.index()];
-
             x_it.next();
         }
     }
@@ -180,8 +178,8 @@ static DSC_INLINE void set_slice(dsc_tensor *DSC_RESTRICT xa,
                                  const bool xb_scalar,
                                  const int n_slices, const dsc_slice *slices,
                                  const bool whole) {
-    DSC_TENSOR_DATA_R(T, xa);
-    DSC_TENSOR_DATA_R(T, xb);
+    DSC_DATA(T, xa);
+    DSC_DATA(T, xb);
     if (xa_scalar) {
         int offset = 0;
         for (int i = 0; i < n_slices; ++i)
@@ -249,13 +247,11 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
                                  const dsc_tensor *xb,
                                  dsc_tensor *out,
                                  Op op) {
-    T *xa_data = (T *) xa->buf->data;
-    T *xb_data = (T *) xb->buf->data;
-    T *out_data = (T *) out->buf->data;
-    const bool xa_scalar = dsc_is_scalar(xa);
-    const bool xb_scalar = dsc_is_scalar(xb);
+    DSC_DATA_ALIAS(T, xa);
+    DSC_DATA_ALIAS(T, xb);
+    DSC_DATA_ALIAS(T, out);
 
-    if (xa_scalar) {
+    if (dsc_is_scalar(xa)) {
         const T val = xa_data[0];
         dsc_for(i, out) {
             out_data[i] = op(
@@ -263,7 +259,7 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
                     xb_data[i]
             );
         }
-    } else if (xb_scalar) {
+    } else if (dsc_is_scalar(xb)) {
         const T val = xb_data[0];
         dsc_for(i, out) {
             out_data[i] = op(
@@ -347,8 +343,8 @@ template<typename Tx, typename To = Tx, typename Op>
 static DSC_INLINE void unary_op(const dsc_tensor *DSC_RESTRICT x,
                                 dsc_tensor *DSC_RESTRICT out,
                                 Op op) {
-    DSC_TENSOR_DATA(Tx, x);
-    DSC_TENSOR_DATA(To, out);
+    DSC_DATA(Tx, x);
+    DSC_DATA(To, out);
     
     dsc_for(i, out) {
         out_data[i] = op(x_data[i]);
@@ -560,8 +556,8 @@ template <typename T>
 static DSC_INLINE void sum(const dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out,
                            const int axis_idx) {
-    DSC_TENSOR_DATA_R(T, x);
-    DSC_TENSOR_DATA_R(T, out);
+    DSC_DATA(T, x);
+    DSC_DATA(T, out);
 
     const int axis_n = x->shape[axis_idx];
     dsc_axis_iterator x_it(x, axis_idx, axis_n);
@@ -592,6 +588,86 @@ void dsc_cpu_sum(dsc_device *,
             break;
         case C64:
             sum<c64>(x, out, axis_idx);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
+    }
+}
+
+template <typename T>
+static DSC_INLINE void min(const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT out,
+                           const int axis_idx) {
+    DSC_DATA(T, x);
+    DSC_DATA(T, out);
+
+    const int axis_n = x->shape[axis_idx];
+    dsc_axis_iterator x_it(x, axis_idx, axis_n);
+    dsc_for(i, out) {
+        T min = dsc_inf<T, true>();
+        for (int j = 0; j < axis_n; ++j) {
+            min = cpu_min_op()(min, x_data[x_it.index()]);
+            x_it.next();
+        }
+        out_data[i] = min;
+    }
+}
+
+void dsc_cpu_min(dsc_device *,
+                 const dsc_tensor *DSC_RESTRICT x,
+                 dsc_tensor *DSC_RESTRICT out,
+                 const int axis_idx) {
+    switch (out->dtype) {
+        case F32:
+            min<f32>(x, out, axis_idx);
+            break;
+        case F64:
+            min<f64>(x, out, axis_idx);
+            break;
+        case C32:
+            min<c32>(x, out, axis_idx);
+            break;
+        case C64:
+            min<c64>(x, out, axis_idx);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
+    }
+}
+
+template <typename T>
+static DSC_INLINE void max(const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT out,
+                           const int axis_idx) {
+    DSC_DATA(T, x);
+    DSC_DATA(T, out);
+
+    const int axis_n = x->shape[axis_idx];
+    dsc_axis_iterator x_it(x, axis_idx, axis_n);
+    dsc_for(i, out) {
+        T max = dsc_inf<T, false>();
+        for (int j = 0; j < axis_n; ++j) {
+            max = cpu_max_op()(max, x_data[x_it.index()]);
+            x_it.next();
+        }
+        out_data[i] = max;
+    }
+}
+
+void dsc_cpu_max(dsc_device *,
+                 const dsc_tensor *DSC_RESTRICT x,
+                 dsc_tensor *DSC_RESTRICT out,
+                 const int axis_idx) {
+    switch (out->dtype) {
+        case F32:
+            max<f32>(x, out, axis_idx);
+            break;
+        case F64:
+            max<f64>(x, out, axis_idx);
+            break;
+        case C32:
+            max<c32>(x, out, axis_idx);
+            break;
+        case C64:
+            max<c64>(x, out, axis_idx);
             break;
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
     }

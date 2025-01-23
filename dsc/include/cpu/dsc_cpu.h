@@ -141,3 +141,13 @@ extern void dsc_cpu_sum(dsc_device *,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out,
                         int axis_idx);
+
+extern void dsc_cpu_min(dsc_device *,
+                        const dsc_tensor *DSC_RESTRICT x,
+                        dsc_tensor *DSC_RESTRICT out,
+                        int axis_idx);
+
+extern void dsc_cpu_max(dsc_device *,
+                        const dsc_tensor *DSC_RESTRICT x,
+                        dsc_tensor *DSC_RESTRICT out,
+                        int axis_idx);

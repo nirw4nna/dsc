@@ -10,3 +10,4 @@ tabulate
 ruff
 pyright
 cupy-cuda12x
+torch

@@ -780,8 +780,8 @@ dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
 
     DSC_GET_DEVICE(ctx, x->device);
 
-    DSC_TENSOR_DATA(void, out);
-    DSC_TENSOR_DATA(byte, x);
+    DSC_DATA(void, out);
+    DSC_DATA(byte, x);
 
     dev->memcpy(out_data, x_data + (offset * DSC_DTYPE_SIZE[x->dtype]),
                 out->ne * DSC_DTYPE_SIZE[out->dtype], ON_DEVICE);
@@ -1323,50 +1323,33 @@ dsc_tensor *dsc_mean(dsc_ctx *ctx,
                      const int axis,
                      const bool keep_dims) {
     // DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
-    //
-    // out = dsc_sum(ctx, x, out, axis, keep_dims);
-    //
-    // const int axis_idx = dsc_tensor_dim(x, axis);
-    // const int axis_n = x->shape[axis_idx];
-    //
-    // dsc_tensor *scale;
-    // switch (out->dtype) {
-    //     case F32:
-    //         DSC_WRAP_VALUE(scale, f32, 1.f / (f32) axis_n);
-    //         break;
-    //     case F64:
-    //         DSC_WRAP_VALUE(scale, f64, 1. / (f64) axis_n);
-    //         break;
-    //     case C32:
-    //         DSC_WRAP_VALUE(scale, c32, dsc_complex(c32, 1.f / (f32) axis_n, 0.f));
-    //         break;
-    //     case C64:
-    //         DSC_WRAP_VALUE(scale, c64, dsc_complex(c64, 1. / (f64) axis_n, 0.));
-    //         break;
-    //     DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
-    // }
-    // out = dsc_mul(ctx, out, scale, out);
-    // return out;
-    return nullptr;
-}
 
-template <typename T>
-static DSC_INLINE void max(const dsc_tensor *DSC_RESTRICT x,
-                           dsc_tensor *DSC_RESTRICT out,
-                           int axis_idx) {
-    // DSC_TENSOR_DATA(T, x);
-    // DSC_TENSOR_DATA(T, out);
-    //
-    // const int axis_n = x->shape[axis_idx];
-    // dsc_axis_iterator x_it(x, axis_idx, axis_n);
-    // dsc_for(i, out) {
-    //     T max = dsc_inf<T, false>();
-    //     for (int j = 0; j < axis_n; ++j) {
-    //         max = max_op()(max, x_data[x_it.index()]);
-    //         x_it.next();
-    //     }
-    //     out_data[i] = max;
-    // }
+    out = dsc_sum(ctx, x, out, axis, keep_dims);
+
+    const int axis_idx = dsc_tensor_dim(x, axis);
+    const int axis_n = x->shape[axis_idx];
+
+    dsc_tensor *scale;
+    switch (out->dtype) {
+        case F32:
+            scale = dsc_wrap_f32(ctx, 1.f / (f32) axis_n, x->device);
+            break;
+        case F64:
+            scale = dsc_wrap_f64(ctx, 1. / (f64) axis_n, x->device);
+            break;
+        case C32:
+            scale = dsc_wrap_c32(ctx, dsc_complex(c32, 1.f / (f32) axis_n, 0.f), x->device);
+            break;
+        case C64:
+            scale = dsc_wrap_c64(ctx, dsc_complex(c64, 1. / (f64) axis_n, 0.), x->device);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
+    }
+    out = dsc_mul(ctx, out, scale, out);
+
+    dsc_tensor_free(ctx, scale);
+
+    return out;
 }
 
 dsc_tensor *dsc_max(dsc_ctx *ctx,
@@ -1374,48 +1357,15 @@ dsc_tensor *dsc_max(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT out,
                      const int axis,
                      const bool keep_dims) {
-    DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
+    // DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
 
     validate_reduce_params();
 
     const int axis_idx = dsc_tensor_dim(x, axis);
 
-    switch (out->dtype) {
-        case F32:
-            max<f32>(x, out, axis_idx);
-            break;
-        case F64:
-            max<f64>(x, out, axis_idx);
-            break;
-        case C32:
-            max<c32>(x, out, axis_idx);
-            break;
-        case C64:
-            max<c64>(x, out, axis_idx);
-            break;
-        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
-    }
+    DSC_DISPATCH(x->device, max, x, out, axis_idx);
 
     return out;
-}
-
-template <typename T>
-static DSC_INLINE void min(const dsc_tensor *DSC_RESTRICT x,
-                           dsc_tensor *DSC_RESTRICT out,
-                           int axis_idx) {
-    // DSC_TENSOR_DATA(T, x);
-    // DSC_TENSOR_DATA(T, out);
-    //
-    // const int axis_n = x->shape[axis_idx];
-    // dsc_axis_iterator x_it(x, axis_idx, axis_n);
-    // dsc_for(i, out) {
-    //     T min = dsc_inf<T, true>();
-    //     for (int j = 0; j < axis_n; ++j) {
-    //         min = min_op()(min, x_data[x_it.index()]);
-    //         x_it.next();
-    //     }
-    //     out_data[i] = min;
-    // }
 }
 
 dsc_tensor *dsc_min(dsc_ctx *ctx,
@@ -1429,21 +1379,7 @@ dsc_tensor *dsc_min(dsc_ctx *ctx,
 
     const int axis_idx = dsc_tensor_dim(x, axis);
 
-    switch (out->dtype) {
-        case F32:
-            min<f32>(x, out, axis_idx);
-            break;
-        case F64:
-            min<f64>(x, out, axis_idx);
-            break;
-        case C32:
-            min<c32>(x, out, axis_idx);
-            break;
-        case C64:
-            min<c64>(x, out, axis_idx);
-            break;
-        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
-    }
+    DSC_DISPATCH(x->device, min, x, out, axis_idx);
 
     return out;
 }
