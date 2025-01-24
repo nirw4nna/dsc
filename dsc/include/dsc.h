@@ -29,14 +29,6 @@
 
 static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 
-#define DSC_LOG_FATAL(format, ...)                                            \
-    do {                                                                      \
-        fprintf(stderr, "[FATAL] %s: " format "\n", __func__, ##__VA_ARGS__); \
-        exit(EXIT_FAILURE);                                                   \
-    } while (0)
-#define DSC_LOG_ERR(format, ...)   fprintf(stderr, "[ERROR] %s: " format"\n",__func__, ##__VA_ARGS__)
-#define DSC_LOG_INFO(format, ...)  fprintf(stdout, "[INFO ] %s: " format"\n",__func__, ##__VA_ARGS__)
-
 #define DSC_ASSERT(x)                                                           \
     do {                                                                        \
         if (!(x)) {                                                             \
@@ -45,10 +37,28 @@ static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
         }                                                                       \
     } while(0)
 
-#if defined(DSC_DEBUG)
-#    define DSC_LOG_DEBUG(format, ...)  fprintf(stdout, "[DEBUG] %s: " format"\n",__func__, ##__VA_ARGS__)
-#else
+#define DSC_LOG_FATAL(format, ...)                                            \
+    do {                                                                      \
+        fprintf(stderr, "[FATAL] %s: " format "\n", __func__, ##__VA_ARGS__); \
+        exit(EXIT_FAILURE);                                                   \
+    } while (0)
+
+#if DSC_LOG_LEVEL >= 3
 #    define DSC_LOG_DEBUG(format, ...)  ((void) 0)
+#    define DSC_LOG_INFO(format, ...)   ((void) 0)
+#    define DSC_LOG_ERR(format, ...)    ((void) 0)
+#elif DSC_LOG_LEVEL >= 2
+#    define DSC_LOG_DEBUG(format, ...)  ((void) 0)
+#    define DSC_LOG_INFO(format, ...)   ((void) 0)
+#    define DSC_LOG_ERR(format, ...)    fprintf(stderr, "[ERROR] %s: " format"\n",__func__, ##__VA_ARGS__)
+#elif DSC_LOG_LEVEL >= 1
+#    define DSC_LOG_DEBUG(format, ...)  ((void) 0)
+#    define DSC_LOG_INFO(format, ...)   fprintf(stdout, "[INFO ] %s: " format"\n",__func__, ##__VA_ARGS__)
+#    define DSC_LOG_ERR(format, ...)    fprintf(stderr, "[ERROR] %s: " format"\n",__func__, ##__VA_ARGS__)
+#elif DSC_LOG_LEVEL >= 0
+#    define DSC_LOG_DEBUG(format, ...)  fprintf(stdout, "[DEBUG] %s: " format"\n",__func__, ##__VA_ARGS__)
+#    define DSC_LOG_INFO(format, ...)   fprintf(stdout, "[INFO ] %s: " format"\n",__func__, ##__VA_ARGS__)
+#    define DSC_LOG_ERR(format, ...)    fprintf(stderr, "[ERROR] %s: " format"\n",__func__, ##__VA_ARGS__)
 #endif
 
 #define DSC_INVALID_CASE(format, ...)   \

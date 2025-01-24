@@ -18,40 +18,51 @@ ifeq ($(UNAME_M),$(filter $(UNAME_M),x86_64))
 	CXXFLAGS	+= 	-march=native -mtune=native
 endif
 
+ifndef DSC_LOG_LEVEL
+	ifdef DSC_FAST
+		DSC_LOG_LEVEL	:=	2
+	else
+		DSC_LOG_LEVEL	:=	0
+	endif
+endif
+
+CXXFLAGS	+=	-DDSC_LOG_LEVEL=$(DSC_LOG_LEVEL)
+NVCCFLAGS	+=	-DDSC_LOG_LEVEL=$(DSC_LOG_LEVEL)
+
 # Defining the __FAST_MATH__ macro makes computations faster even without adding any actual -ffast-math like flag.
 # On the other hand, -ffast-math makes the FFTs slower.
 ifdef DSC_FAST
-	CXXFLAGS	+= -DDSC_FAST -O3 -D__FAST_MATH__ -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
-	NVCCFLAGS	+= -DDSC_FAST -O3 --use_fast_math
+	CXXFLAGS	+=	-O3 -D__FAST_MATH__ -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
+	NVCCFLAGS	+=	-O3 --use_fast_math
 else
-	CXXFLAGS	+= -DDSC_DEBUG -O0 -fno-omit-frame-pointer -g
-	NVCCFLAGS	+= -DDSC_DEBUG -O0 -fno-omit-frame-pointer -g -G
+	CXXFLAGS	+=	-O0 -fno-omit-frame-pointer -g
+	NVCCFLAGS	+=	-O0 -fno-omit-frame-pointer -g -G
 endif
 
 ifdef DSC_ENABLE_TRACING
-	CXXFLAGS	+= -DDSC_ENABLE_TRACING -pthread
+	CXXFLAGS	+=	-DDSC_ENABLE_TRACING -pthread
 endif
 
 ifdef DSC_MAX_TRACES
-	CXXFLAGS	+= -DDSC_MAX_TRACES=$(DSC_MAX_TRACES)
+	CXXFLAGS	+=	-DDSC_MAX_TRACES=$(DSC_MAX_TRACES)
 endif
 
 # If we are not compiling the shared object and are in debug mode then run in ASAN mode
 ifeq ($(MAKECMDGOALS),shared)
-	CXXFLAGS	+= -fPIC
-	NVCCFLAGS	+= -fPIC
+	CXXFLAGS	+=	-fPIC
+	NVCCFLAGS	+=	-fPIC
 endif
 
-CUDA_SRCS	= $(wildcard dsc/src/cuda/*.cu)
-CUDA_OBJS	= $(CUDA_SRCS:.cu=.o)
+CUDA_SRCS	=	$(wildcard dsc/src/cuda/*.cu)
+CUDA_OBJS	=	$(CUDA_SRCS:.cu=.o)
 
 # Enable CUDA support
 ifdef DSC_CUDA
-	CXXFLAGS	+= -I$(CUDA)/include -DDSC_CUDA
-	NVCCFLAGS	+= -DDSC_CUDA
-	LDFLAGS		+= -L$(CUDA)/lib64 -lcudart
+	CXXFLAGS	+=	-I$(CUDA)/include -DDSC_CUDA
+	NVCCFLAGS	+=	-DDSC_CUDA
+	LDFLAGS		+=	-L$(CUDA)/lib64 -lcudart
 
-	OBJS		+= $(CUDA_OBJS)
+	OBJS		+=	$(CUDA_OBJS)
 
 %.o: %.cu
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
@@ -72,12 +83,12 @@ endif
 $(info   LDFLAGS:	$(LDFLAGS))
 $(info )
 
-SRCS		= $(wildcard dsc/src/*.cpp)
-SRCS		+= $(wildcard dsc/src/cpu/*.cpp)
-OBJS		+= $(SRCS:.cpp=.o)
+SRCS		=	$(wildcard dsc/src/*.cpp)
+SRCS		+=	$(wildcard dsc/src/cpu/*.cpp)
+OBJS		+=	$(SRCS:.cpp=.o)
 
-SHARED_LIB	= python/dsc/libdsc.so
-STATIC_LIB	= libdsc.a
+SHARED_LIB	=	python/dsc/libdsc.so
+STATIC_LIB	=	libdsc.a
 
 .PHONY: clean shared static
 
