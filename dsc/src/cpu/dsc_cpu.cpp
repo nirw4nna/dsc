@@ -126,6 +126,56 @@ void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x) {
     }
 }
 
+template<typename T>
+static DSC_INLINE void concat(dsc_tensor **to_concat,
+                              const int tensors,
+                              dsc_tensor *DSC_RESTRICT out,
+                              const int axis_idx) {
+    DSC_DATA(T, out);
+    // Todo: validate the perf of this implementation
+    dsc_axis_iterator *iterators = (dsc_axis_iterator *) alloca(tensors * sizeof(dsc_axis_iterator));
+    for (int i = 0; i < tensors; ++i) iterators[i] = dsc_axis_iterator(to_concat[i], axis_idx);
+
+    dsc_axis_iterator out_iterator(out, axis_idx);
+
+    while (out_iterator.has_next()) {
+        for (int i = 0; i < tensors; ++i) {
+            const int axis_n = to_concat[i]->shape[axis_idx];
+
+            T *DSC_RESTRICT src_data = (T *) to_concat[i]->buf->data;
+            for (int el_idx = 0; el_idx < axis_n; ++el_idx) {
+                const int index = iterators[i].index();
+                out_data[out_iterator.index()] = src_data[index];
+
+                out_iterator.next();
+                iterators[i].next();
+            }
+        }
+    }
+}
+
+void dsc_cpu_concat(dsc_device *,
+                    dsc_tensor **to_concat,
+                    const int tensors,
+                    dsc_tensor *DSC_RESTRICT out,
+                    const int axis_idx) {
+    switch (out->dtype) {
+        case F32:
+            concat<f32>(to_concat, tensors, out, axis_idx);
+            break;
+        case F64:
+            concat<f64>(to_concat, tensors, out, axis_idx);
+            break;
+        case C32:
+            concat<c32>(to_concat, tensors, out, axis_idx);
+            break;
+        case C64:
+            concat<c64>(to_concat, tensors, out, axis_idx);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
+    }
+}
+
 // ============================================================
 // Indexing and Slicing
 //

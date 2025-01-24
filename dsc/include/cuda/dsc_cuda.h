@@ -83,6 +83,11 @@ extern void dsc_cuda_arange(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
 extern void dsc_cuda_randn(dsc_device *dev, dsc_tensor *DSC_RESTRICT x);
 
+extern void dsc_cuda_concat(dsc_device *dev,
+                            dsc_tensor **to_concat,
+                            int tensors,
+                            dsc_tensor *DSC_RESTRICT out,
+                            int axis_idx);
 
 // ============================================================
 // Indexing and Slicing

@@ -23,6 +23,12 @@ extern void dsc_cpu_arange(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
 extern void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
+extern void dsc_cpu_concat(dsc_device *,
+                           dsc_tensor **to_concat,
+                           int tensors,
+                           dsc_tensor *DSC_RESTRICT out,
+                           int axis_idx);
+
 // ============================================================
 // Indexing and Slicing
 //
