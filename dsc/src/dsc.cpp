@@ -608,22 +608,6 @@ dsc_tensor *dsc_concat(dsc_ctx *ctx, const int axis,
     return out;
 }
 
-template <typename T>
-static DSC_INLINE void copy_with_stride(const dsc_tensor *DSC_RESTRICT x,
-                                        dsc_tensor *DSC_RESTRICT out,
-                                        const int *shape,
-                                        const int *stride) {
-    // Todo: it's probably better to have a copy that takes care of this?
-    // DSC_TENSOR_DATA(T, x);
-    // DSC_TENSOR_DATA(T, out);
-    //
-    // dsc_stride_iterator x_it(shape, stride);
-    // dsc_for(i, out) {
-    //     out_data[i] = x_data[x_it.index()];
-    //     x_it.next();
-    // }
-}
-
 dsc_tensor *dsc_transpose(dsc_ctx *ctx,
                           const dsc_tensor *DSC_RESTRICT x,
                           const int axes...) {
@@ -655,7 +639,6 @@ dsc_tensor *dsc_transpose(dsc_ctx *ctx,
 
     int swapped_shape[DSC_MAX_DIMS], swapped_stride[DSC_MAX_DIMS];
     for (int i = 0; i < DSC_MAX_DIMS - x->n_dim; ++i) {
-        // Fixme: useless??
         swapped_shape[i] = x->shape[i];
         swapped_stride[i] = x->stride[i];
     }
@@ -668,23 +651,9 @@ dsc_tensor *dsc_transpose(dsc_ctx *ctx,
 
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim,
                                      &swapped_shape[dsc_tensor_dim(x, 0)],
-                                     x->dtype);
+                                     x->dtype, x->device);
 
-    switch (x->dtype) {
-        case F32:
-            copy_with_stride<f32>(x, out, swapped_shape, swapped_stride);
-            break;
-        case F64:
-            copy_with_stride<f64>(x, out, swapped_shape, swapped_stride);
-            break;
-        case C32:
-            copy_with_stride<c32>(x, out, swapped_shape, swapped_stride);
-            break;
-        case C64:
-            copy_with_stride<c64>(x, out, swapped_shape, swapped_stride);
-            break;
-        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
-    }
+    DSC_DISPATCH(x->device, transpose, x, out, swapped_shape, swapped_stride);
 
     return out;
 }

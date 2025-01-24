@@ -65,10 +65,20 @@ private:
 };
 
 struct dsc_broadcast_iterator {
-    dsc_broadcast_iterator(const dsc_tensor *x, const int *out_shape) :
-            x_shape_(x->shape), x_stride_(x->stride), out_shape_(out_shape) {
+    dsc_broadcast_iterator(const dsc_tensor *x, const int *out_shape) : x_shape_(x->shape),
+                                                                        x_stride_(x->stride),
+                                                                        out_shape_(out_shape) {
         for (int i = 0; i < DSC_MAX_DIMS; ++i) {
             x_broadcast_stride_[i] = x_shape_[i] < out_shape_[i] ? 0 : x_stride_[i];
+        }
+    }
+
+    // Simple strided iterator
+    dsc_broadcast_iterator(const int *x_shape, const int *x_stride) : x_shape_(x_shape),
+                                                                      x_stride_(x_stride),
+                                                                      out_shape_(x_shape) {
+        for (int i = 0; i < DSC_MAX_DIMS; ++i) {
+            x_broadcast_stride_[i] = x_stride_[i];
         }
     }
 
@@ -92,34 +102,6 @@ private:
     int index_ = 0;
     const int *x_shape_, *x_stride_, *out_shape_;
     int x_broadcast_stride_[DSC_MAX_DIMS]{}, x_idx_[DSC_MAX_DIMS]{};
-};
-
-// Todo: unify the stride iterator with the broadcast iterator?
-struct dsc_stride_iterator {
-    dsc_stride_iterator(const int *shape, const int *stride) :
-            shape_(shape), stride_(stride) {
-    }
-
-    DSC_INLINE void next() {
-        for (int i = DSC_MAX_DIMS - 1; i >= 0; --i) {
-            if (++x_idx_[i] < shape_[i]) [[likely]] {
-                index_ += stride_[i];
-                return;
-            }
-            // Rollover this dimension
-            index_ -= (x_idx_[i] - 1) * stride_[i];
-            x_idx_[i] = 0;
-        }
-    }
-
-    DSC_INLINE int index() const {
-        return index_;
-    }
-
-private:
-    int index_ = 0;
-    const int *shape_, *stride_;
-    int x_idx_[DSC_MAX_DIMS]{};
 };
 
 struct dsc_slice_iterator {

@@ -280,6 +280,71 @@ void dsc_cuda_concat(dsc_device *dev,
     dsc_data_free(dev, x_buf);
 }
 
+struct transpose_params {
+    int new_shape[DSC_MAX_DIMS]{}, new_stride[DSC_MAX_DIMS]{};
+};
+
+template <typename T>
+static DSC_CUDA_KERNEL void k_transpose(const T *DSC_RESTRICT x,
+                                        T *DSC_RESTRICT out,
+                                        const int n,
+                                        const transpose_params params) {
+    DSC_CUDA_TID();
+    DSC_CUDA_STRIDE();
+
+    if (tid >= n) return;
+
+    int x_idx[DSC_MAX_DIMS]{};
+    for (int i = tid; i < n; i += stride) {
+        compute_idx_from_linear(x_idx, i, params.new_shape);
+        out[i] = x[compute_linear_idx(x_idx, params.new_stride)];
+    }
+}
+
+void dsc_cuda_transpose(dsc_device *,
+                        const dsc_tensor *DSC_RESTRICT x,
+                        dsc_tensor *DSC_RESTRICT out,
+                        const int *new_shape,
+                        const int *new_stride) {
+    transpose_params params{};
+    memcpy(params.new_shape, new_shape, DSC_MAX_DIMS * sizeof(*params.new_shape));
+    memcpy(params.new_stride, new_stride, DSC_MAX_DIMS * sizeof(*params.new_stride));
+
+    const int n = out->ne;
+    switch (out->dtype) {
+        case F32: {
+            DSC_DATA(f32, x);
+            DSC_DATA(f32, out);
+            k_transpose<f32><<<DSC_CUDA_BLOCKS(n),
+                               DSC_CUDA_DEFAULT_THREADS>>>(x_data, out_data, n, params);
+            break;
+        }
+        case F64: {
+            DSC_DATA(f64, x);
+            DSC_DATA(f64, out);
+            k_transpose<f64><<<DSC_CUDA_BLOCKS(n),
+                               DSC_CUDA_DEFAULT_THREADS>>>(x_data, out_data, n, params);
+
+            break;
+        }
+        case C32: {
+            DSC_DATA(c32, x);
+            DSC_DATA(c32, out);
+            k_transpose<c32><<<DSC_CUDA_BLOCKS(n),
+                               DSC_CUDA_DEFAULT_THREADS>>>(x_data, out_data, n, params);
+            break;
+        }
+        case C64: {
+            DSC_DATA(c64, x);
+            DSC_DATA(c64, out);
+            k_transpose<c64><<<DSC_CUDA_BLOCKS(n),
+                               DSC_CUDA_DEFAULT_THREADS>>>(x_data, out_data, n, params);
+            break;
+        }
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
+    }
+}
+
 // ============================================================
 // Indexing and Slicing
 

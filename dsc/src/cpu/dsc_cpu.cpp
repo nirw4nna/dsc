@@ -176,6 +176,43 @@ void dsc_cpu_concat(dsc_device *,
     }
 }
 
+template <typename T>
+static DSC_INLINE void transpose(const dsc_tensor *DSC_RESTRICT x,
+                                 dsc_tensor *DSC_RESTRICT out,
+                                 const int *new_shape,
+                                 const int *new_stride) {
+    DSC_DATA(T, x);
+    DSC_DATA(T, out);
+
+    dsc_broadcast_iterator x_it(new_shape, new_stride);
+    dsc_for(i, out) {
+        out_data[i] = x_data[x_it.index()];
+        x_it.next();
+    }
+}
+
+void dsc_cpu_transpose(dsc_device *,
+                       const dsc_tensor *DSC_RESTRICT x,
+                       dsc_tensor *DSC_RESTRICT out,
+                       const int *new_shape,
+                       const int *new_stride) {
+    switch (x->dtype) {
+        case F32:
+            transpose<f32>(x, out, new_shape, new_stride);
+            break;
+        case F64:
+            transpose<f64>(x, out, new_shape, new_stride);
+            break;
+        case C32:
+            transpose<c32>(x, out, new_shape, new_stride);
+            break;
+        case C64:
+            transpose<c64>(x, out, new_shape, new_stride);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
+    }
+}
+
 // ============================================================
 // Indexing and Slicing
 //

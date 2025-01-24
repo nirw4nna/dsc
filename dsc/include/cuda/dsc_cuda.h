@@ -89,6 +89,12 @@ extern void dsc_cuda_concat(dsc_device *dev,
                             dsc_tensor *DSC_RESTRICT out,
                             int axis_idx);
 
+extern void dsc_cuda_transpose(dsc_device *,
+                               const dsc_tensor *DSC_RESTRICT x,
+                               dsc_tensor *DSC_RESTRICT out,
+                               const int *new_shape,
+                               const int *new_stride);
+
 // ============================================================
 // Indexing and Slicing
 
