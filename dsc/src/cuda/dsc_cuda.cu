@@ -409,7 +409,7 @@ static DSC_INLINE void set_slice_params(const dsc_tensor *DSC_RESTRICT x,
                                         const dsc_slice *slices,
                                         slicing_params *params) {
     for (int i = 0; i < x->n_dim; ++i) {
-        const int dim = dsc_tensor_dim(x, i);
+        const int dim = dsc_tensor_dim_idx(x, i);
         if (i < n_slices) {
             params->slices[dim] = slices[i];
         } else {
@@ -505,7 +505,7 @@ void dsc_cuda_set_slice(dsc_device *,
     if (xa_scalar) {
         int offset = 0;
         for (int i = 0; i < n_slices; ++i)
-            offset += (slices[i].start * xa->stride[dsc_tensor_dim(xa, i)]);
+            offset += (slices[i].start * dsc_tensor_get_stride(xa, i));
 
         DSC_DATA(byte, xa);
         DSC_DATA(void, xb);
@@ -518,7 +518,7 @@ void dsc_cuda_set_slice(dsc_device *,
 
         int n = 1;
         for (int i = 0; i < xa->n_dim; ++i) {
-            const int dim = dsc_tensor_dim(xa, i);
+            const int dim = dsc_tensor_dim_idx(xa, i);
             const int ne_i = abs(params.slices[dim].start - params.slices[dim].stop);
             const int step_i = abs(params.slices[dim].step);
             params.shape[dim] = (ne_i + step_i - 1) / step_i;
@@ -611,8 +611,8 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
                                  const dsc_tensor *xb,
                                  dsc_tensor *out,
                                  Op op) {
-    const bool same_shape = xa->n_dim == xb->n_dim && memcmp(&xa->shape[dsc_tensor_dim(xa, 0)],
-                                                             &xb->shape[dsc_tensor_dim(xb, 0)],
+    const bool same_shape = xa->n_dim == xb->n_dim && memcmp(&dsc_tensor_get_dim(xa, 0),
+                                                             &dsc_tensor_get_dim(xb, 0),
                                                              xa->n_dim * sizeof(*xa->shape)) == 0;
     DSC_DATA_ALIAS(T, xa);
     DSC_DATA_ALIAS(T, xb);

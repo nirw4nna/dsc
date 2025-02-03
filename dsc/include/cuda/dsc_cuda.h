@@ -26,11 +26,11 @@
 #define DSC_CUDA_TID()        const int tid = (int) (threadIdx.x + blockIdx.x * blockDim.x)
 #define DSC_CUDA_STRIDE()     const int stride = (int) (blockDim.x * gridDim.x)
 
-#define DSC_CUDA_FAIL_ON_ERROR(err) \
-    do { \
+#define DSC_CUDA_FAIL_ON_ERROR(err)                                 \
+    do {                                                            \
         if (err != cudaSuccess) {                                   \
             DSC_LOG_FATAL("CUDA error: %s", cudaGetErrorName(err)); \
-        } \
+        }                                                           \
     } while (0)
 
 #define dsc_cuda_copy_from(DST, SRC, nb)    DSC_CUDA_FAIL_ON_ERROR(cudaMemcpy((DST), (SRC), (nb), cudaMemcpyDeviceToHost))
@@ -141,6 +141,10 @@ extern void dsc_cuda_pow(dsc_device *,
                          const dsc_tensor *xb,
                          dsc_tensor *out);
 
+extern void dsc_cuda_matmul(dsc_device *,
+                            const dsc_tensor *DSC_RESTRICT xa,
+                            const dsc_tensor *DSC_RESTRICT xb,
+                            dsc_tensor *DSC_RESTRICT out);
 // ============================================================
 // Unary Operations
 

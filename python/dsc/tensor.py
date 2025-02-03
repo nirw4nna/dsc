@@ -36,6 +36,7 @@ from ._bindings import (
     _dsc_mul,
     _dsc_div,
     _dsc_pow,
+    _dsc_matmul,
     _dsc_arange,
     _dsc_randn,
     _dsc_cos,
@@ -300,6 +301,12 @@ class Tensor:
     def __rpow__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return power(other, self)
 
+    def __matmul__(self, other: TensorType) -> 'Tensor':
+        return matmul(self, other)
+
+    def __rmatmul__(self, other: TensorType):
+        return matmul(other, self)
+
     def __bytes__(self) -> bytes:
         tensor = self.to(Device.CPU)
         byte_array = (ctypes.c_byte * self.ne * DTYPE_SIZE[self.dtype]).from_address(tensor.data)
@@ -526,6 +533,15 @@ def power(
 ) -> Tensor:
     xa, xb = _wrap_operands(xa, xb)
     return _tensor_op(xa, xb, out, op_name='_dsc_pow')
+
+
+def matmul(
+    xa: TensorType,
+    xb: TensorType,
+    out: Optional[Tensor] = None,
+) -> Tensor:
+    xa, xb = _wrap_operands(xa, xb)
+    return _tensor_op(xa, xb, out, op_name='_dsc_matmul')
 
 
 def cos(x: Tensor, out: Optional[Tensor] = None) -> Tensor:

@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include <cmath>
 #include "dsc.h"
+#include <cmath>
 
 struct cpu_cast_op {
     template<typename Tin, typename Tout>

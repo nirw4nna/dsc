@@ -460,6 +460,20 @@ _lib.dsc_pow.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, _DscTensor_p]
 _lib.dsc_pow.restype = _DscTensor_p
 
 
+# extern dsc_tensor *dsc_matmul(dsc_ctx *ctx,
+#                               dsc_tensor *DSC_RESTRICT xa,
+#                               dsc_tensor *DSC_RESTRICT xb,
+#                               dsc_tensor *DSC_RESTRICT out = nullptr);
+def _dsc_matmul(
+    ctx: _DscCtx, xa: _DscTensor_p, xb: _DscTensor_p, out: _OptionalTensor
+) -> _DscTensor_p:
+    return _lib.dsc_matmul(ctx, xa, xb, out)
+
+
+_lib.dsc_matmul.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, _DscTensor_p]
+_lib.dsc_matmul.restype = _DscTensor_p
+
+
 # extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
 #                             dsc_tensor *__restrict x,
 #                             dsc_dtype new_dtype);

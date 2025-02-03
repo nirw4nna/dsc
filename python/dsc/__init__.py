@@ -32,6 +32,7 @@ from dsc.tensor import (
     true_div,
     sum,
     mean,
+    matmul,
     max,
     min,
     clip,

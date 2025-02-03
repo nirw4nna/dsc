@@ -32,7 +32,7 @@
     } else {                                                                                   \
         DSC_ASSERT(out->dtype == out_dtype);                                                   \
         DSC_ASSERT(out->n_dim == n_dim);                                                       \
-        DSC_ASSERT(memcmp(out->shape, shape, DSC_MAX_DIMS * sizeof(shape[0])) == 0);           \
+        DSC_ASSERT(memcmp(out->shape, shape, DSC_MAX_DIMS * sizeof(*shape)) == 0);             \
         DSC_ASSERT(out->device == xa->device);                                                 \
     }                                                                                          \
     const dsc_tensor *xa__ = xa, *xb__ = xb;                                                   \
@@ -62,7 +62,7 @@
     do {                                                                                                   \
         DSC_ASSERT(x != nullptr);                                                                          \
                                                                                                            \
-        const int axis_idx = dsc_tensor_dim(x, axis);                                                      \
+        const int axis_idx = dsc_tensor_dim_idx(x, axis);                                                  \
         DSC_ASSERT(axis_idx < DSC_MAX_DIMS);                                                               \
                                                                                                            \
         int out_shape[DSC_MAX_DIMS];                                                                       \
@@ -312,6 +312,7 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
     int ne = 1;
     for (int i = 0; i < n_dim; ++i) ne *= shape[i];
 
+    DSC_ASSERT(ne > 0);
     dsc_tensor *new_tensor = find_empty_tensor(ctx);
     DSC_ASSERT(new_tensor != nullptr);
 
@@ -464,7 +465,7 @@ dsc_tensor *dsc_cast(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
     if (x->dtype == new_dtype) return x;
 
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim,
-                                     &x->shape[dsc_tensor_dim(x, 0)],
+                                     &dsc_tensor_get_dim(x, 0),
                                      new_dtype, x->device);
 
     DSC_DISPATCH(x->device, cast, x, out);
@@ -478,7 +479,7 @@ dsc_tensor *dsc_to(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
 
     if (x->device == CUDA) dsc_cuda_sync();
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim,
-                                     &x->shape[dsc_tensor_dim(x, 0)],
+                                     &dsc_tensor_get_dim(x, 0),
                                      x->dtype, new_device);
 
     if (x->device == CUDA) {
@@ -581,7 +582,7 @@ dsc_tensor *dsc_concat(dsc_ctx *ctx, const int axis,
         return out;
     }
 
-    const int axis_idx = dsc_tensor_dim(to_concat[0], axis);
+    const int axis_idx = dsc_tensor_dim_idx(to_concat[0], axis);
     DSC_ASSERT(axis_idx < DSC_MAX_DIMS);
 
     int resulting_shape[DSC_MAX_DIMS];
@@ -600,7 +601,7 @@ dsc_tensor *dsc_concat(dsc_ctx *ctx, const int axis,
     }
 
     dsc_tensor *out = dsc_new_tensor(ctx, n_dim,
-                                     &resulting_shape[dsc_tensor_dim(to_concat[0], 0)],
+                                     &resulting_shape[dsc_tensor_dim_idx(to_concat[0], 0)],
                                      dtype, device);
 
     DSC_DISPATCH(out->device, concat, to_concat, tensors, out, axis_idx);
@@ -644,13 +645,13 @@ dsc_tensor *dsc_transpose(dsc_ctx *ctx,
     }
 
     for (int i = 0; i < x->n_dim; ++i) {
-        const int idx = dsc_tensor_dim(x, swap_axes[i]);
-        swapped_shape[dsc_tensor_dim(x, i)] = x->shape[idx];
-        swapped_stride[dsc_tensor_dim(x, i)] = x->stride[idx];
+        const int idx = dsc_tensor_dim_idx(x, swap_axes[i]);
+        swapped_shape[dsc_tensor_dim_idx(x, i)] = x->shape[idx];
+        swapped_stride[dsc_tensor_dim_idx(x, i)] = x->stride[idx];
     }
 
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim,
-                                     &swapped_shape[dsc_tensor_dim(x, 0)],
+                                     &swapped_shape[dsc_tensor_dim_idx(x, 0)],
                                      x->dtype, x->device);
 
     DSC_DISPATCH(x->device, transpose, x, out, swapped_shape, swapped_stride);
@@ -678,7 +679,7 @@ dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
     va_start(args, indexes);
     for (int i = 0; i < indexes; ++i) {
         int idx = va_arg(args, int);
-        const int x_dim_i = x->shape[dsc_tensor_dim(x, i)];
+        const int x_dim_i = dsc_tensor_get_dim(x, i);
         // Negative indexes mean accessing from the end
         if (idx < 0) idx += x_dim_i;
 
@@ -702,7 +703,7 @@ dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
 
     int offset = 0;
     for (int i = 0; i < indexes; ++i) {
-        offset += (x->stride[dsc_tensor_dim(x, i)] * el_idx[i]);
+        offset += (dsc_tensor_get_stride(x, i) * el_idx[i]);
     }
 
     DSC_GET_DEVICE(ctx, x->device);
@@ -725,7 +726,7 @@ static DSC_INLINE bool parse_slices(const dsc_tensor *DSC_RESTRICT x,
 
     for (int i = 0; i < slices; ++i) {
         dsc_slice slice = va_arg(args, dsc_slice);
-        const int x_dim_i = x->shape[dsc_tensor_dim(x, i)];
+        const int x_dim_i = dsc_tensor_get_dim(x, i);
 
         // The convention is to set all fields in the slice to the same value != NONE to signal
         // access to a single index rather than a slice (happens in mixed scenarios like x[:, 1])
@@ -808,7 +809,7 @@ dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
             const int abs_step = abs(slice_i.step);
             out_shape[out_idx] = (ne_i + abs_step - 1) / abs_step;
         } else {
-            out_shape[out_idx] = x->shape[dsc_tensor_dim(x, i)];
+            out_shape[out_idx] = dsc_tensor_get_dim(x, i);
         }
         out_idx += 1;
     }
@@ -837,7 +838,7 @@ void dsc_tensor_set_idx(dsc_ctx *ctx,
     va_start(args, indexes);
     for (int i = 0; i < indexes; ++i) {
         const int idx = va_arg(args, int);
-        const int x_dim_i = xa->shape[dsc_tensor_dim(xa, i)];
+        const int x_dim_i = dsc_tensor_get_dim(xa, i);
 
         el_slices[i].start = idx;
         el_slices[i].stop = idx + 1;
@@ -855,7 +856,7 @@ void dsc_tensor_set_idx(dsc_ctx *ctx,
     // dimensions of xa and xb must be broadcastable together
     int xa_sub_shape[DSC_MAX_DIMS];
     for (int i = indexes; i < xa->n_dim; ++i)
-        xa_sub_shape[i - indexes] = xa->shape[dsc_tensor_dim(xa, i - indexes)];
+        xa_sub_shape[i - indexes] = dsc_tensor_get_dim(xa, i - indexes);
 
     const bool xb_scalar = dsc_is_scalar(xb);
     const int xa_sub_ndim = xa->n_dim - indexes;
@@ -865,7 +866,7 @@ void dsc_tensor_set_idx(dsc_ctx *ctx,
     if (!xb_scalar) {
         // If xb is not a scalar then its shape must be compatible with xa_sub_shape
         DSC_ASSERT(xb->n_dim == xa_sub_ndim);
-        for (int i = 0; i < xa_sub_ndim; ++i) DSC_ASSERT(xa_sub_shape[i] == xb->shape[dsc_tensor_dim(xb, i)]);
+        for (int i = 0; i < xa_sub_ndim; ++i) DSC_ASSERT(xa_sub_shape[i] == dsc_tensor_get_dim(xb, i));
     }
 
     DSC_DISPATCH(xa->device, set_slice, xa, xa_sub_ndim == 0, xb, xb_scalar, indexes, el_slices, false);
@@ -898,7 +899,7 @@ void dsc_tensor_set_slice(dsc_ctx *ctx,
             const int abs_step = abs(slice_i.step);
             xa_slice_shape[i] = (ne_i + abs_step - 1) / abs_step;
         } else {
-            xa_slice_shape[i] = xa->shape[dsc_tensor_dim(xa, i)];
+            xa_slice_shape[i] = dsc_tensor_get_dim(xa, i);
         }
     }
     const bool xb_scalar = dsc_is_scalar(xb);
@@ -906,7 +907,7 @@ void dsc_tensor_set_slice(dsc_ctx *ctx,
         // Check whether xb is broadcastable with xa
         const int dims_to_compare = DSC_MIN(xa->n_dim, xb->n_dim);
         for (int i = 0; i < dims_to_compare; ++i) {
-            const int xb_dim_i = xb->shape[dsc_tensor_dim(xb, i)];
+            const int xb_dim_i = dsc_tensor_get_dim(xb, i);
             const int xa_slice_i = xa_slice_shape[i];
             DSC_ASSERT(xa_slice_i == 1 || xb_dim_i == 1 || xa_slice_i == xb_dim_i);
         }
@@ -1005,6 +1006,55 @@ dsc_tensor *dsc_pow(dsc_ctx *ctx,
     DSC_DISPATCH(xa->device, pow, xa, xb, out);
 
     cleanup_binary();
+
+    return out;
+}
+
+dsc_tensor *dsc_matmul(dsc_ctx *ctx,
+                       dsc_tensor *DSC_RESTRICT xa,
+                       dsc_tensor *DSC_RESTRICT xb,
+                       dsc_tensor *DSC_RESTRICT out) {
+    // Notes: it would make sense to add also a 'transpose' flag for xa and xb
+    //        as well as an 'alpha' coefficient (so we end up performing out = alpha * (xa @ xb))
+    DSC_ASSERT(xa->dtype == xb->dtype);
+    DSC_ASSERT(xa->device == xb->device);
+
+    if (xa->n_dim < 2 || xb->n_dim < 2) return dsc_mul(ctx, xa, xb, out);
+
+    const int xa_rows = dsc_tensor_get_dim(xa, -2);
+    const int xa_cols = dsc_tensor_get_dim(xa, -1);
+    const int xb_rows = dsc_tensor_get_dim(xb, -2);
+    const int xb_cols = dsc_tensor_get_dim(xb, -1);
+    if (xa_cols != xb_rows) DSC_LOG_FATAL("can't multiply (%d, %d) by (%d, %d)",
+                                          xa_rows, xa_cols, xb_rows, xb_cols);
+
+    bool can_broadcast = true;
+    for (int i = 0; i < DSC_MAX_DIMS - 2 && can_broadcast; ++i) {
+        if  (xa->shape[i] != xb->shape[i] && xa->shape[i] != 1 && xb->shape[i] != 1) can_broadcast = false;
+    }
+    DSC_ASSERT(can_broadcast);
+
+    int out_shape[DSC_MAX_DIMS];
+    for (int i = 0; i < DSC_MAX_DIMS - 2; ++i) out_shape[i] = DSC_MAX(xa->shape[i], xb->shape[i]);
+
+    out_shape[DSC_MAX_DIMS - 2] = xa_rows;
+    out_shape[DSC_MAX_DIMS - 1] = xb_cols;
+    const int out_ndim = DSC_MAX(xa->n_dim, xb->n_dim);
+    if (out != nullptr) {
+        DSC_ASSERT(memcmp(out_shape, out->shape, DSC_MAX_DIMS * sizeof(*out->shape)) == 0);
+        DSC_ASSERT(out_ndim == out->n_dim);
+        DSC_ASSERT(out->dtype == xa->dtype);
+        DSC_ASSERT(out->device == xa->device);
+    } else {
+        out = dsc_new_tensor(ctx, out_ndim, &out_shape[DSC_MAX_DIMS - out_ndim], xa->dtype, xa->device);
+    }
+
+    DSC_GET_DEVICE(ctx, xa->device);
+    DSC_DATA(void, out);
+    // Matmul requires the result to be zero-initialized
+    dev->memset(out_data, 0, out->ne * DSC_DTYPE_SIZE[out->dtype]);
+
+    DSC_DISPATCH(xa->device, matmul, xa, xb, out);
 
     return out;
 }
@@ -1237,7 +1287,7 @@ dsc_tensor *dsc_sum(dsc_ctx *ctx,
 
     validate_reduce_params();
 
-    const int axis_idx = dsc_tensor_dim(x, axis);
+    const int axis_idx = dsc_tensor_dim_idx(x, axis);
 
     DSC_DISPATCH(x->device, sum, x, out, axis_idx);
 
@@ -1253,7 +1303,7 @@ dsc_tensor *dsc_mean(dsc_ctx *ctx,
 
     out = dsc_sum(ctx, x, out, axis, keep_dims);
 
-    const int axis_idx = dsc_tensor_dim(x, axis);
+    const int axis_idx = dsc_tensor_dim_idx(x, axis);
     const int axis_n = x->shape[axis_idx];
 
     dsc_tensor *scale;
@@ -1288,7 +1338,7 @@ dsc_tensor *dsc_max(dsc_ctx *ctx,
 
     validate_reduce_params();
 
-    const int axis_idx = dsc_tensor_dim(x, axis);
+    const int axis_idx = dsc_tensor_dim_idx(x, axis);
 
     DSC_DISPATCH(x->device, max, x, out, axis_idx);
 
@@ -1304,7 +1354,7 @@ dsc_tensor *dsc_min(dsc_ctx *ctx,
 
     validate_reduce_params();
 
-    const int axis_idx = dsc_tensor_dim(x, axis);
+    const int axis_idx = dsc_tensor_dim_idx(x, axis);
 
     DSC_DISPATCH(x->device, min, x, out, axis_idx);
 

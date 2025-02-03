@@ -82,6 +82,11 @@ extern void dsc_cpu_pow(dsc_device *,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
+extern void dsc_cpu_matmul(dsc_device *dev,
+                           const dsc_tensor *DSC_RESTRICT xa,
+                           const dsc_tensor *DSC_RESTRICT xb,
+                           dsc_tensor *DSC_RESTRICT out);
+
 // ============================================================
 // Unary Operations
 

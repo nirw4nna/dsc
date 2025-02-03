@@ -25,6 +25,10 @@ static void cpu_memcpy(void *dst, const void *src, const usize nb, dsc_memcpy_di
     memcpy(dst, src, nb);
 }
 
+static void cpu_memset(void *dst, const int c, const usize nb) {
+    memset(dst, c, nb);
+}
+
 static void cpu_dispose(dsc_device *dev) {
     dsc_aligned_free(dev->device_mem);
 
@@ -43,6 +47,7 @@ dsc_device *dsc_cpu_device(const usize mem_size) {
         .used_mem = 0,
         .type = CPU,
         .memcpy = cpu_memcpy,
+        .memset = cpu_memset,
         .dispose = cpu_dispose,
     };
 

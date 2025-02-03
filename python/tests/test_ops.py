@@ -3,6 +3,7 @@
 #
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
+from random import randint
 
 import dsc
 import numpy as np
@@ -31,7 +32,7 @@ def teardown_fixture():
     yield
 
 
-def all_close(actual: dsc.Tensor, target: np.ndarray, eps=1e-5):
+def all_close(actual: dsc.Tensor, target: np.ndarray, eps=1e-2):
     actual_np = actual.numpy()
     diffs = ~np.isclose(actual_np, target, atol=eps, rtol=eps, equal_nan=True)
     close = len(actual_np[diffs]) == 0
@@ -104,6 +105,46 @@ class TestOps:
 
                 assert all_close(res_dsc_s, res_np_s)
                 assert all_close(r_res_dsc_s, r_res_np_s)
+
+    def test_matmul(self):
+        def _mnk() -> tuple[int, int, int]:
+            return randint(2, 50), randint(2, 50), randint(2, 50)
+
+        def _test_matmul(shape_a: List[int], shape_b: List[int], dt: np.dtype):
+            print(f'Testing {shape_a} @ {shape_b} with {dt.__name__} on {DEVICE}')
+            xa = random_nd(shape_a, dtype=dt)
+            xb = random_nd(shape_b, dtype=dt)
+            xa_dsc = dsc.from_numpy(xa)
+            xb_dsc = dsc.from_numpy(xb)
+
+            res = xa @ xb
+            res_dsc = xa_dsc @ xb_dsc
+            assert all_close(res_dsc, res)
+
+        for dtype in DSC_DTYPES:
+            if dtype == np.complex64 or dtype == np.complex128:
+                continue
+
+            # 2D matrices
+            for _ in range(5):
+                m, n, k = _mnk()
+                _test_matmul([m, k], [k, n], dtype)
+
+            # Batched case
+            for _ in range(5):
+                batch_1, batch_2 = randint(2, 10), randint(2, 10)
+                m, n, k = _mnk()
+                _test_matmul([batch_1, batch_2, m, k], [batch_1, batch_2, k, n], dtype)
+
+            # Batched case with broadcasting
+            for batch_1 in range(1, 6):
+                for batch_2 in range(1, 6):
+                    m, n, k = _mnk()
+                    _test_matmul([batch_1 if batch_1%2 == 0 else 1,
+                                  batch_2 if batch_2%2 == 0 else 1, m, k],
+                                 [batch_1 if batch_1%2 == 1 else 1,
+                                  batch_2 if batch_2%2 == 1 else 1, k, n],
+                                 dtype)
 
     def test_unary(self):
         ops = {

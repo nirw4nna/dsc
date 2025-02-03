@@ -18,7 +18,7 @@
 // Max number of traces that can be recorded. Changing this will result in more memory
 // allocated during context initialization.
 #if !defined(DSC_MAX_TRACES)
-#    define DSC_MAX_TRACES ((u64) 1'000)
+#    define DSC_MAX_TRACES   ((u64) 1'000)
 #endif
 
 #if !defined(DSC_MAX_OBJS)
@@ -70,8 +70,9 @@ static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 #define DSC_ALIGN(x, y)      (((x) + (y) - 1) & ~((y) - 1))
 #define DSC_MAX(x, y)        ((x) > (y) ? (x) : (y))
 #define DSC_MIN(x, y)        ((x) < (y) ? (x) : (y))
-#define DSC_B_TO_KB(b)       ((f64)(b) / 1024.)
-#define DSC_B_TO_MB(b)       ((f64)(b) / (1024. * 1024.))
+#define DSC_CEIL(x, y)       (((x) + ((y) - 1)) / (y))
+#define DSC_B_TO_KB(b)       ((f64) (b) / 1024.)
+#define DSC_B_TO_MB(b)       ((f64) (b) / (1024. * 1024.))
 #define DSC_MB(mb)           ((usize) ((mb) * 1024l * 1024l))
 #define DSC_KB(kb)           ((usize) ((kb) * 1024l))
 
@@ -85,12 +86,10 @@ static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 #    define DSC_INLINE           __forceinline__
 #    define DSC_STRICTLY_PURE    __attribute__((const))
 #    define DSC_PURE             __attribute__((pure))
-#    define DSC_MALLOC           __attribute__((malloc))
 #elif defined(__GNUC__)
 #    define DSC_INLINE           inline __attribute__((always_inline))
 #    define DSC_STRICTLY_PURE    __attribute__((const))
 #    define DSC_PURE             __attribute__((pure))
-#    define DSC_MALLOC           __attribute__((malloc))
 #else
 #    define DSC_INLINE           inline
 #    define DSC_STRICTLY_PURE
@@ -110,11 +109,13 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 #define DSC_DATA_ALIAS(T, X)    T *X##_data = (T *) (X)->buf->data
 #define DSC_DATA(T, X)          T *DSC_RESTRICT X##_data = (T *) (X)->buf->data
 
-#define dsc_tensor_dim(X, dim)    (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (X)->n_dim + (dim)))
-#define dsc_new_like(CTX, X)      (dsc_new_tensor((CTX), (X)->n_dim, &(X)->shape[dsc_tensor_dim(X, 0)], (X)->dtype, (X)->device))
-#define dsc_new_view(CTX, X)      (dsc_new_tensor((CTX), (X)->n_dim, &(X)->shape[dsc_tensor_dim(X, 0)], (X)->dtype, (X)->device, (X)->buf))
-#define dsc_for(idx, X)           for (int idx = 0; idx < (X)->ne; ++idx)
-#define dsc_is_scalar(X)          (X)->n_dim == 1 && (X)->shape[dsc_tensor_dim((X), -1)] == 1
+#define dsc_tensor_dim_idx(X, dim)    (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (X)->n_dim + (dim)))
+#define dsc_tensor_get_dim(X, dim)    ((X)->shape[dsc_tensor_dim_idx((X), (dim))])
+#define dsc_tensor_get_stride(X, dim) ((X)->stride[dsc_tensor_dim_idx((X), (dim))])
+#define dsc_new_like(CTX, X)          (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (X)->device))
+#define dsc_new_view(CTX, X)          (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (X)->device, (X)->buf))
+#define dsc_for(idx, X)               for (int idx = 0; idx < (X)->ne; ++idx)
+#define dsc_is_scalar(X)              (X)->n_dim == 1 && dsc_tensor_get_dim(X, -1) == 1
 
 #if defined(__cplusplus)
 extern "C" {
@@ -344,6 +345,11 @@ extern dsc_tensor *dsc_pow(dsc_ctx *ctx,
                            dsc_tensor *xa,
                            dsc_tensor *xb,
                            dsc_tensor *out = nullptr);
+
+extern dsc_tensor *dsc_matmul(dsc_ctx *ctx,
+                              dsc_tensor *DSC_RESTRICT xa,
+                              dsc_tensor *DSC_RESTRICT xb,
+                              dsc_tensor *DSC_RESTRICT out = nullptr);
 
 // ============================================================
 // Unary Operations

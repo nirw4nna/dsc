@@ -48,6 +48,7 @@ struct dsc_device {
     dsc_device_type type;
 
     void (*memcpy)  (void *dst, const void *src, usize nb, dsc_memcpy_dir dir);
+    void (*memset)  (void *dst, int c, usize nb);
     void (*dispose) (dsc_device *dev);
 };
 
@@ -114,7 +115,7 @@ DSC_INLINE dsc_free_node *next_free_node(dsc_device *dev) {
 }
 }
 
-static DSC_MALLOC DSC_INLINE dsc_data_buffer *dsc_data_alloc(dsc_device *dev, usize nb) {
+static DSC_INLINE dsc_data_buffer *dsc_data_alloc(dsc_device *dev, usize nb) {
     DSC_ASSERT(dev != nullptr);
     DSC_ASSERT(nb > 0);
 

@@ -5,11 +5,13 @@
 // (https://opensource.org/license/bsd-3-clause).
 
 #include "cpu/dsc_cpu.h"
-#include "dsc_device.h"
-#include "cpu/dsc_ops.h"
+#include "cpu/dsc_gemm.h"
 #include "cpu/dsc_iter.h"
+#include "cpu/dsc_ops.h"
+#include "dsc_device.h"
+#include <cpu/dsc_gemm.h>
+#include <cstring>// memcpy
 #include <random>
-#include <cstring> // memcpy
 
 
 // ============================================================
@@ -270,7 +272,7 @@ static DSC_INLINE void set_slice(dsc_tensor *DSC_RESTRICT xa,
     if (xa_scalar) {
         int offset = 0;
         for (int i = 0; i < n_slices; ++i)
-            offset += (slices[i].start * xa->stride[dsc_tensor_dim(xa, i)]);
+            offset += (slices[i].start * dsc_tensor_get_stride(xa, i));
 
         xa_data[offset] = xb_data[0];
     } else if (xb_scalar) {
@@ -421,6 +423,83 @@ void dsc_cpu_pow(dsc_device *,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
     binary_op(xa, xb, out, cpu_pow_op());
+}
+
+void dsc_cpu_matmul(dsc_device *dev,
+                    const dsc_tensor *DSC_RESTRICT xa,
+                    const dsc_tensor *DSC_RESTRICT xb,
+                    dsc_tensor *DSC_RESTRICT out) {
+    const int stride_a = dsc_tensor_get_stride(xa, -2);
+    const int stride_b = dsc_tensor_get_stride(xb, -2);
+    const int stride_out = dsc_tensor_get_stride(out, -2);
+    const int m = dsc_tensor_get_dim(out, -2);
+    const int n = dsc_tensor_get_dim(out, -1);
+    const int k = dsc_tensor_get_dim(xa, -1);
+
+    const int d0_out = out->shape[0];
+    const int d1_out = out->shape[1];
+    // We already validated the shape so if the resulting dim is != it means we need to apply broadcasting
+    const int xa_stride_d0 = xa->shape[0] != d0_out ? 0 : xa->stride[0];
+    const int xa_stride_d1 = xa->shape[1] != d1_out ? 0 : xa->stride[1];
+    const int xb_stride_d0 = xb->shape[0] != d0_out ? 0 : xb->stride[0];
+    const int xb_stride_d1 = xb->shape[1] != d1_out ? 0 : xb->stride[1];
+
+    // Packed buffers
+    dsc_data_buffer *xa_buf;
+    dsc_data_buffer *xb_buf;
+    switch (xa->dtype) {
+        case F32: {
+            DSC_DATA(f32, xa);
+            DSC_DATA(f32, xb);
+            DSC_DATA(f32, out);
+            xa_buf = dsc_data_alloc(dev, dsc_packed_A_size<f32>());
+            xb_buf = dsc_data_alloc(dev, dsc_packed_B_size<f32>());
+
+            f32 *DSC_RESTRICT packed_a = (f32 *) xa_buf->data;
+            f32 *DSC_RESTRICT packed_b = (f32 *) xb_buf->data;
+
+            for (int d0 = 0; d0 < d0_out; ++d0) {
+                for (int d1 = 0; d1 < d1_out; ++d1) {
+                    const int out_offset = d0 * out->stride[0] + d1 * out->stride[1];
+                    const int xa_offset = d0 * xa_stride_d0 + d1 * xa_stride_d1;
+                    const int xb_offset = d0 * xb_stride_d0 + d1 * xb_stride_d1;
+                    dsc_gemm<f32>(m, n, k,
+                                  &xa_data[xa_offset], stride_a, packed_a,
+                                  &xb_data[xb_offset], stride_b, packed_b,
+                                  &out_data[out_offset], stride_out);
+                }
+            }
+            break;
+        }
+        case F64: {
+            DSC_DATA(f64, xa);
+            DSC_DATA(f64, xb);
+            DSC_DATA(f64, out);
+
+            xa_buf = dsc_data_alloc(dev, dsc_packed_A_size<f64>());
+            xb_buf = dsc_data_alloc(dev, dsc_packed_B_size<f64>());
+
+            f64 *DSC_RESTRICT packed_a = (f64 *) xa_buf->data;
+            f64 *DSC_RESTRICT packed_b = (f64 *) xb_buf->data;
+
+            for (int d0 = 0; d0 < d0_out; ++d0) {
+                for (int d1 = 0; d1 < d1_out; ++d1) {
+                    const int out_offset = d0 * out->stride[0] + d1 * out->stride[1];
+                    const int xa_offset = d0 * xa_stride_d0 + d1 * xa_stride_d1;
+                    const int xb_offset = d0 * xb_stride_d0 + d1 * xb_stride_d1;
+                    dsc_gemm<f64>(m, n, k,
+                                  &xa_data[xa_offset], stride_a, packed_a,
+                                  &xb_data[xb_offset], stride_b, packed_b,
+                                  &out_data[out_offset], stride_out);
+                }
+            }
+            break;
+        }
+        DSC_INVALID_CASE("unsupported dtype=%d", xa->dtype);
+    }
+
+    dsc_data_free(dev, xa_buf);
+    dsc_data_free(dev, xb_buf);
 }
 
 // ============================================================

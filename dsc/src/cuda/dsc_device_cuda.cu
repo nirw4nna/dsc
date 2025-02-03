@@ -28,6 +28,11 @@ static void cuda_memcpy(void *dst, const void *src, const usize nb, const dsc_me
     DSC_CUDA_FAIL_ON_ERROR(cudaMemcpy(dst, src, nb, DSC_CUDA_MEMCPY_DIRECTIONS[dir]));
 }
 
+static void cuda_memset(void *dst, const int c, const usize nb) {
+    DSC_CUDA_FAIL_ON_ERROR(cudaMemset(dst, c, nb));
+}
+
+
 static void cuda_dispose(dsc_device *dev) {
     DSC_CUDA_FAIL_ON_ERROR(cudaFree(dev->device_mem));
 
@@ -61,6 +66,7 @@ dsc_device *dsc_cuda_device(usize mem_size, const int cuda_dev) {
         .used_mem = 0,
         .type = CUDA,
         .memcpy = cuda_memcpy,
+        .memset = cuda_memset,
         .dispose = cuda_dispose,
     };
 

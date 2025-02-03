@@ -108,7 +108,7 @@ struct dsc_slice_iterator {
     dsc_slice_iterator(const dsc_tensor *x, const int n_slices, const dsc_slice *slices) :
             shape_(x->shape), stride_(x->stride), n_dim_(x->n_dim) {
         for (int i = 0; i < x->n_dim; ++i) {
-            const int dim_idx = dsc_tensor_dim(x, i);
+            const int dim_idx = dsc_tensor_dim_idx(x, i);
             if (i < n_slices) {
                 start_[dim_idx] = slices[i].start;
                 stop_[dim_idx] = slices[i].stop;
