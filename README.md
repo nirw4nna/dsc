@@ -59,9 +59,8 @@ to enable/disable specific features:
 
 | Option             | Description                                                                  |
 |--------------------|------------------------------------------------------------------------------|
-| DSC_DEBUG          | Compile with debug information and verbose logging (**default**)             |
-| DSC_FAST           | Turn off logging and compile with the highest optimisation level             |
-| DSC_CUDA           | Enable CUDA support (**default=OFF**)                                        |
+| DSC_LOG_LEVEL      | Configure the logging level (values: [0-3] with 0 meaning everything on)     |
+| DSC_FAST           | Turn off logging (level=2) and compile with the highest optimisation level   |
 | DSC_ENABLE_TRACING | Enable tracing for all operations                                            |
 | DSC_MAX_TRACES     | Max number of traces that can be recorded (**default=1K**)                   |
 | DSC_MAX_OBJS       | Max number of DSC tensors that can be used at the same time (**default=1K**) |
@@ -73,9 +72,9 @@ python3 -c "import dsc; x = dsc.arange(10); print(x)"
 
 ## Usage
 The DSC Python API is very similar to NumPy but with a few key differences:
-- **Initialization**: the memory pool that DSC can use must be explicitly initialized using `dsc.init(mem_size, scratch_size)`
+- **Initialization**: the memory pool that DSC can use must be explicitly initialized using `dsc.init(mem_size)`
 at the beginning of your program. If this is not the case init will be called by the DSC Python wrapper, in this case the
-amount of memory reserved for the main and the scratch memory will be 10% of the total memory of your system.
+amount of memory reserved will be 10% of the total memory of your system.
 
 
 - **Tracing**: DSC has a built-in tracer. To use it in Python you can either call `dsc.start_recording()` and 
@@ -92,65 +91,6 @@ Note that `numpy()` creates a view while `from_numpy()` creates a copy of the or
 switch between DSC and NumPy.
 
 Everything else should be familiar to those used to work with NumPy.
-
-To showcase some more features, let's implement an FFT-based filter in both Python and C++ using DSC.
-### Python
-```python
-import dsc
-
-def filterFFT(s: dsc.Tensor, b: dsc.Tensor) -> dsc.Tensor:
-    # Determine the length of the output signal
-    ls = len(s)
-    lb = len(b)
-    output_length = ls + lb - 1
-
-    # Calculate the next power of two greater than or equal to the output length (for efficiency)
-    fft_size = int(2 ** math.ceil(math.log2(output_length)))
-
-    # Perform FFTs of the input signal and the filter coefficients
-    S = dsc.rfft(s, n=fft_size)
-    B = dsc.rfft(b, n=fft_size)
-
-    # Multiply the FFTs to perform convolution in the frequency domain
-    convolved_signal_freq = S * B
-
-    # Perform inverse FFT to get back to the time domain
-    filtered_signal = dsc.irfft(convolved_signal_freq)
-
-    # Take the central part to have the same length as the input signal
-    filtered_signal = filtered_signal[:output_length]
-
-    return filtered_signal
-```
-### C++
-```c++
-#include "dsc_api.h"
-
-dsc::tensor<float> filterFFT(const dsc::tensor<float>& s, const dsc::tensor<float>& b) {
-    // Determine the length of the output signal
-    const auto ls = s.size();
-    const auto lb = b.size();
-    const auto output_length = ls + lb - 1;
-    
-    // Calculate the next power of two greater than or equal to the output length (for efficiency)
-    const auto fft_size = (int) (pow(2, ceil(log2((double) output_length))));
-    
-    // Perform FFTs of the input signal and the filter coefficients
-    const auto S = dsc::rfft(s, fft_size);
-    const auto B = dsc::rfft(b, fft_size);
-    
-    // Multiply the FFTs to perform convolution in the frequency domain
-    const auto convolved_signal_freq = S * B;
-    
-    // Perform inverse FFT to get back to the time domain
-    const auto filtered_signal = dsc::irfft(convolved_signal_freq);
-    
-    // Take the central part to have the same length as the input signal
-    return filtered_signal.get(DSC_SLICE_TO(output_length));
-}
-```
-As you can see both implementations look very similar and they also achieve similar performance as the core operations
-are all implemented using the same low-level DSC core library.
 
 ## Performance
 See [performance](benchmarks/perf.md) for a detailed comparison.

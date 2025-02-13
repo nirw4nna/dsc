@@ -24,10 +24,12 @@
 #if !defined(DSC_MAX_OBJS)
 #    define DSC_MAX_OBJS     ((int) 1'000)
 #endif
-#define DSC_MAX_DEVICES      ((int) 2)
+#define DSC_MAX_DEVICES      ((int) 1)
 #define DSC_DEFAULT_DEVICE   CPU
+#define DSC_COMPARISON_OPS   ((int) 6)
 
-static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
+static_assert(DSC_MAX_DEVICES == 1, "DSC_MAX_DEVICES != 1 - update the code");
+static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the code");
 
 #define DSC_ASSERT(x)                                                           \
     do {                                                                        \
@@ -82,11 +84,7 @@ static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 // A 'pure' function is basically the same thing without the restriction on global state change, this means
 // that a 'pure' function can take in and read the value of parameters passed by pointer even if that value
 // changes between subsequent invocations.
-#if defined(__NVCC__)
-#    define DSC_INLINE           __forceinline__
-#    define DSC_STRICTLY_PURE    __attribute__((const))
-#    define DSC_PURE             __attribute__((pure))
-#elif defined(__GNUC__)
+#if defined(__GNUC__)
 #    define DSC_INLINE           inline __attribute__((always_inline))
 #    define DSC_STRICTLY_PURE    __attribute__((const))
 #    define DSC_PURE             __attribute__((pure))
@@ -127,12 +125,19 @@ struct dsc_data_buffer;
 enum dsc_device_type : i8 {
     DEFAULT = -1,
     CPU,
-    CUDA
 };
 
 static constexpr const char *DSC_DEVICE_NAMES[DSC_MAX_DEVICES] = {
         "CPU",
-        "CUDA",
+};
+
+enum dsc_comparison_op : u8 {
+    EQ,
+    NE,
+    LT,
+    LE,
+    GT,
+    GE
 };
 
 struct dsc_tensor {
@@ -175,20 +180,6 @@ extern void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x);
 extern usize dsc_used_mem(dsc_ctx *ctx);
 
 extern void dsc_print_mem_usage(dsc_ctx *ctx);
-
-extern void dsc_set_default_device(dsc_ctx *ctx, dsc_device_type device);
-
-extern void dsc_cuda_set_device(dsc_ctx *ctx, int device);
-
-extern bool dsc_cuda_available(dsc_ctx *);
-
-extern int dsc_cuda_devices(dsc_ctx *);
-
-extern int dsc_cuda_dev_capability(dsc_ctx *, int device);
-
-extern usize dsc_cuda_dev_mem(dsc_ctx *, int device);
-
-extern void dsc_cuda_sync(dsc_ctx *);
 
 // ============================================================
 // Tracing
@@ -246,20 +237,20 @@ extern dsc_tensor *dsc_tensor_4d(dsc_ctx *ctx,
                                  const void *DSC_RESTRICT data = nullptr,
                                  dsc_device_type data_device = DEFAULT);
 
+extern dsc_tensor *dsc_wrap_bool(dsc_ctx *ctx,
+                                 bool val,
+                                 dsc_device_type device = DEFAULT);
+
+extern dsc_tensor *dsc_wrap_i32(dsc_ctx *ctx,
+                                i32 val,
+                                dsc_device_type device = DEFAULT);
+
 extern dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx,
                                 f32 val,
                                 dsc_device_type device = DEFAULT);
 
 extern dsc_tensor *dsc_wrap_f64(dsc_ctx *ctx,
                                 f64 val,
-                                dsc_device_type device = DEFAULT);
-
-extern dsc_tensor *dsc_wrap_c32(dsc_ctx *ctx,
-                                c32 val,
-                                dsc_device_type device = DEFAULT);
-
-extern dsc_tensor *dsc_wrap_c64(dsc_ctx *ctx,
-                                c64 val,
                                 dsc_device_type device = DEFAULT);
 
 extern dsc_tensor *dsc_arange(dsc_ctx *ctx,
@@ -277,9 +268,8 @@ extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
                             dsc_tensor *DSC_RESTRICT x,
                             dsc_dtype new_dtype);
 
-extern dsc_tensor *dsc_to(dsc_ctx *ctx,
-                          dsc_tensor *DSC_RESTRICT x,
-                          dsc_device_type new_device = DEFAULT);
+// ============================================================
+// Tensor Manipulation
 
 extern dsc_tensor *dsc_reshape(dsc_ctx *ctx,
                                const dsc_tensor *DSC_RESTRICT x,
@@ -288,6 +278,11 @@ extern dsc_tensor *dsc_reshape(dsc_ctx *ctx,
 extern dsc_tensor *dsc_concat(dsc_ctx *ctx,
                               int axis,
                               int tensors...);
+
+extern dsc_tensor *dsc_split(dsc_ctx *ctx,
+                             const dsc_tensor *DSC_RESTRICT x,
+                             int ne, int offset,
+                             int axis = -1);
 
 extern dsc_tensor *dsc_transpose(dsc_ctx *ctx,
                                  const dsc_tensor *DSC_RESTRICT x,
@@ -351,94 +346,52 @@ extern dsc_tensor *dsc_matmul(dsc_ctx *ctx,
                               dsc_tensor *DSC_RESTRICT xb,
                               dsc_tensor *DSC_RESTRICT out = nullptr);
 
+extern dsc_tensor *dsc_compare(dsc_ctx *ctx,
+                               const dsc_tensor *xa,
+                               const dsc_tensor *xb,
+                               dsc_comparison_op comp,
+                               dsc_tensor *out = nullptr);
+
 // ============================================================
 // Unary Operations
 
 extern dsc_tensor *dsc_cos(dsc_ctx *ctx,
-                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out = nullptr);
 
 extern dsc_tensor *dsc_sin(dsc_ctx *ctx,
-                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out = nullptr);
 
-extern dsc_tensor *dsc_sinc(dsc_ctx *ctx,
-                            const dsc_tensor *DSC_RESTRICT x,
+extern dsc_tensor *dsc_tanh(dsc_ctx *ctx,
+                            dsc_tensor *DSC_RESTRICT x,
                             dsc_tensor *DSC_RESTRICT out = nullptr);
-
-extern dsc_tensor *dsc_logn(dsc_ctx *ctx,
-                            const dsc_tensor *DSC_RESTRICT x,
-                            dsc_tensor *DSC_RESTRICT out = nullptr);
-
-extern dsc_tensor *dsc_log2(dsc_ctx *ctx,
-                            const dsc_tensor *DSC_RESTRICT x,
-                            dsc_tensor *DSC_RESTRICT out = nullptr);
-
-extern dsc_tensor *dsc_log10(dsc_ctx *ctx,
-                             const dsc_tensor *DSC_RESTRICT x,
-                             dsc_tensor *DSC_RESTRICT out = nullptr);
 
 extern dsc_tensor *dsc_exp(dsc_ctx *ctx,
-                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out = nullptr);
 
 extern dsc_tensor *dsc_sqrt(dsc_ctx *ctx,
-                            const dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT x,
                             dsc_tensor *DSC_RESTRICT out = nullptr);
-
-extern dsc_tensor *dsc_abs(dsc_ctx *ctx,
-                           const dsc_tensor *DSC_RESTRICT x,
-                           dsc_tensor *DSC_RESTRICT out = nullptr);
-
-extern dsc_tensor *dsc_angle(dsc_ctx *ctx,
-                             const dsc_tensor *DSC_RESTRICT x);
-
-// conj and real are NOP if the input is real meaning x will be returned as is.
-extern dsc_tensor *dsc_conj(dsc_ctx *ctx,
-                            dsc_tensor *DSC_RESTRICT x);
-
-extern dsc_tensor *dsc_real(dsc_ctx *ctx,
-                            dsc_tensor *DSC_RESTRICT x);
-
-extern dsc_tensor *dsc_imag(dsc_ctx *ctx,
-                            const dsc_tensor *DSC_RESTRICT x);
-
-// Modified Bessel function of the first kind order 0
-extern dsc_tensor *dsc_i0(dsc_ctx *ctx,
-                          const dsc_tensor *DSC_RESTRICT x);
-
-// Use a single function for all the dtypes since complex comparison is done by just checking
-// the real part. By setting min to -inf and max to +inf we can simply clip x with two comparisons:
-// out = min(max(x, x_min), x_max).
-extern dsc_tensor *dsc_clip(dsc_ctx *ctx,
-                            const dsc_tensor *DSC_RESTRICT x,
-                            dsc_tensor *DSC_RESTRICT out = nullptr,
-                            f64 x_min = dsc_inf<f64, false>(),
-                            f64 x_max = dsc_inf<f64, true>());
 
 // ============================================================
 // Unary Operations Along Axis
 
 extern dsc_tensor *dsc_sum(dsc_ctx *ctx,
-                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out = nullptr,
                            int axis = -1,
                            bool keep_dims = true);
 
-extern dsc_tensor *dsc_mean(dsc_ctx *ctx,
-                            const dsc_tensor *DSC_RESTRICT x,
-                            dsc_tensor *DSC_RESTRICT out = nullptr,
-                            int axis = -1,
-                            bool keep_dims = true);
-
 extern dsc_tensor *dsc_max(dsc_ctx *ctx,
-                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out = nullptr,
                            int axis = -1,
                            bool keep_dims = true);
 
 extern dsc_tensor *dsc_min(dsc_ctx *ctx,
-                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out = nullptr,
                            int axis = -1,
                            bool keep_dims = true);

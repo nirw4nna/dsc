@@ -23,11 +23,19 @@ extern void dsc_cpu_arange(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
 extern void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
+// ============================================================
+// Tensor Manipulation
+
 extern void dsc_cpu_concat(dsc_device *,
                            dsc_tensor **to_concat,
                            int tensors,
                            dsc_tensor *DSC_RESTRICT out,
                            int axis_idx);
+
+extern void dsc_cpu_split(dsc_device *,
+                          const dsc_tensor *DSC_RESTRICT x,
+                          dsc_tensor *DSC_RESTRICT out,
+                          int axis_idx, int offset);
 
 extern void dsc_cpu_transpose(dsc_device *,
                               const dsc_tensor *DSC_RESTRICT x,
@@ -87,6 +95,12 @@ extern void dsc_cpu_matmul(dsc_device *dev,
                            const dsc_tensor *DSC_RESTRICT xb,
                            dsc_tensor *DSC_RESTRICT out);
 
+extern void dsc_cpu_compare(dsc_device *,
+                            const dsc_tensor *xa,
+                            const dsc_tensor *xb,
+                            dsc_comparison_op comp,
+                            dsc_tensor *out);
+
 // ============================================================
 // Unary Operations
 
@@ -98,21 +112,9 @@ extern void dsc_cpu_sin(dsc_device *,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_cpu_sinc(dsc_device *,
+extern void dsc_cpu_tanh(dsc_device *,
                          const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
-
-extern void dsc_cpu_logn(dsc_device *,
-                         const dsc_tensor *DSC_RESTRICT x,
-                         dsc_tensor *DSC_RESTRICT out);
-
-extern void dsc_cpu_log2(dsc_device *,
-                         const dsc_tensor *DSC_RESTRICT x,
-                         dsc_tensor *DSC_RESTRICT out);
-
-extern void dsc_cpu_log10(dsc_device *,
-                          const dsc_tensor *DSC_RESTRICT x,
-                          dsc_tensor *DSC_RESTRICT out);
 
 extern void dsc_cpu_exp(dsc_device *,
                         const dsc_tensor *DSC_RESTRICT x,
@@ -121,35 +123,6 @@ extern void dsc_cpu_exp(dsc_device *,
 extern void dsc_cpu_sqrt(dsc_device *,
                          const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
-
-extern void dsc_cpu_i0(dsc_device *,
-                       const dsc_tensor *DSC_RESTRICT x,
-                       dsc_tensor *DSC_RESTRICT out);
-
-extern void dsc_cpu_abs(dsc_device *,
-                        const dsc_tensor *DSC_RESTRICT x,
-                        dsc_tensor *DSC_RESTRICT out);
-
-extern void dsc_cpu_angle(dsc_device *,
-                          const dsc_tensor *DSC_RESTRICT x,
-                          dsc_tensor *DSC_RESTRICT out);
-
-extern void dsc_cpu_conj(dsc_device *,
-                         const dsc_tensor *DSC_RESTRICT x,
-                         dsc_tensor *DSC_RESTRICT out);
-
-extern void dsc_cpu_real(dsc_device *,
-                         const dsc_tensor *DSC_RESTRICT x,
-                         dsc_tensor *DSC_RESTRICT out);
-
-extern void dsc_cpu_imag(dsc_device *,
-                         const dsc_tensor *DSC_RESTRICT x,
-                         dsc_tensor *DSC_RESTRICT out);
-
-extern void dsc_cpu_clip(dsc_device *,
-                         const dsc_tensor *DSC_RESTRICT x,
-                         dsc_tensor *DSC_RESTRICT out,
-                         f64 x_min, f64 x_max);
 
 // ============================================================
 // Unary Operations Along Axis

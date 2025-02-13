@@ -9,11 +9,15 @@
 #include "dsc.h"
 
 struct dsc_axis_iterator {
-    dsc_axis_iterator(const dsc_tensor *x, const int axis,
-                      const int axis_n = -1) :
+    dsc_axis_iterator(const dsc_tensor *x,
+                      const int axis,
+                      const int axis_n = -1,
+                      const int offset = 0) :
             shape_(x->shape), stride_(x->stride),
             axis_(axis), axis_n_((axis_n < 0 || axis_n > x->shape[axis]) ? x->shape[axis] : axis_n) {
+        DSC_ASSERT((unsigned) offset < (unsigned) axis_n_);
 
+        idx_[axis_] = offset;
     }
 
     DSC_INLINE void next() {

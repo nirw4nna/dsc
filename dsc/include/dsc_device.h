@@ -52,10 +52,10 @@ struct dsc_device {
     void (*dispose) (dsc_device *dev);
 };
 
-namespace {
-DSC_INLINE dsc_free_node *find_best(dsc_device *dev,
-                                    const usize required_size,
-                                    dsc_free_node **prev) {
+namespace internal::alloc {
+static DSC_INLINE dsc_free_node *find_best(dsc_device *dev,
+                                           const usize required_size,
+                                           dsc_free_node **prev) {
     dsc_free_node *node = dev->head;
     dsc_free_node *best = node->size >= required_size ? node : nullptr;
     dsc_free_node *prev_node = nullptr;
@@ -74,9 +74,9 @@ DSC_INLINE dsc_free_node *find_best(dsc_device *dev,
     return best;
 }
 
-DSC_INLINE void node_insert(dsc_free_node **head,
-                            dsc_free_node *prev,
-                            dsc_free_node *to_insert) {
+static DSC_INLINE void node_insert(dsc_free_node **head,
+                                   dsc_free_node *prev,
+                                   dsc_free_node *to_insert) {
     if (prev == nullptr) {
         if (*head != nullptr) {
             to_insert->next = *head;
@@ -93,9 +93,9 @@ DSC_INLINE void node_insert(dsc_free_node **head,
     }
 }
 
-DSC_INLINE void node_remove(dsc_free_node **head,
-                            dsc_free_node *prev,
-                            dsc_free_node *to_remove) {
+static DSC_INLINE void node_remove(dsc_free_node **head,
+                                   dsc_free_node *prev,
+                                   dsc_free_node *to_remove) {
     if (prev == nullptr) {
         *head = to_remove->next;
     } else {
@@ -105,7 +105,7 @@ DSC_INLINE void node_remove(dsc_free_node **head,
     dsc_node_mark_free(to_remove);
 }
 
-DSC_INLINE dsc_free_node *next_free_node(dsc_device *dev) {
+static DSC_INLINE dsc_free_node *next_free_node(dsc_device *dev) {
     for (int i = 0; i < DSC_MAX_OBJS; ++i) {
         if (dsc_free_node *bin = &dev->free_nodes[i]; dsc_node_is_free(bin)) {
             return bin;
@@ -114,6 +114,8 @@ DSC_INLINE dsc_free_node *next_free_node(dsc_device *dev) {
     return nullptr;
 }
 }
+
+using namespace internal::alloc;
 
 static DSC_INLINE dsc_data_buffer *dsc_data_alloc(dsc_device *dev, usize nb) {
     DSC_ASSERT(dev != nullptr);
@@ -207,10 +209,5 @@ static DSC_INLINE void dsc_data_free(dsc_device *dev, dsc_data_buffer *ptr) {
 
 extern dsc_device *dsc_cpu_device(usize mem_size);
 
-#if defined(DSC_CUDA)
-    extern dsc_device *dsc_cuda_device(usize mem_size, int cuda_dev);
-#else
-    static DSC_INLINE dsc_device *dsc_cuda_device(usize, int) {
-        return nullptr;
-    }
-#endif
+#undef dsc_node_is_free
+#undef dsc_node_mark_free

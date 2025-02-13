@@ -4,40 +4,38 @@
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
 
-from dsc.context import init, set_default_device
+from dsc.context import init
 from dsc.tensor import (
     Tensor,
     from_numpy,
     reshape,
     concat,
+    split,
     transpose,
     arange,
     randn,
     cos,
     sin,
-    sinc,
-    logn,
-    log2,
-    log10,
+    tanh,
     exp,
     sqrt,
-    absolute,
-    angle,
-    conj,
-    real,
-    imag,
     add,
     sub,
     mul,
     true_div,
     sum,
     mean,
+    var,
     matmul,
     max,
     min,
-    clip,
     power,
-    i0,
+    equal,
+    not_equal, 
+    less,
+    less_equal,
+    greater,
+    greater_equal,
     ones,
     ones_like,
     zeros,
@@ -50,4 +48,3 @@ from dsc.tensor import (
 from dsc.dtype import Dtype
 from dsc.profiler import profile, start_recording, stop_recording
 from dsc.device import Device
-import dsc.cuda as cuda
