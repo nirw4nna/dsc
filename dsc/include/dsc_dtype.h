@@ -113,10 +113,14 @@ consteval T dsc_pi() {
 
 template<typename T>
 consteval T dsc_zero() {
-    if constexpr (dsc_is_type<T, f32>()) {
+    if constexpr (dsc_is_type<T, bool>()) {
+        return false;
+    } else if constexpr (dsc_is_type<T, i32>()) {
+        return 0;
+    } else if constexpr (dsc_is_type<T, f32>()) {
         return 0.f;
     } else if constexpr (dsc_is_type<T, f64>()) {
-        return 0;
+        return 0.;
     } else {
         static_assert("T is not supported");
     }

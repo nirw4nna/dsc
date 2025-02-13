@@ -288,6 +288,11 @@ extern dsc_tensor *dsc_transpose(dsc_ctx *ctx,
                                  const dsc_tensor *DSC_RESTRICT x,
                                  int axes...);
 
+extern dsc_tensor *dsc_tril(dsc_ctx *ctx,
+                            const dsc_tensor *DSC_RESTRICT x,
+                            int diagonal = 0,
+                            dsc_tensor *DSC_RESTRICT out = nullptr);
+
 // ============================================================
 // Indexing and Slicing
 //
@@ -351,6 +356,11 @@ extern dsc_tensor *dsc_compare(dsc_ctx *ctx,
                                const dsc_tensor *xb,
                                dsc_comparison_op comp,
                                dsc_tensor *out = nullptr);
+
+extern void dsc_masked_fill(dsc_ctx *ctx,
+                            dsc_tensor *x,
+                            const dsc_tensor *mask,
+                            f64 value);
 
 // ============================================================
 // Unary Operations

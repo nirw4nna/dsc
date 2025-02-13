@@ -43,6 +43,11 @@ extern void dsc_cpu_transpose(dsc_device *,
                               const int *new_shape,
                               const int *new_stride);
 
+extern void dsc_cpu_tril(dsc_device *,
+                         const dsc_tensor *DSC_RESTRICT x,
+                         int diagonal,
+                         dsc_tensor *DSC_RESTRICT out);
+
 // ============================================================
 // Indexing and Slicing
 //
@@ -100,6 +105,11 @@ extern void dsc_cpu_compare(dsc_device *,
                             const dsc_tensor *xb,
                             dsc_comparison_op comp,
                             dsc_tensor *out);
+
+extern void dsc_cpu_masked_fill(dsc_device *,
+                                dsc_tensor *x,
+                                const dsc_tensor *mask,
+                                f64 value);
 
 // ============================================================
 // Unary Operations

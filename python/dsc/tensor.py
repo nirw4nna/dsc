@@ -15,8 +15,10 @@ from ._bindings import (
     _dsc_reshape,
     _dsc_concat,
     _dsc_compare,
+    _dsc_masked_fill,
     _dsc_split,
     _dsc_transpose,
+    _dsc_tril,
     _dsc_tensor_free,
     _dsc_sum,
     _dsc_max,
@@ -342,6 +344,10 @@ class Tensor:
     def transpose(self, axes: Optional[Union[Tuple[int, ...], List[int]]] = None) -> 'Tensor':
         return transpose(self, axes)
 
+    def masked_fill(self, mask: TensorType, value: float):
+        mask = _wrap(mask)
+        _dsc_masked_fill(_get_ctx(), self.c_ptr, mask.c_ptr, value)
+
     def split(self, ne: int, axis: int = -1) -> Tuple['Tensor', ...]:
         return split(self, ne, axis)
 
@@ -445,6 +451,11 @@ def transpose(
         return Tensor(_dsc_transpose(_get_ctx(), x._c_ptr, *axes_tuple))
     else:
         raise RuntimeError(f'cannot transpose axes {axes}')
+
+
+def tril(x: TensorType, diagonal: int = 0, out: Optional[Tensor] = None) -> Tensor:
+    x = _wrap(x)
+    return Tensor(_dsc_tril(_get_ctx(), x.c_ptr, diagonal, _c_ptr_or_none(out)), _has_out(out))
 
 
 def _c_ptr_or_none(x: Optional['Tensor']) -> _OptionalTensor:

@@ -246,6 +246,45 @@ void dsc_cpu_transpose(dsc_device *,
     }
 }
 
+template<typename T>
+static DSC_INLINE void tril(const dsc_tensor *DSC_RESTRICT x,
+                            const int diagonal,
+                            dsc_tensor *DSC_RESTRICT out) {
+    DSC_DATA(T, x);
+    DSC_DATA(T, out);
+
+    for (dsc_axis_iterator x_it(x, dsc_tensor_dim_idx(x, -1));
+         x_it.has_next();
+         x_it.next()) {
+        const int idx = x_it.index();
+        const int row = x_it.pos(-2);
+        const int col = x_it.pos(-1);
+
+        out_data[idx] = (col > (row + diagonal)) ? dsc_zero<T>() : x_data[idx];
+    }
+}
+
+void dsc_cpu_tril(dsc_device *,
+                  const dsc_tensor *DSC_RESTRICT x,
+                  const int diagonal,
+                  dsc_tensor *DSC_RESTRICT out) {
+    switch (x->dtype) {
+        case BOOL:
+            tril<bool>(x, diagonal, out);
+            break;
+        case I32:
+            tril<i32>(x, diagonal, out);
+            break;
+        case F32:
+            tril<f32>(x, diagonal, out);
+            break;
+        case F64:
+            tril<f64>(x, diagonal, out);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
+    }
+}
+
 // ============================================================
 // Indexing and Slicing
 //
@@ -505,6 +544,35 @@ void dsc_cpu_compare(dsc_device *,
             binary_op(xa, xb, out, cpu_ge_op());
             break;
         DSC_INVALID_CASE("unknown comparison=%d", comp);
+    }
+}
+
+template<typename T>
+static DSC_INLINE void masked_fill(dsc_tensor *x,
+                                   const dsc_tensor *mask,
+                                   const T value) {
+    DSC_DATA(T, x);
+    DSC_DATA(bool, mask);
+
+    dsc_broadcast_iterator mask_it(mask, x->shape);
+    dsc_for(i, x) {
+        x_data[i] = mask_data[mask_it.index()] ? value : x_data[i];
+        mask_it.next();
+    }
+}
+
+void dsc_cpu_masked_fill(dsc_device *,
+                         dsc_tensor *x,
+                         const dsc_tensor *mask,
+                         const f64 value) {
+    switch (x->dtype) {
+        case F32:
+            masked_fill(x, mask, (f32) value);
+            break;
+        case F64:
+            masked_fill(x, mask, value);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
 }
 

@@ -434,6 +434,20 @@ _lib.dsc_compare.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_uint8, _DscT
 _lib.dsc_compare.restype = _DscTensor_p
 
 
+# extern void dsc_masked_fill(dsc_ctx *ctx,
+#                             dsc_tensor *x,
+#                             const dsc_tensor *mask,
+#                             f64 value);
+def _dsc_masked_fill(
+        ctx: _DscCtx, x: _DscTensor_p, mask: _DscTensor_p, value: float
+):
+    _lib.dsc_masked_fill(ctx, x, mask, c_double(value))
+
+
+_lib.dsc_masked_fill.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_double]
+_lib.dsc_masked_fill.restype = None
+
+
 # extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
 #                             dsc_tensor *__restrict x,
 #                             dsc_dtype new_dtype);
@@ -488,6 +502,18 @@ def _dsc_transpose(ctx: _DscCtx, x: _DscTensor_p, *axes: int) -> _DscTensor_p:
 
 _lib.dsc_transpose.argtypes = [_DscCtx, _DscTensor_p, c_int]
 _lib.dsc_transpose.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_tril(dsc_ctx *ctx,
+#                             const dsc_tensor *DSC_RESTRICT x,
+#                             int diagonal = 0,
+#                             dsc_tensor *DSC_RESTRICT out = nullptr);
+def _dsc_tril(ctx: _DscCtx, x: _DscTensor_p, diagonal: int, out: _DscTensor_p) -> _DscTensor_p:
+    return _lib.dsc_tril(ctx, x, c_int(diagonal), out)
+
+
+_lib.dsc_tril.argtypes = [_DscCtx, _DscTensor_p, c_int, _DscTensor_p]
+_lib.dsc_tril.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,

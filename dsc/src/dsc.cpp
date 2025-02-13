@@ -70,7 +70,7 @@
     }                                                                                         \
     cast_unary_params()
 
-#define cleanup_unary_params()               \
+#define cleanup_unary_params()                 \
     do {                                       \
         if (x__ != x) dsc_tensor_free(ctx, x); \
     } while (0)
@@ -601,6 +601,28 @@ dsc_tensor *dsc_transpose(dsc_ctx *ctx,
     return out;
 }
 
+dsc_tensor *dsc_tril(dsc_ctx *ctx,
+                     const dsc_tensor *DSC_RESTRICT x,
+                     const int diagonal,
+                     dsc_tensor *DSC_RESTRICT out) {
+    DSC_ASSERT(x != nullptr);
+    DSC_ASSERT(x->n_dim >= 2);
+    DSC_ASSERT(diagonal <= dsc_tensor_get_dim(x, -1));
+
+    if (out == nullptr) {
+        out = dsc_new_like(ctx, x);
+    } else {
+        DSC_ASSERT(out->device == x->device);
+        DSC_ASSERT(out->n_dim == x->n_dim);
+        DSC_ASSERT(out->dtype == x->dtype);
+        DSC_ASSERT(memcmp(out->shape, x->shape, DSC_MAX_DIMS * sizeof(*x->shape)) == 0);
+    }
+
+    DSC_DISPATCH(x->device, tril, x, diagonal, out);
+
+    return out;
+}
+
 // ============================================================
 // Indexing and Slicing
 //
@@ -1035,6 +1057,26 @@ dsc_tensor *dsc_compare(dsc_ctx *ctx,
     DSC_DISPATCH(xa->device, compare, xa, xb, comp, out);
 
     return out;
+}
+
+void dsc_masked_fill(dsc_ctx *ctx,
+                     dsc_tensor *x,
+                     const dsc_tensor *mask,
+                     const f64 value) {
+    DSC_ASSERT(x != nullptr);
+    DSC_ASSERT(mask != nullptr);
+    DSC_ASSERT(x->device == mask->device);
+    DSC_ASSERT(mask->dtype == BOOL);
+    DSC_ASSERT(x->dtype == F32 || x->dtype == F64);
+
+    // Mask must be broadcastable with the shape of x, not the other way around
+    DSC_ASSERT(x->n_dim >= mask->n_dim);
+    DSC_ASSERT(can_broadcast(x, mask));
+    for (int i = 0; i < DSC_MAX_DIMS; ++i) {
+        DSC_ASSERT(x->shape[i] >= mask->shape[i]);
+    }
+
+    DSC_DISPATCH(x->device, masked_fill, x, mask, value);
 }
 
 // ============================================================

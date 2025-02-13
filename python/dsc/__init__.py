@@ -12,6 +12,7 @@ from dsc.tensor import (
     concat,
     split,
     transpose,
+    tril,
     arange,
     randn,
     cos,

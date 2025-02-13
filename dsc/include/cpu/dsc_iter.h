@@ -17,6 +17,7 @@ struct dsc_axis_iterator {
             axis_(axis), axis_n_((axis_n < 0 || axis_n > x->shape[axis]) ? x->shape[axis] : axis_n) {
         DSC_ASSERT((unsigned) offset < (unsigned) axis_n_);
 
+        // Todo: this can't work, what happens when we reset this dimension?
         idx_[axis_] = offset;
     }
 
@@ -56,6 +57,10 @@ struct dsc_axis_iterator {
 
     DSC_INLINE bool has_next() const {
         return !end_;
+    }
+
+    DSC_INLINE int pos(const int idx) const {
+        return idx_[idx > 0 ? idx : DSC_MAX_DIMS + idx];
     }
 
 private:
