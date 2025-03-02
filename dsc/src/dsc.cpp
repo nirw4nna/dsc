@@ -413,6 +413,20 @@ dsc_tensor *dsc_cast(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
 // ============================================================
 // Tensor Manipulation
 
+void dsc_copy(dsc_ctx *ctx,
+              dsc_tensor *DSC_RESTRICT x,
+              void *DSC_RESTRICT data,
+              const usize nb,
+              const dsc_device_type data_device) {
+    DSC_ASSERT(x != nullptr);
+    DSC_ASSERT(x->ne * DSC_DTYPE_SIZE[x->dtype] >= nb);
+    DSC_ASSERT(x->device == data_device);
+
+    DSC_DATA(void, x);
+    DSC_GET_DEVICE(ctx, x->device);
+    dev->memcpy(x_data, data, nb, ON_DEVICE);
+}
+
 dsc_tensor *dsc_reshape(dsc_ctx *ctx,
                         const dsc_tensor *DSC_RESTRICT x,
                         const int dimensions...) {
@@ -524,33 +538,6 @@ dsc_tensor *dsc_concat(dsc_ctx *ctx, const int axis,
     return out;
 }
 
-dsc_tensor *dsc_split(dsc_ctx *ctx,
-                      const dsc_tensor *DSC_RESTRICT x,
-                      const int ne, const int offset,
-                      const int axis) {
-    DSC_ASSERT(x != nullptr);
-    DSC_ASSERT(ne > 0);
-    DSC_ASSERT(offset > 0);
-
-    const int axis_idx = dsc_tensor_dim_idx(x, axis);
-    const int axis_n = dsc_tensor_get_dim(x, axis);
-
-    DSC_ASSERT(axis_n % ne == 0);
-
-    int out_shape[DSC_MAX_DIMS];
-    for (int i = 0; i < DSC_MAX_DIMS; ++i) {
-        out_shape[i] = i != axis_idx ? x->shape[i] : ne;
-    }
-
-    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim,
-                                     &out_shape[dsc_tensor_dim_idx(x, 0)],
-                                     x->dtype, x->device);
-
-    DSC_DISPATCH(x->device, split, x, out, axis_idx, offset);
-
-    return out;
-}
-
 dsc_tensor *dsc_transpose(dsc_ctx *ctx,
                           const dsc_tensor *DSC_RESTRICT x,
                           const int axes...) {
@@ -607,7 +594,6 @@ dsc_tensor *dsc_tril(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT out) {
     DSC_ASSERT(x != nullptr);
     DSC_ASSERT(x->n_dim >= 2);
-    DSC_ASSERT(diagonal <= dsc_tensor_get_dim(x, -1));
 
     if (out == nullptr) {
         out = dsc_new_like(ctx, x);
@@ -782,6 +768,23 @@ dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
 
     DSC_DISPATCH(out->device, get_slice, x, out, slices, el_slices, whole);
 
+    return out;
+}
+
+dsc_tensor *dsc_tensor_get_tensor(dsc_ctx *ctx,
+                                  const dsc_tensor *DSC_RESTRICT x,
+                                  const dsc_tensor *DSC_RESTRICT indexes) {
+    DSC_ASSERT(x != nullptr);
+    DSC_ASSERT(indexes != nullptr);
+    DSC_ASSERT(indexes->dtype == I32);
+    DSC_ASSERT(x->device == indexes->device);
+
+    // Note: limited for now, could be more generic
+    DSC_ASSERT(x->n_dim == 2);
+    DSC_ASSERT(indexes->n_dim == 1);
+
+    dsc_tensor *out = dsc_tensor_2d(ctx, x->dtype, indexes->ne, dsc_tensor_get_dim(x, -1), x->device);
+    DSC_DISPATCH(x->device, get_tensor, x, indexes, out);
     return out;
 }
 

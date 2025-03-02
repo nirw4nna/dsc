@@ -35,7 +35,7 @@ extern void dsc_cpu_concat(dsc_device *,
 extern void dsc_cpu_split(dsc_device *,
                           const dsc_tensor *DSC_RESTRICT x,
                           dsc_tensor *DSC_RESTRICT out,
-                          int axis_idx, int offset);
+                          int axis_idx, int ne, int offset);
 
 extern void dsc_cpu_transpose(dsc_device *,
                               const dsc_tensor *DSC_RESTRICT x,
@@ -57,6 +57,11 @@ extern void dsc_cpu_get_slice(dsc_device *,
                               dsc_tensor *DSC_RESTRICT out,
                               int n_slices, const dsc_slice *slices,
                               bool whole);
+
+extern void dsc_cpu_get_tensor(dsc_device *,
+                               const dsc_tensor *DSC_RESTRICT x,
+                               const dsc_tensor *DSC_RESTRICT indexes,
+                               dsc_tensor *DSC_RESTRICT out);
 
 extern void dsc_cpu_set_slice(dsc_device *,
                               dsc_tensor *DSC_RESTRICT xa,

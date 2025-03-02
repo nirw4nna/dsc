@@ -16,7 +16,6 @@ from ._bindings import (
     _dsc_concat,
     _dsc_compare,
     _dsc_masked_fill,
-    _dsc_split,
     _dsc_transpose,
     _dsc_tril,
     _dsc_tensor_free,
@@ -25,9 +24,11 @@ from ._bindings import (
     _dsc_min,
     _dsc_tensor_get_idx,
     _dsc_tensor_get_slice,
+    _dsc_tensor_get_tensor,
     _dsc_tensor_set_idx,
     _dsc_tensor_set_slice,
     _dsc_view,
+    _dsc_copy,
     _dsc_wrap_bool,
     _dsc_wrap_i32,
     _dsc_wrap_f32,
@@ -69,15 +70,12 @@ from typing import Union, Tuple, List, Optional, Any
 TensorType = Union['Tensor', np.ndarray]
 
 
-def _unwrap(x: 'Tensor') -> Union[float, 'Tensor']:
+def _unwrap(x: 'Tensor') -> Union[ScalarType, 'Tensor']:
     # If x is not wrapping a single value return it
     if x.n_dim != 1 or len(x) != 1:
         return x
 
-    if x.dtype == Dtype.F32 or x.dtype == Dtype.F64:
-        return ctypes.cast(x.data, DTYPE_TO_CTYPE[x.dtype]).contents.value
-    else:
-        raise RuntimeError(f'unknown dtype {x.dtype}')
+    return ctypes.cast(x.data, DTYPE_TO_CTYPE[x.dtype]).contents.value
 
 
 def _c_slice(x: Union[slice, int]) -> _DscSlice:
@@ -99,7 +97,6 @@ def _wrap(
     x: Union[ScalarType, TensorType], dtype: Optional[Dtype] = None, device: Optional[Device] = None
 ) -> 'Tensor':
     device = device if device is not None else Device.DEFAULT
-    # Default dtype is f32 or c32, depending on float or complex
     if isinstance(x, np.ndarray):
         # The conversion from (and to) NumPy is not free, so it's better to do that once and then work with DSC tensors.
         # This is here just for convenience not because it's a best practice.
@@ -123,10 +120,11 @@ def _wrap(
         return Tensor(_dsc_wrap_bool(_get_ctx(), bool(x), device))
     elif out_dtype == Dtype.I32:
         return Tensor(_dsc_wrap_i32(_get_ctx(), int(x), device))
-    elif out_dtype == Dtype.F32:
-        return Tensor(_dsc_wrap_f32(_get_ctx(), float(x), device))
-    else:
+    elif out_dtype == Dtype.F64:
         return Tensor(_dsc_wrap_f64(_get_ctx(), float(x), device))
+    else:
+        # Default to F32
+        return Tensor(_dsc_wrap_f32(_get_ctx(), float(x), device))
 
 
 def _pointers_are_equals(xa: _DscTensor_p, xb: _DscTensor_p) -> bool:
@@ -195,8 +193,9 @@ class Tensor:
             slice,
             Tuple[slice, ...],
             Tuple[Union[int, slice], ...],
+            'Tensor',
         ],
-    ) -> Union[float, complex, 'Tensor']:
+    ) -> Union[ScalarType, 'Tensor']:
         if isinstance(item, int):
             return _unwrap(Tensor(_dsc_tensor_get_idx(_get_ctx(), self.c_ptr, item)))
         elif isinstance(item, Tuple) and all(isinstance(i, int) for i in item):
@@ -220,6 +219,12 @@ class Tensor:
             return Tensor(
                 _dsc_tensor_get_slice(
                     _get_ctx(), self.c_ptr, *tuple(_c_slice(s) for s in item)
+                )
+            )
+        elif isinstance(item, Tensor):
+            return Tensor(
+                _dsc_tensor_get_tensor(
+                    _get_ctx(), self.c_ptr, item.c_ptr
                 )
             )
         else:
@@ -296,7 +301,7 @@ class Tensor:
     def __matmul__(self, other: TensorType) -> 'Tensor':
         return matmul(self, other)
 
-    def __rmatmul__(self, other: TensorType):
+    def __rmatmul__(self, other: TensorType) -> 'Tensor':
         return matmul(other, self)
 
     def __eq__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
@@ -329,6 +334,10 @@ class Tensor:
 
         return np_array.reshape(self.shape)
 
+    def load(self, x: np.ndarray):
+        data_ptr = ctypes.cast(x.ctypes.data, ctypes.c_void_p)
+        _dsc_copy(_get_ctx(), self.c_ptr, data_ptr, x.size * DTYPE_SIZE[NP_TO_DTYPE[x.dtype]], self.device)
+
     def cast(self, dtype: Dtype) -> 'Tensor':
         if self.dtype == dtype:
             return self
@@ -344,17 +353,18 @@ class Tensor:
     def transpose(self, axes: Optional[Union[Tuple[int, ...], List[int]]] = None) -> 'Tensor':
         return transpose(self, axes)
 
-    def masked_fill(self, mask: TensorType, value: float):
+    def masked_fill(self, mask: TensorType, value: float) -> 'Tensor':
         mask = _wrap(mask)
         _dsc_masked_fill(_get_ctx(), self.c_ptr, mask.c_ptr, value)
+        return self
 
     def split(self, ne: int, axis: int = -1) -> Tuple['Tensor', ...]:
         return split(self, ne, axis)
 
-    def mean(self, axis: int = -1, keepdims: bool = True):
+    def mean(self, axis: int = -1, keepdims: bool = True) -> 'Tensor':
         return mean(self, None, axis=axis, keepdims=keepdims)
 
-    def var(self, axis: int = -1, keepdims: bool = True):
+    def var(self, axis: int = -1, keepdims: bool = True) -> 'Tensor':
         return var(self, None, axis=axis, keepdims=keepdims)
 
 
@@ -438,7 +448,13 @@ def split(x: Tensor, ne: int, axis: int = -1) -> Tuple[Tensor, ...]:
     n = x.size(axis)
     if n % ne != 0:
         raise RuntimeError(f'cannot split {x.shape} along {axis} ({n} is not a multiple of {ne})')
-    return tuple([Tensor(_dsc_split(_get_ctx(), x.c_ptr, ne, idx * ne, axis)) for idx in range(n // ne)])
+    slices = []
+    for idx in range(n // ne):
+        s = [slice(None, None, 1)] * x.n_dim
+        s[axis] = slice(idx * ne, (idx + 1) * ne, 1)
+        slices.append(tuple(s))
+
+    return tuple(x[s] for s in slices)
 
 
 def transpose(
@@ -685,7 +701,7 @@ def mean(
 def var(
     x: Tensor, out: Optional[Tensor] = None, axis: int = -1, keepdims: bool = True
 ) -> Tensor:
-    return mean((x - x.mean(axis, keepdims)) ** 2, out, axis, keepdims)
+    return mean((x - x.mean(axis, True)) ** 2, out, axis, keepdims)
 
 
 def max(

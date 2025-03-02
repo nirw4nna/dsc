@@ -174,41 +174,6 @@ void dsc_cpu_concat(dsc_device *,
     }
 }
 
-template<typename T>
-static DSC_INLINE void split(const dsc_tensor *DSC_RESTRICT x,
-                             dsc_tensor *DSC_RESTRICT out,
-                             const int axis_idx, const int offset) {
-    DSC_DATA(T, x);
-    DSC_DATA(T, out);
-
-    dsc_axis_iterator x_it(x, axis_idx, -1, offset);
-    dsc_for(i, out) {
-        out_data[i] = x_data[x_it.index()];
-        x_it.next();
-    }
-}
-
-void dsc_cpu_split(dsc_device *,
-                   const dsc_tensor *DSC_RESTRICT x,
-                   dsc_tensor *DSC_RESTRICT out,
-                   const int axis_idx, const int offset) {
-    switch (out->dtype) {
-        case BOOL:
-            split<bool>(x, out, axis_idx, offset);
-            break;
-        case I32:
-            split<i32>(x, out, axis_idx, offset);
-            break;
-        case F32:
-            split<f32>(x, out, axis_idx, offset);
-            break;
-        case F64:
-            split<f64>(x, out, axis_idx, offset);
-            break;
-        DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
-    }
-}
-
 template <typename T>
 static DSC_INLINE void transpose(const dsc_tensor *DSC_RESTRICT x,
                                  dsc_tensor *DSC_RESTRICT out,
@@ -327,6 +292,26 @@ void dsc_cpu_get_slice(dsc_device *,
             copy_slice<f64>(x, out, n_slices, slices, whole);
             break;
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
+    }
+}
+
+void dsc_cpu_get_tensor(dsc_device *,
+                        const dsc_tensor *DSC_RESTRICT x,
+                        const dsc_tensor *DSC_RESTRICT indexes,
+                        dsc_tensor *DSC_RESTRICT out) {
+    DSC_DATA(byte, x);
+    DSC_DATA(i32, indexes);
+    DSC_DATA(byte, out);
+
+    const int stride = dsc_tensor_get_stride(x, -2);
+    const int count = dsc_tensor_get_dim(x, -1);
+    const usize dtype_size = DSC_DTYPE_SIZE[x->dtype];
+
+    dsc_for(i, indexes) {
+        const int idx = indexes_data[i];
+        memcpy(out_data + (i * stride * dtype_size),
+               x_data + (idx * stride * dtype_size),
+               count * dtype_size);
     }
 }
 
@@ -452,6 +437,9 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
             // this is not the case: the output will always be bool but the input could be anything
             if constexpr (is_comparison_op<Op>()) {
                 switch (xa->dtype) {
+                    case BOOL:
+                        binary_op<bool, bool>(xa, xb, out, op);
+                        break;
                     case I32:
                         binary_op<bool, i32>(xa, xb, out, op);
                         break;
@@ -720,7 +708,7 @@ template<typename T, typename ROp>
 static DSC_INLINE void reduce(const dsc_tensor *DSC_RESTRICT x,
                               dsc_tensor *DSC_RESTRICT out,
                               const int axis_idx,
-                              T initial_value,
+                              const T initial_value,
                               ROp reduction) {
     DSC_DATA(T, out);
     DSC_DATA(T, x);
@@ -728,11 +716,12 @@ static DSC_INLINE void reduce(const dsc_tensor *DSC_RESTRICT x,
     const int axis_n = x->shape[axis_idx];
     dsc_axis_iterator x_it(x, axis_idx, axis_n);
     dsc_for(i, out) {
+        T reduced_val = initial_value;
         for (int j = 0; j < axis_n; ++j) {
-            initial_value = reduction(initial_value, x_data[x_it.index()]);
+            reduced_val = reduction(reduced_val, x_data[x_it.index()]);
             x_it.next();
         }
-        out_data[i] = initial_value;
+        out_data[i] = reduced_val;
     }
 }
 

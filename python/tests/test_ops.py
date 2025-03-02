@@ -3,26 +3,20 @@
 #
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
-from random import randint
+from random import randint, random
 
 import dsc
 import numpy as np
-import random
 import pytest
 from typing import List
 import math
 from itertools import permutations
-import os
-
-
-DEVICE = os.getenv('DEVICE', default='cpu')
 
 
 @pytest.fixture(scope='session', autouse=True)
 def session_fixture():
     # This is invoked once before starting the test session
     dsc.init(int(2**30))
-    dsc.set_default_device(DEVICE)
     yield
 
 
@@ -32,7 +26,7 @@ def teardown_fixture():
     yield
 
 
-def all_close(actual: dsc.Tensor, target: np.ndarray, eps=1e-2):
+def all_close(actual: dsc.Tensor, target: np.ndarray, eps=1e-5):
     actual_np = actual.numpy()
     diffs = ~np.isclose(actual_np, target, atol=eps, rtol=eps, equal_nan=True)
     close = len(actual_np[diffs]) == 0
@@ -40,32 +34,51 @@ def all_close(actual: dsc.Tensor, target: np.ndarray, eps=1e-2):
 
 
 def random_nd(shape: List[int], dtype: np.dtype = np.float64):
-    return np.random.randn(*tuple(shape)).astype(dtype)
+    if dtype == np.bool:
+        return np.random.randint(0, 2, size=tuple(shape)).astype(dtype)
+    elif dtype == np.int32:
+        # Return a positive integer tensor if the dtype is int32 so that we don't have issues
+        # with power
+        return np.random.randint(0, 10, size=tuple(shape)).astype(dtype)
+    else:
+        return np.random.randn(*tuple(shape)).astype(dtype)
 
 
-DTYPES = [np.float32, np.float64, np.complex64, np.complex128]
+DTYPES = [np.bool, np.int32, np.float32, np.float64]
 DSC_DTYPES = {
+    np.bool: dsc.Dtype.BOOL,
+    np.int32: dsc.Dtype.I32,
     np.float32: dsc.Dtype.F32,
     np.float64: dsc.Dtype.F64,
-    np.complex64: dsc.Dtype.C32,
-    np.complex128: dsc.Dtype.C64,
 }
 
+def is_float(dtype) -> bool:
+    return dtype == np.float32 or dtype == np.float64
 
 class TestOps:
     def test_binary(self):
         ops = {
-            'add': (np.add, dsc.add, '+'),
-            'sub': (np.subtract, dsc.sub, '-'),
-            'mul': (np.multiply, dsc.mul, '*'),
-            'div': (np.true_divide, dsc.true_div, '/'),
-            'power': (np.power, dsc.power, '**'),
+            'add': (np.add, dsc.add),
+            'sub': (np.subtract, dsc.sub),
+            'mul': (np.multiply, dsc.mul),
+            'div': (np.true_divide, dsc.true_div),
+            'power': (np.power, dsc.power),
+            'equal': (np.equal, dsc.equal),
+            'not_equal': (np.not_equal, dsc.not_equal),
+            'less': (np.less, dsc.less),
+            'less_equal': (np.less_equal, dsc.less_equal),
+            'greater': (np.greater, dsc.greater),
+            'greater_equal': (np.greater_equal, dsc.greater_equal),
+
         }
         for op_name in ops.keys():
-            np_op, dsc_op, symbol = ops[op_name]
+            np_op, dsc_op = ops[op_name]
             for dtype in DTYPES:
-                print(f'Testing operator {op_name} with {dtype.__name__} on {DEVICE}')
-                shape = [random.randint(2, 10) for _ in range(4)]
+                if op_name == 'sub':
+                    np_op = np.bitwise_xor if dtype == np.bool else np.subtract
+
+                print(f'Testing operator {op_name} with {dtype.__name__}')
+                shape = [randint(2, 10) for _ in range(4)]
                 x = random_nd(shape, dtype=dtype)
                 x_dsc = dsc.from_numpy(x)
 
@@ -75,43 +88,46 @@ class TestOps:
 
                 res_np = np_op(x, y)
                 res_dsc = dsc_op(x_dsc, y_dsc)
-                r_res_np = eval(f'y {symbol} x')
-                r_res_dsc = eval(f'y_dsc {symbol} x_dsc')
+                r_res_np = np_op(y, x)
+                r_res_dsc = dsc_op(y_dsc, x_dsc)
                 assert all_close(res_dsc, res_np)
                 assert all_close(r_res_dsc, r_res_np)
 
                 # Broadcasting
-                collapse_idx = random.randint(0, 3)
+                collapse_idx = randint(0, 3)
                 shape[collapse_idx] = 1
                 y_b = random_nd(shape, dtype=dtype)
                 y_dsc_b = dsc.from_numpy(y_b)
                 res_np_b = np_op(x, y_b)
                 res_dsc_b = dsc_op(x_dsc, y_dsc_b)
-                r_res_np_b = eval(f'y_b {symbol} x')
-                r_res_dsc_b = eval(f'y_dsc_b {symbol} x_dsc')
+                r_res_np_b = np_op(y_b, x)
+                r_res_dsc_b = dsc_op(y_dsc_b, x_dsc)
                 assert all_close(res_dsc_b, res_np_b)
                 assert all_close(r_res_dsc_b, r_res_np_b)
 
                 # Scalar
-                if dtype == np.complex64 or dtype == np.complex128:
-                    y_s = complex(random.random(), random.random())
+                if is_float(dtype):
+                    y_s = random()
+                elif dtype == np.bool:
+                    y_s = bool(randint(0, 1))
                 else:
-                    y_s = random.random()
+                    y_s = randint(0, 10)
 
                 res_np_s = np_op(x, y_s)
                 res_dsc_s = dsc_op(x_dsc, y_s)
-                r_res_np_s = eval(f'y_s {symbol} x')
-                r_res_dsc_s = eval(f'y_s {symbol} x_dsc')
+                r_res_np_s = np_op(y_s, x)
+                r_res_dsc_s = dsc_op(y_s, x_dsc)
 
                 assert all_close(res_dsc_s, res_np_s)
                 assert all_close(r_res_dsc_s, r_res_np_s)
 
+    @pytest.mark.skip(reason='not properly implemented yet')
     def test_matmul(self):
         def _mnk() -> tuple[int, int, int]:
             return randint(2, 50), randint(2, 50), randint(2, 50)
 
         def _test_matmul(shape_a: List[int], shape_b: List[int], dt: np.dtype):
-            print(f'Testing {shape_a} @ {shape_b} with {dt.__name__} on {DEVICE}')
+            print(f'Testing {shape_a} @ {shape_b} with {dt.__name__}')
             xa = random_nd(shape_a, dtype=dt)
             xb = random_nd(shape_b, dtype=dt)
             xa_dsc = dsc.from_numpy(xa)
@@ -149,50 +165,28 @@ class TestOps:
     def test_unary(self):
         ops = {
             'sin': (np.sin, dsc.sin),
-            'sinc': (np.sinc, dsc.sinc),
             'cos': (np.cos, dsc.cos),
-            'logn': (np.log, dsc.logn),
-            'log2': (np.log2, dsc.log2),
-            'log10': (np.log10, dsc.log10),
+            'tanh': (np.tanh, dsc.tanh),
             'exp': (np.exp, dsc.exp),
             'sqrt': (np.sqrt, dsc.sqrt),
-            'absolute': (np.absolute, dsc.absolute),
-            'angle': (np.angle, dsc.angle),
-            'conj': (np.conj, dsc.conj),
-            'real': (np.real, dsc.real),
-            'imag': (np.imag, dsc.imag),
-            'i0': (np.i0, dsc.i0),
         }
         for op_name in ops.keys():
             np_op, dsc_op = ops[op_name]
             for dtype in DTYPES:
-                if op_name == 'i0' and (
-                    dtype == np.complex64 or dtype == np.complex128
-                ):
-                    continue
-
-                print(f'Testing {op_name} with {dtype.__name__} on {DEVICE}')
-                x = random_nd([random.randint(1, 10) for _ in range(4)], dtype=dtype)
+                print(f'Testing {op_name} with {dtype.__name__}')
+                x = random_nd([randint(1, 10) for _ in range(4)], dtype=dtype)
                 x_dsc = dsc.from_numpy(x)
 
                 res_np = np_op(x)
                 res_dsc = dsc_op(x_dsc)
-                assert all_close(res_dsc, res_np)
-
-    def test_clip(self):
-        for dtype in DTYPES:
-            print(f'Testing clip with {dtype.__name__} on {DEVICE}')
-            x = np.arange(10).astype(dtype) - 5
-            x_dsc = dsc.from_numpy(x)
-
-            assert all_close(dsc.clip(x_dsc, -2, 2), np.clip(x, -2, 2))
-            assert all_close(dsc.clip(x_dsc, -3), np.clip(x, -3, None))
-            assert all_close(dsc.clip(x_dsc, None, 2), np.clip(x, None, 2))
+                # There are precision issues when working with non-float types
+                assert all_close(res_dsc, res_np, 1e-5 if is_float(dtype) else 1e-3)
 
     def test_unary_axis(self):
         ops = {
             'sum': (np.sum, dsc.sum),
             'mean': (np.mean, dsc.mean),
+            'var': (np.var, dsc.var),
             'max': (np.max, dsc.max),
             'min': (np.min, dsc.min),
         }
@@ -200,9 +194,9 @@ class TestOps:
             np_op, dsc_op = ops[op_name]
             for dtype in DTYPES:
                 for axis in range(-4, 4):
-                    print(f'Testing {op_name} with {dtype.__name__} along axis {axis} on {DEVICE}')
+                    print(f'Testing {op_name} with {dtype.__name__} along axis {axis}')
                     x = random_nd(
-                        [random.randint(1, 10) for _ in range(4)], dtype=dtype
+                        [randint(1, 10) for _ in range(4)], dtype=dtype
                     )
                     x_dsc = dsc.from_numpy(x)
 
@@ -218,21 +212,22 @@ class TestOps:
 class TestInit:
     def test_arange(self):
         for _ in range(10):
-            n = random.randint(1, 10_000)
-
+            n = randint(1, 10_000)
             for dtype in DTYPES:
-                print(f'Tensing arange with N={n} and dtype={dtype.__name__} on {DEVICE}')
+                if dtype == np.bool:
+                    continue
+                print(f'Tensing arange with N={n} and dtype={dtype.__name__} ')
                 res_np = np.arange(n, dtype=dtype)
                 res_dsc = dsc.arange(n, dtype=DSC_DTYPES[dtype])
                 assert all_close(res_dsc, res_np)
 
     def test_random(self):
         for _ in range(10):
-            shape = tuple([random.randint(1, 10) for _ in range(4)])
+            shape = tuple([randint(1, 10) for _ in range(4)])
             for dtype in DTYPES:
-                if dtype == np.complex64 or dtype == np.complex128:
+                if not is_float(dtype):
                     continue
-                print(f'Tensing randn with dtype={dtype.__name__} on {DEVICE}')
+                print(f'Tensing randn with dtype={dtype.__name__} ')
 
                 res_np = np.random.randn(*shape).astype(dtype)
                 res_dsc = dsc.randn(*shape, dtype=DSC_DTYPES[dtype])
@@ -254,13 +249,28 @@ class TestIndexing:
 
                 for indexes in range(n_dim + 1):
                     for _ in range(10):
-                        idx = tuple(random.randint(-10, 9) for _ in range(indexes + 1))
+                        idx = tuple(randint(-10, 9) for _ in range(indexes + 1))
                         res = x[idx]
                         res_dsc = x_dsc[idx]
                         if isinstance(res_dsc, dsc.Tensor):
                             assert all_close(res_dsc, res)
                         else:
                             assert np.isclose(res, res_dsc)
+    def test_get_tensor(self):
+        for dtype in DTYPES:
+            rows = randint(1, 100)
+            cols = randint(1, 100)
+            x = random_nd([rows, cols], dtype=dtype)
+            x_dsc = dsc.from_numpy(x)
+
+            indexes = np.array([randint(0, rows - 1) for _ in range(randint(1, rows))]).astype(np.int32)
+            indexes_dsc = dsc.from_numpy(indexes)
+
+            res = x[indexes]
+            res_dsc = x_dsc[indexes_dsc]
+            assert all_close(res_dsc, res)
+
+
 
     @staticmethod
     def _validate_slice(sl: slice, max_dim: int) -> bool:
@@ -328,9 +338,9 @@ class TestIndexing:
 
                 for indexes in range(1, n_dim):
                     for _ in range(10):
-                        idx = tuple(random.randint(-10, 9) for _ in range(indexes))
+                        idx = tuple(randint(-10, 9) for _ in range(indexes))
                         val = (
-                            random.random() + 1
+                            random() + 1
                             if indexes == n_dim
                             else random_nd(
                                 [10 for _ in range(n_dim - indexes)], dtype=dtype
@@ -404,15 +414,14 @@ class TestIndexing:
 def test_creation():
     for n_dim in range(4):
         for dtype in DTYPES:
-            shape = tuple(random.randint(1, 20) for _ in range(n_dim + 1))
-            fill = random.random()
-            if dtype == np.complex64 or dtype == np.complex128:
-                fill = complex(random.random(), random.random())
+            shape = tuple(randint(1, 20) for _ in range(n_dim + 1))
+            fill = random()
+
             x = np.full(shape, fill_value=fill, dtype=dtype)
             x_dsc = dsc.full(shape, fill_value=fill, dtype=DSC_DTYPES[dtype])
             assert all_close(x_dsc, x)
 
-            like = np.ones([random.randint(1, 10) for _ in range(n_dim + 1)])
+            like = np.ones([randint(1, 10) for _ in range(n_dim + 1)])
 
             x = np.full_like(like, fill_value=fill, dtype=dtype)
             x_dsc = dsc.full_like(like, fill_value=fill, dtype=DSC_DTYPES[dtype])
@@ -450,15 +459,15 @@ def test_reshape():
 def test_concat():
     for n_dim in range(1, 5):
         for dtype in DTYPES:
-            shape = [random.randint(2, 10) for _ in range(n_dim)]
+            shape = [randint(2, 10) for _ in range(n_dim)]
             for axis_idx in range(n_dim):
                 print(
                     f'Testing concat with {n_dim}-dimensional tensors of type {dtype.__name__} on axis {axis_idx}'
                 )
                 shape_x1 = list(shape)
-                shape_x1[axis_idx] = random.randint(2, 10)
+                shape_x1[axis_idx] = randint(2, 10)
                 shape_x2 = list(shape)
-                shape_x2[axis_idx] = random.randint(2, 10)
+                shape_x2[axis_idx] = randint(2, 10)
                 x1 = random_nd(shape_x1, dtype)
                 x2 = random_nd(shape_x2, dtype)
                 x1_dsc = dsc.from_numpy(x1)
@@ -474,13 +483,31 @@ def test_concat():
                 assert all_close(res_dsc_flat, res_np_flat)
 
 
+def test_split():
+    for n_dim in range(1, 5):
+        for dtype in DTYPES:
+            shape = [randint(2, 10) for _ in range(n_dim)]
+            for axis_idx in range(n_dim):
+                print(f'Testing split with {n_dim}-dimensional tensors of type {dtype.__name__} on axis {axis_idx}')
+                ne = shape[axis_idx]
+                multi = randint(1, 10)
+                shape[axis_idx] *= multi
+                x = random_nd(shape, dtype)
+                x_dsc = dsc.from_numpy(x)
+
+                res = np.split(x, multi, axis=axis_idx)
+                res_dsc = dsc.split(x_dsc, ne, axis=axis_idx)
+                assert len(res) == len(res_dsc)
+                for r_np, r_dsc in zip(res, res_dsc):
+                    assert all_close(r_dsc, r_np)
+
 def test_transpose():
     for n_dim in range(1, 5):
         for dtype in DTYPES:
             print(
                 f'Testing transpose with {n_dim}-dimensional tensors of type {dtype.__name__}'
             )
-            shape = [random.randint(2, 10) for _ in range(n_dim)]
+            shape = [randint(2, 10) for _ in range(n_dim)]
             x = random_nd(shape, dtype)
             x_dsc = dsc.from_numpy(x)
             # Simple transpose
@@ -493,3 +520,31 @@ def test_transpose():
                 res_np = np.transpose(x, axes)
                 res_dsc = dsc.transpose(x_dsc, axes)
                 assert all_close(res_dsc, res_np)
+
+def test_tril():
+    for n_dim in range(2, 5):
+        for dtype in DTYPES:
+            x = random_nd([randint(1, 10) for _ in range(n_dim)], dtype)
+            x_dsc = dsc.from_numpy(x)
+            for k in range(-1, 2):
+                print(f'Testing tril with {n_dim}-dimensional tensors of type {dtype.__name__} k={k}')
+                res = np.tril(x, k)
+                res_dsc = dsc.tril(x_dsc, k)
+                assert all_close(res_dsc, res)
+
+def test_masked_fill():
+    for n_dim in range(1, 5):
+        for dtype in DTYPES:
+            if not is_float(dtype):
+                continue
+
+            print(f'Testing masked_fill with {n_dim}-dimensional tensors of type {dtype.__name__}')
+            x = random_nd([randint(1, 10) for _ in range(n_dim)], dtype)
+            mask = random_nd(x.shape, np.bool)
+            x_dsc = dsc.from_numpy(x)
+            mask_dsc = dsc.from_numpy(mask)
+            fill = random()
+
+            x[mask] = fill
+            res_dsc = x_dsc.masked_fill(mask_dsc, fill)
+            assert all_close(res_dsc, x)

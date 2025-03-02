@@ -20,7 +20,7 @@ from ctypes import (
     Structure,
     POINTER,
 )
-from typing import Union
+from typing import Union, Tuple
 from enum import Enum
 from .dtype import Dtype
 from .device import Device
@@ -159,6 +159,25 @@ def _dsc_view(ctx: _DscCtx, x: _DscTensor_p) -> _DscTensor_p:
 
 _lib.dsc_view.argtypes = [_DscCtx, _DscTensor_p]
 _lib.dsc_view.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
+#                                   int n_dim,
+#                                   const int *shape,
+#                                   dsc_dtype dtype,
+#                                   dsc_device_type device = DEFAULT,
+#                                   dsc_data_buffer *buf = nullptr,
+#                                   const void *DSC_RESTRICT data = nullptr,
+#                                   dsc_device_type data_device = DEFAULT);
+def _dsc_new_tensor(
+    ctx: _DscCtx, shape: Tuple[int, ...], dtype: Dtype, device: Device 
+) -> _DscTensor_p:
+    shape_arr = (c_int * len(shape))(*shape)
+    return _lib.dsc_new_tensor(ctx, len(shape), shape_arr, c_uint8(dtype.value), c_int8(device.value), None, None, c_int8(Device.DEFAULT.value))
+
+
+_lib.dsc_new_tensor.argtypes = [_DscCtx, c_int, POINTER(c_int), c_uint8, c_int8, POINTER(_DscDataBuffer), c_void_p, c_int8]
+_lib.dsc_new_tensor.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx,
@@ -459,6 +478,19 @@ _lib.dsc_cast.argtypes = [_DscCtx, _DscTensor_p, c_uint8]
 _lib.dsc_cast.restype = _DscTensor_p
 
 
+# extern void dsc_copy(dsc_ctx *ctx,
+#                      dsc_tensor *DSC_RESTRICT x,
+#                      void *DSC_RESTRICT data,
+#                      usize nb,
+#                      dsc_device_type data_device = DEFAULT);
+def _dsc_copy(ctx: _DscCtx, x: _DscTensor_p, data: c_void_p, nb: int, data_device: Device):
+    _lib.dsc_copy(ctx, x, data, c_size_t(nb), c_int8(data_device.value))
+
+
+_lib.dsc_copy.argtypes = [_DscCtx, _DscTensor_p, c_void_p, c_size_t, c_int8]
+_lib.dsc_copy.restype = None
+
+
 # extern dsc_tensor *dsc_reshape(dsc_ctx *ctx,
 #                                const dsc_tensor *DSC_RESTRICT x,
 #                                int dims...);
@@ -479,18 +511,6 @@ def _dsc_concat(ctx: _DscCtx, axis: int, *tensors: _DscTensor_p) -> _DscTensor_p
 
 _lib.dsc_concat.argtypes = [_DscCtx, c_int, c_int]
 _lib.dsc_concat.restype = _DscTensor_p
-
-
-# extern dsc_tensor *dsc_split(dsc_ctx *ctx,
-#                              const dsc_tensor *DSC_RESTRICT x,
-#                              int ne, int offset,
-#                              int axis = -1);
-def _dsc_split(ctx: _DscCtx, x: _DscTensor_p, ne: int, offset: int, axis: int) -> _DscTensor_p:
-    return _lib.dsc_split(ctx, x, c_int(ne), c_int(offset), c_int(axis))
-
-
-_lib.dsc_split.argtypes = [_DscCtx, _DscTensor_p, c_int, c_int, c_int]
-_lib.dsc_split.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_transpose(dsc_ctx *ctx,
@@ -538,6 +558,19 @@ def _dsc_tensor_get_slice(
 
 _lib.dsc_tensor_get_slice.argtypes = [_DscCtx, _DscTensor_p, c_int]
 _lib.dsc_tensor_get_slice.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_tensor_get_tensor(dsc_ctx *ctx,
+#                                          const dsc_tensor *DSC_RESTRICT x,
+#                                          const dsc_tensor *DSC_RESTRICT indexes);
+def _dsc_tensor_get_tensor(
+        ctx: _DscCtx, x: _DscTensor_p, indexes: _DscTensor_p
+) -> _DscTensor_p:
+    return _lib.dsc_tensor_get_tensor(ctx, x, indexes)
+
+
+_lib.dsc_tensor_get_tensor.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p]
+_lib.dsc_tensor_get_tensor.restype = _DscTensor_p
 
 
 # extern void *dsc_tensor_set_idx(dsc_ctx *,

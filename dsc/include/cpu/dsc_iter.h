@@ -8,51 +8,52 @@
 
 #include "dsc.h"
 
+
+namespace internal::iter {
+// TODO: validate the codegen!
+template<int Cur = 0>
+constexpr int compute_index(const int *DSC_RESTRICT idx,
+                            const int *DSC_RESTRICT stride) {
+    // Note: computing the index on the fly is way easier than keeping track of the current index
+    // and increasing/decreasing it after each step, but it requires some benchmarking!
+    if constexpr (Cur == DSC_MAX_DIMS) {
+        return 0;
+    } else {
+        return idx[Cur] * stride[Cur] + compute_index<Cur + 1>(idx, stride);
+    }
+}
+}
+
 struct dsc_axis_iterator {
     dsc_axis_iterator(const dsc_tensor *x,
                       const int axis,
-                      const int axis_n = -1,
-                      const int offset = 0) :
-            shape_(x->shape), stride_(x->stride),
-            axis_(axis), axis_n_((axis_n < 0 || axis_n > x->shape[axis]) ? x->shape[axis] : axis_n) {
-        DSC_ASSERT((unsigned) offset < (unsigned) axis_n_);
-
-        // Todo: this can't work, what happens when we reset this dimension?
-        idx_[axis_] = offset;
+                      const int axis_n = -1) :
+            x_(x), axis_(axis),
+            axis_n_((axis_n < 0 || axis_n > x->shape[axis]) ? x->shape[axis] : axis_n) {
     }
 
     DSC_INLINE void next() {
-        if (++idx_[axis_] < axis_n_) [[likely]] {
-            index_ += stride_[axis_];
-            return;
-        }
+        if (++idx_[axis_] < axis_n_) [[likely]] return;
 
-        index_ -= (idx_[axis_] - 1) * stride_[axis_];
         idx_[axis_] = 0;
-
         bool still_left = false;
         for (int i = DSC_MAX_DIMS - 1; i >= 0; --i) {
-            if (i == axis_)
-                continue;
+            if (i == axis_) continue;
 
-            if (++idx_[i] < shape_[i]) {
-                index_ += stride_[i];
+            if (++idx_[i] < x_->shape[i]) [[likely]] {
                 still_left = true;
                 break;
             }
-
-            // Rollover this dimension
-            index_ -= (idx_[i] - 1) * stride_[i];
             idx_[i] = 0;
-            // If this is the first dimension, and it rolls over we are done
+            // If this is the last dimension and we rolled then we're done
             end_ = i == 0;
         }
-        if (axis_ == 0 && !still_left)
-            end_ = true;
+        // If we are iterating over axis 0 and we arrive here then we're done
+        end_ |= axis_ == 0 && !still_left;
     }
 
     DSC_INLINE int index() const {
-        return index_;
+        return internal::iter::compute_index(idx_, x_->stride);
     }
 
     DSC_INLINE bool has_next() const {
@@ -64,10 +65,8 @@ struct dsc_axis_iterator {
     }
 
 private:
-    int index_ = 0;
     int idx_[DSC_MAX_DIMS]{};
-    const int *shape_;
-    const int *stride_;
+    const dsc_tensor *DSC_RESTRICT x_;
     int axis_;
     int axis_n_;
     bool end_ = false;
@@ -149,21 +148,10 @@ struct dsc_slice_iterator {
     }
 
     DSC_INLINE int index() const {
-        return compute_index<DSC_MAX_DIMS, 0>();
+        return internal::iter::compute_index<>(idx_, stride_);
     }
 
 private:
-    template<int N, int Cur = 0>
-    constexpr int compute_index() const {
-        // Note: computing the index on the fly is way easier than keeping track of the current index
-        // and increasing/decreasing it after each step, but it requires some benchmarking!
-        if constexpr (Cur == N) {
-            return 0;
-        } else {
-            return idx_[Cur] * stride_[Cur] + compute_index<N, Cur + 1>();
-        }
-    }
-
     const int *shape_;
     const int *stride_;
     int idx_[DSC_MAX_DIMS]{};

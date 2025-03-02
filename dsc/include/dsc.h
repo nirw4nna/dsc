@@ -57,7 +57,7 @@ static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the cod
 #    define DSC_LOG_DEBUG(format, ...)  ((void) 0)
 #    define DSC_LOG_INFO(format, ...)   fprintf(stdout, "[INFO ] %s: " format"\n",__func__, ##__VA_ARGS__)
 #    define DSC_LOG_ERR(format, ...)    fprintf(stderr, "[ERROR] %s: " format"\n",__func__, ##__VA_ARGS__)
-#elif DSC_LOG_LEVEL >= 0
+#else
 #    define DSC_LOG_DEBUG(format, ...)  fprintf(stdout, "[DEBUG] %s: " format"\n",__func__, ##__VA_ARGS__)
 #    define DSC_LOG_INFO(format, ...)   fprintf(stdout, "[INFO ] %s: " format"\n",__func__, ##__VA_ARGS__)
 #    define DSC_LOG_ERR(format, ...)    fprintf(stderr, "[ERROR] %s: " format"\n",__func__, ##__VA_ARGS__)
@@ -271,6 +271,12 @@ extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
 // ============================================================
 // Tensor Manipulation
 
+extern void dsc_copy(dsc_ctx *ctx,
+                     dsc_tensor *DSC_RESTRICT x,
+                     void *DSC_RESTRICT data,
+                     usize nb,
+                     dsc_device_type data_device = DEFAULT);
+
 extern dsc_tensor *dsc_reshape(dsc_ctx *ctx,
                                const dsc_tensor *DSC_RESTRICT x,
                                int dimensions...);
@@ -278,11 +284,6 @@ extern dsc_tensor *dsc_reshape(dsc_ctx *ctx,
 extern dsc_tensor *dsc_concat(dsc_ctx *ctx,
                               int axis,
                               int tensors...);
-
-extern dsc_tensor *dsc_split(dsc_ctx *ctx,
-                             const dsc_tensor *DSC_RESTRICT x,
-                             int ne, int offset,
-                             int axis = -1);
 
 extern dsc_tensor *dsc_transpose(dsc_ctx *ctx,
                                  const dsc_tensor *DSC_RESTRICT x,
@@ -307,6 +308,10 @@ extern dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
 extern dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
                                         const dsc_tensor *DSC_RESTRICT x,
                                         int slices...);
+
+extern dsc_tensor *dsc_tensor_get_tensor(dsc_ctx *ctx,
+                                         const dsc_tensor *DSC_RESTRICT x,
+                                         const dsc_tensor *DSC_RESTRICT indexes);
 
 extern void dsc_tensor_set_idx(dsc_ctx *ctx,
                                dsc_tensor *DSC_RESTRICT xa,
