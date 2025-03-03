@@ -255,7 +255,7 @@ extern dsc_tensor *dsc_wrap_f64(dsc_ctx *ctx,
 
 extern dsc_tensor *dsc_arange(dsc_ctx *ctx,
                               int n,
-                              dsc_dtype dtype = DSC_DEFAULT_TYPE,
+                              dsc_dtype dtype = I32,
                               dsc_device_type device = DEFAULT);
 
 extern dsc_tensor *dsc_randn(dsc_ctx *ctx,

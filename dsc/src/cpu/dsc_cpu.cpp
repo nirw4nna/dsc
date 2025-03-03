@@ -305,10 +305,13 @@ void dsc_cpu_get_tensor(dsc_device *,
 
     const int stride = dsc_tensor_get_stride(x, -2);
     const int count = dsc_tensor_get_dim(x, -1);
+    const int rows = dsc_tensor_get_dim(x, -2);
     const usize dtype_size = DSC_DTYPE_SIZE[x->dtype];
 
     dsc_for(i, indexes) {
         const int idx = indexes_data[i];
+        DSC_ASSERT(idx < rows);
+
         memcpy(out_data + (i * stride * dtype_size),
                x_data + (idx * stride * dtype_size),
                count * dtype_size);

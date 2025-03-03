@@ -335,6 +335,9 @@ class Tensor:
         return np_array.reshape(self.shape)
 
     def load(self, x: np.ndarray):
+        assert x.shape == self.shape
+        assert NP_TO_DTYPE[x.dtype] == self.dtype
+
         data_ptr = ctypes.cast(x.ctypes.data, ctypes.c_void_p)
         _dsc_copy(_get_ctx(), self.c_ptr, data_ptr, x.size * DTYPE_SIZE[NP_TO_DTYPE[x.dtype]], self.device)
 
@@ -717,7 +720,7 @@ def min(
 
 
 def arange(
-    n: int, dtype: Dtype = Dtype.F32, device: DeviceType = Device.DEFAULT
+    n: int, dtype: Dtype = Dtype.I32, device: DeviceType = Device.DEFAULT
 ) -> Tensor:
     return Tensor(_dsc_arange(_get_ctx(), n, dtype, _get_device(device)))
 

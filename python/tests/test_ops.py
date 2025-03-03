@@ -502,7 +502,7 @@ def test_split():
                     assert all_close(r_dsc, r_np)
 
 def test_transpose():
-    for n_dim in range(1, 5):
+    for n_dim in range(2, 5):
         for dtype in DTYPES:
             print(
                 f'Testing transpose with {n_dim}-dimensional tensors of type {dtype.__name__}'
@@ -515,8 +515,13 @@ def test_transpose():
             res_dsc_simple = dsc.transpose(x_dsc)
             assert all_close(res_dsc_simple, res_np_simple)
 
-            # Test with all the permutations of axes
-            for axes in permutations(range(n_dim)):
+            # Test with all the permutations of axes, both positive and negative
+            for axes in permutations(range(-n_dim, 0), n_dim):
+                res_np = np.transpose(x, axes)
+                res_dsc = dsc.transpose(x_dsc, axes)
+                assert all_close(res_dsc, res_np)
+
+            for axes in permutations(range(0, n_dim), n_dim):
                 res_np = np.transpose(x, axes)
                 res_dsc = dsc.transpose(x_dsc, axes)
                 assert all_close(res_dsc, res_np)

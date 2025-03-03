@@ -559,22 +559,21 @@ dsc_tensor *dsc_transpose(dsc_ctx *ctx,
         std::va_list args;
         va_start(args, axes);
         for (int i = 0; i < axes; ++i) {
-            const int el = va_arg(args, int);
-            DSC_ASSERT((unsigned) el < DSC_MAX_DIMS);
-            swap_axes[i] = el;
+            // Accept also negative axes
+            swap_axes[i] = va_arg(args, int);
         }
         va_end(args);
     }
     // DSC_TRACE_TRANSPOSE_OP(x, swap_axes);
 
     int swapped_shape[DSC_MAX_DIMS], swapped_stride[DSC_MAX_DIMS];
-    for (int i = 0; i < DSC_MAX_DIMS - x->n_dim; ++i) {
-        swapped_shape[i] = x->shape[i];
-        swapped_stride[i] = x->stride[i];
-    }
+    memcpy(swapped_shape, x->shape, DSC_MAX_DIMS * sizeof(*x->shape));
+    memcpy(swapped_stride, x->stride, DSC_MAX_DIMS * sizeof(*x->stride));
 
     for (int i = 0; i < x->n_dim; ++i) {
         const int idx = dsc_tensor_dim_idx(x, swap_axes[i]);
+        DSC_ASSERT((unsigned) idx < DSC_MAX_DIMS);
+
         swapped_shape[dsc_tensor_dim_idx(x, i)] = x->shape[idx];
         swapped_stride[dsc_tensor_dim_idx(x, i)] = x->stride[idx];
     }
@@ -779,11 +778,16 @@ dsc_tensor *dsc_tensor_get_tensor(dsc_ctx *ctx,
     DSC_ASSERT(indexes->dtype == I32);
     DSC_ASSERT(x->device == indexes->device);
 
-    // Note: limited for now, could be more generic
+    // Note: right now this implements the behaviour of torch.Embedding
     DSC_ASSERT(x->n_dim == 2);
-    DSC_ASSERT(indexes->n_dim == 1);
+    const int out_ndim = indexes->n_dim + 1;
+    DSC_ASSERT(out_ndim <= DSC_MAX_DIMS);
 
-    dsc_tensor *out = dsc_tensor_2d(ctx, x->dtype, indexes->ne, dsc_tensor_get_dim(x, -1), x->device);
+    int out_shape[DSC_MAX_DIMS]{};
+    for (int i = 0; i < indexes->n_dim; ++i) out_shape[i] = dsc_tensor_get_dim(indexes, i);
+    out_shape[indexes->n_dim] = dsc_tensor_get_dim(x, -1);
+
+    dsc_tensor *out = dsc_new_tensor(ctx, out_ndim, out_shape, x->dtype, x->device);
     DSC_DISPATCH(x->device, get_tensor, x, indexes, out);
     return out;
 }

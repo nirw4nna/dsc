@@ -323,7 +323,8 @@ _lib.dsc_wrap_f64.restype = _DscTensor_p
 
 # extern dsc_tensor *dsc_arange(dsc_ctx *ctx,
 #                               int n,
-#                               dsc_dtype dtype = DSC_DEFAULT_TYPE);
+#                               dsc_dtype dtype = I32,
+#                               dsc_device_type device = DEFAULT);
 def _dsc_arange(
     ctx: _DscCtx, n: int, dtype: Dtype, device: Device
 ) -> _DscTensor_p:
