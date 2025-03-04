@@ -880,8 +880,11 @@ void dsc_tensor_set_idx(dsc_ctx *ctx,
 
     const bool xb_scalar = dsc_is_scalar(xb);
     const int xa_sub_ndim = xa->n_dim - indexes;
+    // What I mean is that the indexes identify a single element of xa (ie. if xa is 2D xa[i, j])
+    // in this case of course also xb must be a scalar
+    const bool xa_scalar = xa_sub_ndim == 0;
 
-    if (xa_sub_ndim == 0) DSC_ASSERT(xb_scalar);
+    if (xa_scalar) DSC_ASSERT(xb_scalar);
 
     if (!xb_scalar) {
         // If xb is not a scalar then its shape must be compatible with xa_sub_shape
@@ -889,7 +892,7 @@ void dsc_tensor_set_idx(dsc_ctx *ctx,
         for (int i = 0; i < xa_sub_ndim; ++i) DSC_ASSERT(xa_sub_shape[i] == dsc_tensor_get_dim(xb, i));
     }
 
-    DSC_DISPATCH(xa->device, set_slice, xa, xa_sub_ndim == 0, xb, xb_scalar, indexes, el_slices, false);
+    DSC_DISPATCH(xa->device, set_slice, xa, xa_scalar, xb, xb_scalar, indexes, el_slices, false);
 }
 
 void dsc_tensor_set_slice(dsc_ctx *ctx,

@@ -9,8 +9,6 @@
 // =============================================================== //
 // =========================== Notepad =========================== //
 // =============================================================== //
-// (1): is_scalar should probably just check that ne == 1. This    //
-//      works for binary_op but I'm not sure for the other uses.   //
 // =============================================================== //
 
 #include <cstdio>
@@ -77,8 +75,8 @@ static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the cod
 #define DSC_CEIL(x, y)       (((x) + ((y) - 1)) / (y))
 #define DSC_B_TO_KB(b)       ((f64) (b) / 1024.)
 #define DSC_B_TO_MB(b)       ((f64) (b) / (1024. * 1024.))
-#define DSC_MB(mb)           ((usize) ((mb) * 1024l * 1024l))
-#define DSC_KB(kb)           ((usize) ((kb) * 1024l))
+#define DSC_MB(mb)           ((usize) ((mb) * 1024ULL * 1024ULL))
+#define DSC_KB(kb)           ((usize) ((kb) * 1024ULL))
 
 // A 'strictly pure' function is a function whose return value doesn't depend on the global state of the program,
 // this means that it must not access global variables subject to change or access parameters passed by pointer
@@ -116,8 +114,7 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 #define dsc_new_like(CTX, X)          (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (X)->device))
 #define dsc_new_view(CTX, X)          (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (X)->device, (X)->buf))
 #define dsc_for(idx, X)               for (int idx = 0; idx < (X)->ne; ++idx)
-// TODO: (1)
-#define dsc_is_scalar(X)              (X)->n_dim == 1 && dsc_tensor_get_dim(X, -1) == 1
+#define dsc_is_scalar(X)              (X)->ne == 1
 
 #if defined(__cplusplus)
 extern "C" {
@@ -148,7 +145,7 @@ struct dsc_tensor {
     // The shape of this tensor, right-aligned. For example a 1D tensor T of 4 elements
     // will have dim = [1, 1, 1, 4].
     int shape[DSC_MAX_DIMS];
-    // Stride for a given dimension expressed in number of bytes.
+    // Stride for a given dimension expressed in number of elements.
     int stride[DSC_MAX_DIMS];
     dsc_data_buffer *buf;
     int ne;
