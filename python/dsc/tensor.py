@@ -56,6 +56,7 @@ from ._bindings import (
 from .dtype import (
     Dtype,
     NP_TO_DTYPE,
+    DTYPE_TO_NP,
     DTYPE_CONVERSION_TABLES,
     DTYPE_SIZE,
     DTYPE_TO_CTYPE,
@@ -66,7 +67,7 @@ import numpy as np
 from .context import _get_ctx
 import ctypes
 import sys
-from typing import Union, Tuple, List, Optional, Any
+from typing import Union, Tuple, List, Optional, Any, Iterable
 
 
 TensorType = Union['Tensor', np.ndarray]
@@ -420,6 +421,11 @@ def from_numpy(x: np.ndarray, device: DeviceType = Device.DEFAULT) -> Tensor:
     x_ptr = ctypes.cast(x.ctypes.data, ctypes.c_void_p)
     out = _create_tensor(NP_TO_DTYPE[x.dtype], x.shape, _get_device(device), x_ptr)
     return out
+
+
+def tensor(x: Iterable, dtype: Dtype, device: DeviceType = Device.DEFAULT) -> Tensor:
+    x_ = np.array(x, dtype=DTYPE_TO_NP[dtype])
+    return from_numpy(x_, device)
 
 
 def reshape(x: Tensor, *shape: Union[int, Tuple[int, ...], List[int]]) -> Tensor:

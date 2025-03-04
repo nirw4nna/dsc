@@ -9,6 +9,8 @@
 // =============================================================== //
 // =========================== Notepad =========================== //
 // =============================================================== //
+// (1): is_scalar should probably just check that ne == 1. This    //
+//      works for binary_op but I'm not sure for the other uses.   //
 // =============================================================== //
 
 #include <cstdio>
@@ -114,6 +116,7 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 #define dsc_new_like(CTX, X)          (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (X)->device))
 #define dsc_new_view(CTX, X)          (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (X)->device, (X)->buf))
 #define dsc_for(idx, X)               for (int idx = 0; idx < (X)->ne; ++idx)
+// TODO: (1)
 #define dsc_is_scalar(X)              (X)->n_dim == 1 && dsc_tensor_get_dim(X, -1) == 1
 
 #if defined(__cplusplus)

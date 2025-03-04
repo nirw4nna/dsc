@@ -9,7 +9,7 @@ from ..dtype import Dtype
 from ..device import Device
 from .._bindings import _dsc_new_tensor
 from ..context import _get_ctx
-from typing import Iterator, Iterable, Any, Tuple, Callable, Optional, OrderedDict, Mapping
+from typing import Iterator, Iterable, Any, Tuple, Callable, Optional, OrderedDict, Mapping, List
 from abc import ABC, abstractmethod
 import torch
 import math
@@ -72,13 +72,21 @@ class Module(ABC):
             res[name] = param
         return res
 
-    def from_torch(self, torch_model: torch.nn.Module):
+    def from_torch(self, torch_model: torch.nn.Module, on_hook: Optional[List[Tuple[List[str], Callable[[torch.Tensor], torch.Tensor]]]] = None):
         model_dict = torch_model.state_dict()
         for name, param in self.named_parameters():
             if name not in model_dict:
-                print(f'{name} not found in PyTorch model')
+                print(f'DSC parameter "{name}" not found in PyTorch model')
                 continue
             tensor = model_dict[name]
+            if on_hook:
+                # on_hook defines transformations on torch tensors that are called before loading the tensors in DSC
+                for keys, hook in on_hook:
+                    # If any of the keys starts with 'name' I'll apply the hook
+                    if any(name.endswith(key) for key in keys):
+                        print(f'applying hook to "{name}"')
+                        tensor = hook(tensor)
+            print(f'loading tensor "{name}" shape={tensor.shape} dtype={tensor.dtype}')
             param.load(tensor.detach().cpu().numpy())
         
         del model_dict

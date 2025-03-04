@@ -37,6 +37,7 @@ from dsc.tensor import (
     less_equal,
     greater,
     greater_equal,
+    tensor,
     ones,
     ones_like,
     zeros,

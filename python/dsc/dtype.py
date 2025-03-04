@@ -54,6 +54,8 @@ NP_TO_DTYPE = {
     np.dtype(np.float64): Dtype.F64,
 }
 
+DTYPE_TO_NP = {val: key for key, val in NP_TO_DTYPE.items()}
+
 DTYPE_CONVERSION_TABLES = [
     [Dtype.BOOL, Dtype.I32, Dtype.F32, Dtype.F64],
     [Dtype.I32, Dtype.I32, Dtype.F32, Dtype.F64],
