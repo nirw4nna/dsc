@@ -108,6 +108,7 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 #define DSC_DATA(T, X)          T *DSC_RESTRICT X##_data = (T *) (X)->buf->data
 
 #define dsc_tensor_dim_idx(X, dim)    (((dim) < 0) ? (DSC_MAX_DIMS + (dim)) : (DSC_MAX_DIMS - (X)->n_dim + (dim)))
+// Note: dsc_tensor_get_dim() MUST NOT be used with the result of dsc_tensor_dim_idx()!
 #define dsc_tensor_get_dim(X, dim)    ((X)->shape[dsc_tensor_dim_idx((X), (dim))])
 #define dsc_tensor_get_stride(X, dim) ((X)->stride[dsc_tensor_dim_idx((X), (dim))])
 #define dsc_new_like(CTX, X)          (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (X)->device))
@@ -151,6 +152,10 @@ struct dsc_tensor {
     int n_dim;
     dsc_dtype dtype;
     dsc_device_type device;
+};
+
+struct dsc_pair {
+    dsc_tensor *first, *second;
 };
 
 struct dsc_slice {
@@ -263,6 +268,16 @@ extern dsc_tensor *dsc_randn(dsc_ctx *ctx,
                              const int *shape,
                              dsc_dtype dtype = DSC_DEFAULT_TYPE,
                              dsc_device_type device = DEFAULT);
+
+extern dsc_pair dsc_topk(dsc_ctx *ctx,
+                         const dsc_tensor *DSC_RESTRICT x,
+                         int k,
+                         int axis = -1,
+                         bool largest = true);
+
+extern dsc_tensor *dsc_multinomial(dsc_ctx *ctx,
+                                   const dsc_tensor *DSC_RESTRICT x,
+                                   int num_samples);
 
 extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
                             dsc_tensor *DSC_RESTRICT x,

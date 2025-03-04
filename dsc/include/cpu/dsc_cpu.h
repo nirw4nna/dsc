@@ -23,6 +23,20 @@ extern void dsc_cpu_arange(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
 extern void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
+extern void dsc_cpu_topk(dsc_device *,
+                         const dsc_tensor *DSC_RESTRICT x,
+                         dsc_tensor *DSC_RESTRICT tmp_values,
+                         dsc_tensor *DSC_RESTRICT tmp_indexes,
+                         dsc_tensor *DSC_RESTRICT out_values,
+                         dsc_tensor *DSC_RESTRICT out_indexes,
+                         int k, int axis_idx,
+                         bool largest);
+
+extern void dsc_cpu_multinomial(dsc_device *,
+                                const dsc_tensor *DSC_RESTRICT x,
+                                dsc_tensor *DSC_RESTRICT out,
+                                int num_samples);
+
 // ============================================================
 // Tensor Manipulation
 

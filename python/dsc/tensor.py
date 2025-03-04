@@ -16,6 +16,7 @@ from ._bindings import (
     _dsc_concat,
     _dsc_compare,
     _dsc_masked_fill,
+    _dsc_multinomial,
     _dsc_transpose,
     _dsc_tril,
     _dsc_tensor_free,
@@ -46,6 +47,7 @@ from ._bindings import (
     _dsc_tanh,
     _dsc_exp,
     _dsc_sqrt,
+    _dsc_topk,
     _dsc_tensor_1d,
     _dsc_tensor_2d,
     _dsc_tensor_3d,
@@ -729,6 +731,15 @@ def randn(
     *shape: int, dtype: Dtype = Dtype.F32, device: DeviceType = Device.DEFAULT
 ) -> Tensor:
     return Tensor(_dsc_randn(_get_ctx(), shape, dtype, _get_device(device)))
+
+
+def topk(x: Tensor, k: int, axis: int = -1, largest: bool = True) -> Tuple[Tensor, Tensor]:
+    res = _dsc_topk(_get_ctx(), x.c_ptr, k, axis, largest)
+    return Tensor(res.first), Tensor(res.second)
+
+
+def multinomial(x: Tensor, num_samples: int) -> Tensor:
+    return Tensor(_dsc_multinomial(_get_ctx(), x.c_ptr, num_samples))
 
 
 # In the xx_like methods if dtype is not specified it will be the same as x

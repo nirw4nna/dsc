@@ -3,11 +3,11 @@
 #
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
-from random import randint, random
 
 import dsc
 import numpy as np
 import pytest
+from random import randint, random
 from typing import List
 import math
 from itertools import permutations
@@ -55,6 +55,13 @@ DSC_DTYPES = {
 def is_float(dtype) -> bool:
     return dtype == np.float32 or dtype == np.float64
 
+def is_bool(dtype) -> bool:
+    return dtype == np.bool
+
+def is_integer(dtype) -> bool:
+    return dtype == np.int32
+
+
 class TestOps:
     def test_binary(self):
         ops = {
@@ -75,7 +82,7 @@ class TestOps:
             np_op, dsc_op = ops[op_name]
             for dtype in DTYPES:
                 if op_name == 'sub':
-                    np_op = np.bitwise_xor if dtype == np.bool else np.subtract
+                    np_op = np.bitwise_xor if is_bool(dtype) else np.subtract
 
                 print(f'Testing operator {op_name} with {dtype.__name__}')
                 shape = [randint(2, 10) for _ in range(4)]
@@ -108,7 +115,7 @@ class TestOps:
                 # Scalar
                 if is_float(dtype):
                     y_s = random()
-                elif dtype == np.bool:
+                elif is_bool(dtype):
                     y_s = bool(randint(0, 1))
                 else:
                     y_s = randint(0, 10)
@@ -138,9 +145,6 @@ class TestOps:
             assert all_close(res_dsc, res)
 
         for dtype in DSC_DTYPES:
-            if dtype == np.complex64 or dtype == np.complex128:
-                continue
-
             # 2D matrices
             for _ in range(5):
                 m, n, k = _mnk()
@@ -214,7 +218,7 @@ class TestInit:
         for _ in range(10):
             n = randint(1, 10_000)
             for dtype in DTYPES:
-                if dtype == np.bool:
+                if is_bool(dtype):
                     continue
                 print(f'Tensing arange with N={n} and dtype={dtype.__name__} ')
                 res_np = np.arange(n, dtype=dtype)
@@ -553,3 +557,34 @@ def test_masked_fill():
             x[mask] = fill
             res_dsc = x_dsc.masked_fill(mask_dsc, fill)
             assert all_close(res_dsc, x)
+
+
+def test_topk():
+    k = 3
+    # Test against torch as it has the same simple API as DSC in this case
+    import torch
+
+    def _validate_axis(x: torch.Tensor, x_dsc: dsc.Tensor, axis: int, largest: bool):
+        res_v, res_i = torch.topk(x, k, dim=axis, largest=largest)
+        res_dsc_v, res_dsc_i = dsc.topk(x_dsc, k, axis=axis, largest=largest)
+        assert all_close(res_dsc_v, res_v.detach().cpu().numpy())
+        if x.dtype != torch.int32:
+            # Indexes returned by topk can be different when working with int tensors, just check the values
+            assert all_close(res_dsc_i, res_i.detach().cpu().numpy())
+
+    for n_dim in range(1, 5):
+        for dtype in DTYPES:
+            if is_bool(dtype):
+                continue
+            print(f'Testing topk with {n_dim}-dimensional tensors of type {dtype.__name__}')
+            x = random_nd([randint(5, 6) for _ in range(n_dim)], dtype)
+            x_torch = torch.from_numpy(x)
+            x_dsc = dsc.from_numpy(x)
+
+            for axis in range(-n_dim, 0):
+                _validate_axis(x_torch, x_dsc, axis, True)
+                _validate_axis(x_torch, x_dsc, axis, False)
+
+            for axis in range(0, n_dim):
+                _validate_axis(x_torch, x_dsc, axis, True)
+                _validate_axis(x_torch, x_dsc, axis, False)

@@ -46,7 +46,6 @@ class _DscDataBuffer(Structure):
         ('refs', c_int),
     ]
 
-
 class _DscTensor(Structure):
     _fields_ = [
         ('shape', c_int * _DSC_MAX_DIMS),
@@ -77,6 +76,12 @@ _OptionalTensor = Union[_DscTensor_p, None]
 
 class _DscSlice(Structure):
     _fields_ = [('start', c_int), ('stop', c_int), ('step', c_int)]
+
+class _DscPair(Structure):
+    _fields_ = [
+        ('first', _DscTensor_p),
+        ('second', _DscTensor_p)
+    ]
 
 
 # extern dsc_ctx *dsc_ctx_init(usize main_mem, usize scratch_mem);
@@ -353,6 +358,37 @@ def _dsc_randn(
 
 _lib.dsc_randn.argtypes = [_DscCtx, c_int, POINTER(c_int), c_uint8, c_int8]
 _lib.dsc_randn.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_topk(dsc_ctx *ctx,
+#                             const dsc_tensor *DSC_RESTRICT x,
+#                             int k,
+#                             int axis = -1,
+#                             bool largest = true);
+def _dsc_topk(
+        ctx: _DscCtx,
+        x: _DscTensor_p,
+        k: int,
+        axis: int,
+        largest: bool,
+) -> _DscPair:
+    return _lib.dsc_topk(ctx, x, c_int(k), c_int(axis), c_bool(largest))
+
+
+_lib.dsc_topk.argtypes = [_DscCtx, _DscTensor_p, c_int, c_int, c_bool]
+_lib.dsc_topk.restype = _DscPair
+
+
+
+# extern dsc_tensor *dsc_multinomial(dsc_ctx *ctx,
+#                                    const dsc_tensor *DSC_RESTRICT x,
+#                                    int num_samples);
+def _dsc_multinomial(ctx: _DscCtx, x: _DscTensor_p, num_samples: int) -> _DscTensor_p:
+    return _lib.dsc_multinomial(ctx, x, c_int(num_samples))
+
+
+_lib.dsc_multinomial.argtypes = [_DscCtx, _DscTensor_p, c_int]
+_lib.dsc_multinomial.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_add(dsc_ctx *ctx,

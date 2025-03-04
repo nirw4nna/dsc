@@ -45,6 +45,8 @@ from dsc.tensor import (
     full_like,
     empty,
     empty_like,
+    topk,
+    multinomial,
 )
 from dsc.dtype import Dtype
 from dsc.profiler import profile, start_recording, stop_recording

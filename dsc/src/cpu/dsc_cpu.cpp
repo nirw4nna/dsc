@@ -121,6 +121,108 @@ void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x) {
     }
 }
 
+template<typename T>
+static DSC_INLINE void topk(const dsc_tensor *DSC_RESTRICT x,
+                            dsc_tensor *DSC_RESTRICT tmp_values,
+                            dsc_tensor *DSC_RESTRICT tmp_indexes,
+                            dsc_tensor *DSC_RESTRICT out_values,
+                            dsc_tensor *DSC_RESTRICT out_indexes,
+                            const int k, const int axis_idx,
+                            const bool largest) {
+    DSC_DATA(T, x);
+    DSC_DATA(T, tmp_values);
+    DSC_DATA(i32, tmp_indexes);
+    DSC_DATA(T, out_values);
+    DSC_DATA(i32, out_indexes);
+
+    const int axis_n = x->shape[axis_idx];
+    dsc_axis_iterator x_it(x, axis_idx), out_it(out_values, axis_idx); // values and indexes are exactly the same for out
+    while (x_it.has_next()) {
+        for (int i = 0; i < axis_n; ++i) {
+            const int idx = x_it.index();
+            tmp_indexes_data[i] = i;
+            tmp_values_data[i] = x_data[idx];
+            x_it.next();
+        }
+
+        // Sort the indexes based on the values
+        std::sort(tmp_indexes_data, tmp_indexes_data + axis_n, [&tmp_values_data, largest](const i32 xa_idx, const i32 xb_idx) -> bool {
+            const T xa = tmp_values_data[xa_idx];
+            const T xb = tmp_values_data[xb_idx];
+            return largest ? xa > xb : xa < xb;
+        });
+
+        // Copy the top K elements from tmp to out
+        for (int i = 0; i < k; ++i) {
+            const int out_idx = out_it.index();
+            const i32 val_idx = tmp_indexes_data[i];
+            out_indexes_data[out_idx] = val_idx;
+            out_values_data[out_idx] = tmp_values_data[val_idx];
+            out_it.next();
+        }
+    }
+}
+
+void dsc_cpu_topk(dsc_device *,
+                  const dsc_tensor *DSC_RESTRICT x,
+                  dsc_tensor *DSC_RESTRICT tmp_values,
+                  dsc_tensor *DSC_RESTRICT tmp_indexes,
+                  dsc_tensor *DSC_RESTRICT out_values,
+                  dsc_tensor *DSC_RESTRICT out_indexes,
+                  const int k, const int axis_idx,
+                  const bool largest) {
+    switch (x->dtype) {
+        case I32:
+            topk<i32>(x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
+            break;
+        case F32:
+            topk<f32>(x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
+            break;
+        case F64:
+            topk<f64>(x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
+    }
+}
+
+template<typename T>
+static DSC_INLINE void multinomial(const dsc_tensor *DSC_RESTRICT x,
+                                   dsc_tensor *DSC_RESTRICT out,
+                                   const int num_samples) {
+    DSC_DATA(T, x);
+    DSC_DATA(i32, out);
+
+    const int rows = dsc_tensor_get_dim(x, -2);
+    const int cols = dsc_tensor_get_dim(x, -1);
+
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    for (int i = 0; i < rows; ++i) {
+        // Create a discrete distribution using the probabilities (x[i, 0], ..., x[i, cols - 1])
+        std::discrete_distribution<> dist(&x_data[i * cols], &x_data[(i+1) * cols]);
+
+        // Sample num_samples values from the distribution
+        for (int sample = 0; sample < num_samples; ++sample) {
+            out_data[i * cols + sample] = dist(rng);
+        }
+    }
+}
+
+void dsc_cpu_multinomial(dsc_device *,
+                         const dsc_tensor *DSC_RESTRICT x,
+                         dsc_tensor *DSC_RESTRICT out,
+                         const int num_samples) {
+    switch (x->dtype) {
+        case F32:
+            multinomial<f32>(x, out, num_samples);
+            break;
+        case F64:
+            multinomial<f64>(x, out, num_samples);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
+    }
+}
+
 // ============================================================
 // Tensor Manipulation
 
