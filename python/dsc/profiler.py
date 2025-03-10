@@ -58,12 +58,12 @@ def stop_recording(traces_file: str = 'traces.json', dump: bool = True, clear: b
 
 
 @contextmanager
-def profile(traces_file: str = 'traces.json'):
+def profile(traces_file: str = 'traces.json', clear: bool = True, serve: bool = True):
     start_recording()
     try:
         yield
     finally:
-        stop_recording(traces_file, True)
+        stop_recording(traces_file, clear=clear, serve=serve)
 
 
 def trace(name: str, cat: str = 'python'):

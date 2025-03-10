@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 from time import perf_counter
 
-
 @dataclass
 class GPT2Hparams:
    # default hyperparameters for GPT-2 small
@@ -39,6 +38,7 @@ class MultiHeadAttention(nn.Module):
         self.cache_k = None
         self.cache_v = None
 
+    @dsc.trace('MultiHeadAttention')
     def forward(self, x: dsc.Tensor) -> dsc.Tensor:
         B, T, C = x.shape # (block size, context size, emb size)
         attn = self.c_attn(x)
@@ -87,6 +87,7 @@ class TransformerBlock(nn.Module):
             c_proj = nn.Linear(hparams.emb_size * 4, hparams.emb_size),
         ))
 
+    @dsc.trace('TransformerBlock')
     def forward(self, x):
         m = self.mlp
         x = x + self.attn(self.ln_1(x))
@@ -124,6 +125,7 @@ class GPT2(nn.Module):
         del hf_model
         return my_model
 
+    @dsc.trace('GPT2')
     def forward(self, idx: dsc.Tensor) -> dsc.Tensor:
         B, T = idx.shape
         tok_emb = self.transformer.wte(idx)
@@ -181,7 +183,9 @@ if __name__ == '__main__':
     idx = tokenizer.encode(prompt)
     start = perf_counter()
 
-    response_tokens = model.generate(dsc.tensor(idx, dtype=dsc.Dtype.I32).reshape(1, -1), max_new_tokens=MAX_TOKENS)
+    with dsc.profile():
+        response_tokens = model.generate(dsc.tensor(idx, dtype=dsc.Dtype.I32).reshape(1, -1), max_new_tokens=MAX_TOKENS)
+
     delay = perf_counter() - start
 
     print(f'[Out]: {tokenizer.decode(response_tokens[0].numpy().tolist())}')

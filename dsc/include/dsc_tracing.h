@@ -299,11 +299,13 @@ struct dsc_mask_args {
     f64 value;
 
     DUMP() {
+        char value_str[16];
         fprintf(f, R"("x": )");
         x.dump(f);
         fprintf(f, R"(, "mask": )");
         mask.dump(f);
-        fprintf(f, R"(, "value": %f)", value);
+        snprintf(value_str, 16, "%f", value);
+        fprintf(f, R"(, "value": "%s")", value_str);
     }
 };
 
@@ -658,6 +660,8 @@ static dsc_traces dsc_tracing_get(dsc_trace_ctx *ctx) {
 }
 
 static DSC_INLINE void dsc_tracing_dump(dsc_trace_ctx *ctx, const char *filename) {
+    const auto start_ = internal::tracing::time_us();
+
     FILE *f = fopen(filename, "wt");
     DSC_ASSERT(f != nullptr);
 
@@ -702,7 +706,8 @@ static DSC_INLINE void dsc_tracing_dump(dsc_trace_ctx *ctx, const char *filename
     fprintf(f, "]");
     fclose(f);
 
-    DSC_LOG_INFO("exported Perfetto-compatible traces to \"%s\"", filename);
+    const auto stop_ = internal::tracing::time_us();
+    DSC_LOG_INFO("exported %ld Perfetto-compatible traces to \"%s\" in %.0fms", ctx->n_traces, filename, (stop_ - start_) * 1e-3);
 }
 
 #undef TYPED_FILL

@@ -9,22 +9,23 @@ from ..dtype import Dtype
 from ..device import Device
 from .._bindings import _dsc_new_tensor
 from ..context import _get_ctx
+from ..profiler import trace
 from typing import Iterator, Iterable, Any, Tuple, Callable, Optional, OrderedDict, Mapping, List
 from abc import ABC, abstractmethod
 import torch
 import math
-from numpy import ndarray
+from numpy import ndarray, ascontiguousarray
 
 
 class Parameter(Tensor):
-    def __init__(self, shape: Tuple[int, ...], dtype: Dtype = Dtype.F32, device: Device = Device.DEFAULT, post_init: Optional[Callable[[Tensor], Tensor]] = None):
+    def __init__(self, shape: Tuple[int, ...], dtype: Dtype = Dtype.F32, device: Device = Device.DEFAULT, post_init: Optional[Callable[[ndarray], ndarray]] = None):
         super().__init__(_dsc_new_tensor(_get_ctx(), shape, dtype, device))
         self._post_init = post_init
     
     def load(self, x: ndarray):
+        if self._post_init is not None:
+            x = self._post_init(x)
         super().load(x)
-        if self._post_init:
-            self = self._post_init(self)
 
 
 class Module(ABC):
@@ -131,15 +132,12 @@ class ModuleDict(Module):
 class Linear(Module):
     def __init__(self, in_features: int, out_features: int, bias: bool = True):
         super().__init__()
-        self.weight = Parameter((out_features, in_features), post_init=Linear._post_init)
+        self.weight = Parameter((in_features, out_features), post_init=lambda x: ascontiguousarray(x.T))
         self.bias = Parameter((out_features, )) if bias else None
 
-    @staticmethod
-    def _post_init(x: Tensor) -> Tensor:
-        return x.transpose()
-
+    @trace('Linear')
     def forward(self, x: Tensor) -> Tensor:
-        out = x @ self.weight.transpose()
+        out = x @ self.weight
         if self.bias:
             out += self.bias
         return out
@@ -150,7 +148,8 @@ class LayerNorm(Module):
         self.epsilon = epsilon
         self.weight = Parameter((n_features, ))
         self.bias = Parameter((n_features, ))
-    
+
+    @trace('LayerNorm')
     def forward(self, x: Tensor) -> Tensor:
         mean = x.mean(-1, keepdims=True)
         var = x.var(-1, keepdims=True)
@@ -164,14 +163,17 @@ class Embedding(Module):
     def __init__(self, num_embeddings: int, embedding_size: int):
         super().__init__()
         self.weight = Parameter((num_embeddings, embedding_size))
-    
+
     def forward(self, x: Tensor) -> Tensor:
         return self.weight[x]
 
 
+@trace('gelu')
 def gelu(x: Tensor) -> Tensor:
     return 0.5 * x * (1.0 + tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * power(x, 3))))
 
+
+@trace('softmax')
 def softmax(x: Tensor, axis: int = -1) -> Tensor:
     e = exp((x - max(x, axis=axis, keepdims=True)))
     sum_e = sum(e, axis=axis, keepdims=True)

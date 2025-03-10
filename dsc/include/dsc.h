@@ -18,7 +18,7 @@
 // Max number of traces that can be recorded. Changing this will result in more memory
 // allocated during context initialization.
 #if !defined(DSC_MAX_TRACES)
-#    define DSC_MAX_TRACES   ((u64) 1'000)
+#    define DSC_MAX_TRACES   ((u64) 100'000)
 #endif
 
 #if !defined(DSC_MAX_OBJS)

@@ -15,7 +15,7 @@ endif
 
 ifndef DSC_LOG_LEVEL
 	ifdef DSC_FAST
-		DSC_LOG_LEVEL	:=	2
+		DSC_LOG_LEVEL	:=	1
 	else
 		DSC_LOG_LEVEL	:=	0
 	endif
