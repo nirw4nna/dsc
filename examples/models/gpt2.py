@@ -176,7 +176,7 @@ if __name__ == '__main__':
     prompt = 'Javascript is a programming language designed'
     print(f'[In]: {prompt}')
     
-    MAX_TOKENS = 20
+    MAX_TOKENS = 10
 
     idx = tokenizer.encode(prompt)
     start = perf_counter()

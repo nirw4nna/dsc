@@ -25,6 +25,7 @@ class Dtype(Enum):
     def __str__(self) -> str:
         return repr(self)
 
+DTYPE_VALUE_LOOKUP = {val.value: val for val in Dtype.__members__.values()}
 
 TYPENAME_LOOKUP = {
     Dtype.BOOL: 'bool',

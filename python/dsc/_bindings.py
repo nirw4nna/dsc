@@ -8,16 +8,19 @@ import os
 import ctypes
 from ctypes import (
     c_bool,
+    c_char,
     c_char_p,
     c_int,
     c_int32,
     c_int8,
     c_uint8,
+    c_uint64,
     c_size_t,
     c_float,
     c_double,
     c_void_p,
     Structure,
+    Union,
     POINTER,
 )
 from typing import Union, Tuple
@@ -27,6 +30,8 @@ from .device import Device
 
 
 _DSC_MAX_DIMS = 4
+_DSC_TRACE_NAME_MAX = 32
+_DSC_TRACE_CAT_MAX = 16
 _DSC_VALUE_NONE = 2**31 - 1
 
 _DscCtx = c_void_p
@@ -55,6 +60,66 @@ class _DscTensor(Structure):
         ('n_dim', c_int),
         ('dtype', c_uint8),
         ('device', c_int8),
+    ]
+
+# ============================================================
+# Tracing stuff
+#
+
+class _DscTensorArgs(Structure):
+    _fields_ = [
+        ('shape', c_int * _DSC_MAX_DIMS),
+        ('addr', c_uint64),
+        ('n_dim', c_int),
+        ('device', c_uint8),
+        ('dtype', c_uint8),
+    ]
+
+class _DscTensorAllocArgs(Structure):
+    _fields_ = [
+        ('x', _DscTensorArgs)
+    ]
+
+class _DscEmptyArgs(Structure):
+    pass
+
+class _DscTraceArgs(ctypes.Union):
+    _fields_ = [
+        ('tensor_alloc', _DscTensorAllocArgs),
+        ('empty', _DscEmptyArgs),
+    ]
+
+class _DscTraceType(Enum):
+    EMPTY = 0
+    TENSOR_ALLOC = 1
+    TENSOR_FREE = 2
+
+_TRACE_VALUE_LOOKUP = {el.value: el for _, el in _DscTraceType.__members__.items()}
+
+class _DscTracePhase(Enum):
+    BEGIN = 'B'
+    END = 'E'
+    COMPLETE = 'X'
+
+class _DscTrace(Structure):
+    _anonymous = ('args',)
+    _fields_ = [
+        ('name', c_char * 32),
+        ('cat', c_char * 16),
+        ('tid', c_uint64),
+        ('ts', c_uint64),
+        ('pid', c_int),
+        ('phase', c_char),
+        ('type', c_uint8),
+        ('args', _DscTraceArgs)
+    ]
+
+_DscTrace_p = POINTER(_DscTrace)
+
+class _DscTraces(Structure):
+    _fields_ = [
+        ('traces', _DscTrace_p),
+        ('n_traces', c_uint64),
     ]
 
 
@@ -138,13 +203,29 @@ _lib.dsc_traces_record.argtypes = [_DscCtx, c_bool]
 _lib.dsc_traces_record.restype = None
 
 
-# extern void dsc_dump_traces(dsc_ctx *ctx, const char *filename);
-def _dsc_dump_traces(ctx: _DscCtx, filename: str):
-    _lib.dsc_dump_traces(ctx, c_char_p(filename.encode('utf-8')))
+# extern dsc_traces dsc_get_traces(dsc_ctx *);
+def _dsc_get_traces(ctx: _DscCtx):
+    return _lib.dsc_get_traces(ctx)
 
 
-_lib.dsc_dump_traces.argtypes = [_DscCtx, c_char_p]
-_lib.dsc_dump_traces.restype = None
+_lib.dsc_get_traces.argtypes = [_DscCtx]
+_lib.dsc_get_traces.restype = _DscTraces
+
+
+# extern void dsc_insert_trace(dsc_ctx *ctx,
+#                              const char *name,
+#                              const char *cat,
+#                              u64 ts,
+#                              dsc_trace_phase phase);
+def _dsc_insert_trace(ctx: _DscCtx, name: str, cat: str, ts: int, phase: _DscTracePhase):
+    c_name = name.encode('ascii')
+    c_cat = cat.encode('ascii')
+    c_phase = phase.value.encode('ascii')
+    return _lib.dsc_insert_trace(ctx, c_name, c_cat, c_uint64(ts), c_phase)
+
+
+_lib.dsc_insert_trace.argtypes = [_DscCtx, c_char_p, c_char_p, c_uint64, c_char]
+_lib.dsc_insert_trace.restype = None
 
 
 # extern void dsc_clear_traces(dsc_ctx *);
@@ -154,6 +235,16 @@ def _dsc_clear_traces(ctx: _DscCtx):
 
 _lib.dsc_clear_traces.argtypes = [_DscCtx]
 _lib.dsc_clear_traces.restype = None
+
+
+# extern void dsc_dump_traces(dsc_ctx *ctx, const char *filename);
+def _dsc_dump_traces(ctx: _DscCtx, filename: str):
+    c_filename = filename.encode('ascii')
+    _lib.dsc_dump_traces(ctx, c_filename)
+
+
+_lib.dsc_dump_traces.argtypes = [_DscCtx, c_char_p]
+_lib.dsc_dump_traces.restype = None
 
 
 # extern dsc_tensor *dsc_view(dsc_ctx *ctx,

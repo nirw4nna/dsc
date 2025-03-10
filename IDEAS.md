@@ -56,3 +56,42 @@ right away.
 due to this feature.
 - **Generated code must be versioned** (ie. pushed to GitHub) **and must be modifiable** and the code generator
 must not erase these updates if it's re-run.
+
+
+## Profiling
+I need a mechanism to profile DSC code. The key points to keep in mind are:
+- Python overhead can be ignored for kernels that are dispatched directly (ie. matmul: here
+most of the time is spent in C++, the Python overhead is only a few us)
+- Kernels that are defined in Python (ie. gelu, var, LayerNorm) must be profiled
+- Traces must be available in Python
+- Tracing must be opt-in, both in Python (using env vars?) and in C++ (compile-time flags?)
+
+One possibility is to use C++ to generate also the Python traces but in this case it's hard to capture the context
+(what parameters should we print? what metrics?).
+
+Another possibility is to use the C++ portion to collect traces but then expose those traces via the standard low-level
+API so that all the manipulations like sorting, grouping, filtering ecc... can be done in Python.
+Then, it would be great if I could 'group' events together. For example:
+```python
+def softmax(x: Tensor, axis: int = -1) -> Tensor:
+    e = exp((x - max(x, axis=axis, keepdims=True)))
+    sum_e = sum(e, axis=axis, keepdims=True)
+    return e / sum_e
+```
+This code will generate a bunch of events (a reduction along an axis, a binary op, lots of allocations...), I need a mechanism
+to mark them as one big meta-operation, this way I know when looking at the traces where they come from.
+Same goes for the forward step of an `nn.Module`.
+
+An idea could be marking the 'meta-functions' with some decorators like:
+```python3
+@trace('Softmax')
+def softmax(...):
+   ...
+```
+Here the decorator basically creates a new trace (ask the C++ code to generate the trace?) before and after the function
+call.
+
+**Questions:**
+- How does grouping (ie. an event that spans multiple, smaller, events) work in chrome-traces/Perfetto?
+- What's the latency of this decorator mechanism?
+- How can we exchange events efficiently between Python and C++?

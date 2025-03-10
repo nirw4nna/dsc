@@ -3,16 +3,12 @@
 #
 #  This code is licensed under the terms of the 3-clause BSD license
 #  (https://opensource.org/license/bsd-3-clause).
-
-from ._bindings import _dsc_dump_traces, _dsc_traces_record, _dsc_clear_traces
+from ._bindings import  _dsc_traces_record, _dsc_clear_traces, _dsc_insert_trace, _dsc_dump_traces, _DscTracePhase
 from .context import _get_ctx
+from time import perf_counter
 from contextlib import contextmanager
 from http.server import SimpleHTTPRequestHandler
 import socketserver
-
-
-def start_recording():
-    _dsc_traces_record(_get_ctx(), True)
 
 
 class _PerfettoServer(SimpleHTTPRequestHandler):
@@ -44,20 +40,38 @@ def _serve_traces(traces_file: str):
             httpd.handle_request()
 
 
-def stop_recording(traces_file: str, clear: bool = True):
-    _dsc_traces_record(_get_ctx(), False)
-    _dsc_dump_traces(_get_ctx(), traces_file)
+def start_recording():
+    _dsc_traces_record(_get_ctx(), True)
 
-    _serve_traces(traces_file)
+
+def stop_recording(traces_file: str = 'traces.json', dump: bool = True, clear: bool = True, serve: bool = False):
+    _dsc_traces_record(_get_ctx(), False)
+
+    if dump or serve:
+        _dsc_dump_traces(_get_ctx(), traces_file)
+
+    if serve:
+        _serve_traces(traces_file)
 
     if clear:
         _dsc_clear_traces(_get_ctx())
 
 
 @contextmanager
-def profile(dump_file: str = 'traces.json'):
+def profile(traces_file: str = 'traces.json'):
     start_recording()
     try:
         yield
     finally:
-        stop_recording(dump_file, True)
+        stop_recording(traces_file, True)
+
+
+def trace(name: str, cat: str = 'python'):
+    def _decorator(func):
+        def _wrapper(*args, **kwargs):
+            _dsc_insert_trace(_get_ctx(), name, cat, int(perf_counter() * 1e6) ,_DscTracePhase.BEGIN)
+            res = func(*args, **kwargs)
+            _dsc_insert_trace(_get_ctx(), name, cat, int(perf_counter() * 1e6), _DscTracePhase.END)
+            return res
+        return _wrapper
+    return _decorator

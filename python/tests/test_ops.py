@@ -505,6 +505,7 @@ def test_split():
                 for r_np, r_dsc in zip(res, res_dsc):
                     assert all_close(r_dsc, r_np)
 
+
 def test_transpose():
     for n_dim in range(2, 5):
         for dtype in DTYPES:
@@ -530,6 +531,7 @@ def test_transpose():
                 res_dsc = dsc.transpose(x_dsc, axes)
                 assert all_close(res_dsc, res_np)
 
+
 def test_tril():
     for n_dim in range(2, 5):
         for dtype in DTYPES:
@@ -540,6 +542,7 @@ def test_tril():
                 res = np.tril(x, k)
                 res_dsc = dsc.tril(x_dsc, k)
                 assert all_close(res_dsc, res)
+
 
 def test_masked_fill():
     for n_dim in range(1, 5):

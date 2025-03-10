@@ -122,6 +122,13 @@ extern "C" {
 
 struct dsc_ctx;
 struct dsc_data_buffer;
+struct dsc_trace;
+enum dsc_trace_phase : char;
+
+struct dsc_traces {
+    dsc_trace *traces;
+    u64 n_traces;
+};
 
 enum dsc_device_type : i8 {
     DEFAULT = -1,
@@ -189,13 +196,20 @@ extern void dsc_print_mem_usage(dsc_ctx *ctx);
 // ============================================================
 // Tracing
 
-extern void dsc_traces_record(dsc_ctx *,
+extern void dsc_traces_record(dsc_ctx *ctx,
                               bool record = true);
 
-extern void dsc_dump_traces(dsc_ctx *,
-                            const char *filename);
+extern dsc_traces dsc_get_traces(dsc_ctx *ctx);
 
-extern void dsc_clear_traces(dsc_ctx *);
+extern void dsc_insert_trace(dsc_ctx *ctx,
+                             const char *name,
+                             const char *cat,
+                             u64 ts,
+                             dsc_trace_phase phase);
+
+extern void dsc_clear_traces(dsc_ctx *ctx);
+
+extern void dsc_dump_traces(dsc_ctx *ctx, const char *filename);
 
 // ============================================================
 // Tensor Creation

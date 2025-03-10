@@ -32,6 +32,8 @@ def _get_device(dev: DeviceType) -> Device:
             raise RuntimeError(f'string "{dev}" is not a valid Device')
 
 
+DEVICE_VALUE_LOOKUP = {val.value: val for val in Device.__members__.values()}
+
 DEVICE_LOOKUP = {
     Device.DEFAULT: 'default',
     Device.CPU: 'cpu',

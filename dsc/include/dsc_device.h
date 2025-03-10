@@ -53,7 +53,7 @@ struct dsc_device {
 };
 
 namespace internal::alloc {
-static DSC_INLINE dsc_free_node *find_best(dsc_device *dev,
+DSC_INLINE dsc_free_node *find_best(dsc_device *dev,
                                            const usize required_size,
                                            dsc_free_node **prev) {
     dsc_free_node *node = dev->head;
@@ -74,7 +74,7 @@ static DSC_INLINE dsc_free_node *find_best(dsc_device *dev,
     return best;
 }
 
-static DSC_INLINE void node_insert(dsc_free_node **head,
+DSC_INLINE void node_insert(dsc_free_node **head,
                                    dsc_free_node *prev,
                                    dsc_free_node *to_insert) {
     if (prev == nullptr) {
@@ -93,7 +93,7 @@ static DSC_INLINE void node_insert(dsc_free_node **head,
     }
 }
 
-static DSC_INLINE void node_remove(dsc_free_node **head,
+DSC_INLINE void node_remove(dsc_free_node **head,
                                    dsc_free_node *prev,
                                    dsc_free_node *to_remove) {
     if (prev == nullptr) {
@@ -105,7 +105,7 @@ static DSC_INLINE void node_remove(dsc_free_node **head,
     dsc_node_mark_free(to_remove);
 }
 
-static DSC_INLINE dsc_free_node *next_free_node(dsc_device *dev) {
+DSC_INLINE dsc_free_node *next_free_node(dsc_device *dev) {
     for (int i = 0; i < DSC_MAX_OBJS; ++i) {
         if (dsc_free_node *bin = &dev->free_nodes[i]; dsc_node_is_free(bin)) {
             return bin;

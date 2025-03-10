@@ -133,12 +133,15 @@
 #define dsc_tensor_invalid(PTR)     (PTR)->ne <= 0
 #define dsc_tensor_set_invalid(PTR) (PTR)->ne = -1
 
+
 struct dsc_ctx {
     dsc_device *devices[DSC_MAX_DEVICES];
-    int device_lookup[DSC_MAX_DEVICES];
     dsc_tensor *tensors;
+    dsc_trace_ctx *trace_ctx;
+    int device_lookup[DSC_MAX_DEVICES];
     dsc_device_type default_device;
 };
+
 
 // ============================================================
 // Initialization
@@ -157,7 +160,7 @@ dsc_ctx *dsc_ctx_init(const usize mem_size) {
     // memory upfront.
     ctx->tensors = (dsc_tensor *) calloc(DSC_MAX_OBJS, sizeof(dsc_tensor));
 
-    dsc_internal_init_traces(DSC_MAX_TRACES);
+    ctx->trace_ctx = dsc_tracing_init();
 
     return ctx;
 }
@@ -172,7 +175,7 @@ void dsc_ctx_free(dsc_ctx *ctx) {
         }
     }
 
-    dsc_internal_free_traces();
+    dsc_tracing_free(ctx->trace_ctx);
 
     free(ctx->tensors);
     free(ctx);
@@ -180,7 +183,7 @@ void dsc_ctx_free(dsc_ctx *ctx) {
 
 void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) {
     if (x == nullptr) return;
-    // DSC_TRACE_TENSOR_FREE(x);
+    DSC_TRACE_TENSOR_FREE(x);
 
     DSC_GET_DEVICE(ctx, x->device);
 
@@ -213,16 +216,28 @@ void dsc_print_mem_usage(dsc_ctx *ctx) {
 // ============================================================
 // Tracing
 
-void dsc_traces_record(dsc_ctx *, const bool record) {
-    dsc_internal_record_traces(record);
+void dsc_traces_record(dsc_ctx *ctx, const bool record) {
+    dsc_tracing_record(ctx->trace_ctx, record);
 }
 
-void dsc_dump_traces(dsc_ctx *, const char *filename) {
-    dsc_internal_dump_traces(filename);
+dsc_traces dsc_get_traces(dsc_ctx *ctx) {
+    return dsc_tracing_get(ctx->trace_ctx);
 }
 
-void dsc_clear_traces(dsc_ctx *) {
-    dsc_internal_clear_traces();
+void dsc_insert_trace(dsc_ctx *ctx,
+                      const char *name,
+                      const char *cat,
+                      const u64 ts,
+                      const dsc_trace_phase phase) {
+    dsc_tracing_insert(ctx->trace_ctx, name, cat, ts, phase);
+}
+
+void dsc_clear_traces(dsc_ctx *ctx) {
+    dsc_tracing_clear(ctx->trace_ctx);
+}
+
+void dsc_dump_traces(dsc_ctx *ctx, const char *filename) {
+    dsc_tracing_dump(ctx->trace_ctx, filename);
 }
 
 // ============================================================
@@ -249,7 +264,7 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
 
     DSC_GET_DEVICE(ctx, device);
 
-    // DSC_TRACE_TENSOR_NEW(shape, n_dim, dtype, backend);
+    DSC_TRACE_TENSOR_NEW(shape, n_dim, dtype, device);
 
     int ne = 1;
     for (int i = 0; i < n_dim; ++i) ne *= shape[i];
@@ -376,7 +391,7 @@ dsc_tensor *dsc_arange(dsc_ctx *ctx,
                        const int n,
                        const dsc_dtype dtype,
                        const dsc_device_type device) {
-    // DSC_TRACE_ARANGE_OP(n, dtype);
+    DSC_TRACE_ARANGE_OP(n, dtype);
 
     dsc_tensor *out = dsc_tensor_1d(ctx, dtype, n, device);
     DSC_DISPATCH(device, arange, out);
@@ -388,7 +403,7 @@ dsc_tensor *dsc_randn(dsc_ctx *ctx,
                       const int *shape,
                       const dsc_dtype dtype,
                       const dsc_device_type device) {
-    // DSC_TRACE_RANDN_OP(shape, n_dim, dtype);
+    DSC_TRACE_RANDN_OP(shape, n_dim, dtype);
 
     dsc_tensor *out = dsc_new_tensor(ctx, n_dim, shape, dtype, device);
     DSC_DISPATCH(device, randn, out);
@@ -401,6 +416,8 @@ dsc_pair dsc_topk(dsc_ctx *ctx,
                   const bool largest) {
     // Return the top K largest (smallest) elements of x along the given axis
     DSC_ASSERT(x != nullptr);
+
+    DSC_TRACE_TOPK_OP(x, k, axis, largest);
 
     const int axis_idx = dsc_tensor_dim_idx(x, axis);
     const int axis_n = x->shape[axis_idx];
@@ -433,6 +450,8 @@ dsc_tensor *dsc_multinomial(dsc_ctx *ctx,
     DSC_ASSERT(x->dtype == F32 || x->dtype == F64);
     DSC_ASSERT((unsigned) num_samples <= (unsigned) dsc_tensor_get_dim(x, -1));
 
+    DSC_TRACE_MULTINOMIAL_OP(x, num_samples);
+
     int out_shape[DSC_MAX_DIMS]{};
     memcpy(out_shape, x->shape, DSC_MAX_DIMS * sizeof(*x->shape));
     out_shape[DSC_MAX_DIMS - 1] = num_samples;
@@ -446,7 +465,7 @@ dsc_tensor *dsc_multinomial(dsc_ctx *ctx,
 
 dsc_tensor *dsc_cast(dsc_ctx *ctx, dsc_tensor *DSC_RESTRICT x,
                      const dsc_dtype new_dtype) {
-    // DSC_TRACE_CAST_OP(x, new_dtype);
+    DSC_TRACE_CAST_OP(x, new_dtype);
 
     if (x->dtype == new_dtype) return x;
 
@@ -470,6 +489,8 @@ void dsc_copy(dsc_ctx *ctx,
     DSC_ASSERT(x != nullptr);
     DSC_ASSERT(x->ne * DSC_DTYPE_SIZE[x->dtype] >= nb);
     DSC_ASSERT(x->device == data_device);
+
+    DSC_TRACE_COPY_OP(x, data, nb, data_device);
 
     DSC_DATA(void, x);
     DSC_GET_DEVICE(ctx, x->device);
@@ -508,8 +529,6 @@ dsc_tensor *dsc_reshape(dsc_ctx *ctx,
         new_ne = x->ne;
     }
 
-    // DSC_TRACE_RESHAPE_OP(x, dimensions, new_shape);
-
     DSC_ASSERT(x->ne == new_ne);
 
     return dsc_new_tensor(ctx, dimensions, new_shape, x->dtype, x->device, x->buf);
@@ -519,7 +538,7 @@ dsc_tensor *dsc_concat(dsc_ctx *ctx, const int axis,
                        const int tensors...) {
     DSC_ASSERT(tensors > 1);
 
-    // DSC_TRACE_CONCAT_OP(tensors, axis);
+    DSC_TRACE_CONCAT_OP(tensors, axis);
 
     dsc_tensor **to_concat = (dsc_tensor **) alloca(tensors * sizeof(dsc_tensor *));
     std::va_list args;
@@ -613,7 +632,7 @@ dsc_tensor *dsc_transpose(dsc_ctx *ctx,
         }
         va_end(args);
     }
-    // DSC_TRACE_TRANSPOSE_OP(x, swap_axes);
+    DSC_TRACE_TRANSPOSE_OP(x, swap_axes);
 
     int swapped_shape[DSC_MAX_DIMS], swapped_stride[DSC_MAX_DIMS];
     memcpy(swapped_shape, x->shape, DSC_MAX_DIMS * sizeof(*x->shape));
@@ -687,7 +706,7 @@ dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
     }
     va_end(args);
 
-    // DSC_TRACE_GET_IDX(x, el_idx, indexes);
+    DSC_TRACE_GET_IDX(x, el_idx, indexes);
 
     // Since we are wrapping scalars the resulting tensor will be always at least 1D
     const int out_n_dim = x->n_dim == indexes ? 1 : x->n_dim - indexes;
@@ -792,7 +811,7 @@ dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
     const bool whole = parse_slices(x, el_slices, collapse_dim, slices, args);
     va_end(args);
 
-    // DSC_TRACE_GET_SLICE(x, el_slices, slices);
+    DSC_TRACE_GET_SLICE(x, el_slices, slices);
 
     int out_shape[DSC_MAX_DIMS];
     int out_n_dim = x->n_dim;
@@ -826,6 +845,8 @@ dsc_tensor *dsc_tensor_get_tensor(dsc_ctx *ctx,
     DSC_ASSERT(indexes != nullptr);
     DSC_ASSERT(indexes->dtype == I32);
     DSC_ASSERT(x->device == indexes->device);
+
+    DSC_TRACE_GET_TENSOR(x, indexes);
 
     // Note: right now this implements the behaviour of torch.Embedding
     DSC_ASSERT(x->n_dim == 2);
@@ -870,7 +891,7 @@ void dsc_tensor_set_idx(dsc_ctx *ctx,
     }
     va_end(args);
 
-    // DSC_TRACE_SET_IDX(xa, xb, el_slices, indexes);
+    DSC_TRACE_SET_IDX(xa, xb, el_slices, indexes);
 
     // If we do something like xa[2] and xa has more than one dimension then, the remaining
     // dimensions of xa and xb must be broadcastable together
@@ -912,7 +933,7 @@ void dsc_tensor_set_slice(dsc_ctx *ctx,
     const bool whole = parse_slices(xa, el_slices, nullptr, slices, args);
     va_end(args);
 
-    // DSC_TRACE_SET_SLICE(xa, xb, el_slices, slices);
+    DSC_TRACE_SET_SLICE(xa, xb, el_slices, slices);
 
     int xa_slice_shape[DSC_MAX_DIMS];
     for (int i = 0; i < xa->n_dim; ++i) {
@@ -962,7 +983,7 @@ dsc_tensor *dsc_add(dsc_ctx *ctx,
                     dsc_tensor *xa,
                     dsc_tensor *xb,
                     dsc_tensor *out) {
-    // DSC_TRACE_BINARY_OP(xa, xb, out);
+    DSC_TRACE_BINARY_OP(xa, xb, out);
 
     validate_binary_params(false, false);
 
@@ -977,7 +998,7 @@ dsc_tensor *dsc_sub(dsc_ctx *ctx,
                     dsc_tensor *xa,
                     dsc_tensor *xb,
                     dsc_tensor *out) {
-    // DSC_TRACE_BINARY_OP(xa, xb, out);
+    DSC_TRACE_BINARY_OP(xa, xb, out);
 
     validate_binary_params(false, false);
 
@@ -992,7 +1013,7 @@ dsc_tensor *dsc_mul(dsc_ctx *ctx,
                     dsc_tensor *xa,
                     dsc_tensor *xb,
                     dsc_tensor *out) {
-    // DSC_TRACE_BINARY_OP(xa, xb, out);
+    DSC_TRACE_BINARY_OP(xa, xb, out);
 
     validate_binary_params(false, false);
 
@@ -1007,7 +1028,7 @@ dsc_tensor *dsc_div(dsc_ctx *ctx,
                     dsc_tensor *xa,
                     dsc_tensor *xb,
                     dsc_tensor *out) {
-    // DSC_TRACE_BINARY_OP(xa, xb, out);
+    DSC_TRACE_BINARY_OP(xa, xb, out);
 
     validate_binary_params(true, true);
 
@@ -1022,7 +1043,7 @@ dsc_tensor *dsc_pow(dsc_ctx *ctx,
                     dsc_tensor *xa,
                     dsc_tensor *xb,
                     dsc_tensor *out) {
-    // DSC_TRACE_BINARY_OP(xa, xb, out);
+    DSC_TRACE_BINARY_OP(xa, xb, out);
 
     validate_binary_params(true, false);
 
@@ -1042,6 +1063,8 @@ dsc_tensor *dsc_matmul(dsc_ctx *ctx,
     DSC_ASSERT(xa->device == xb->device);
 
     if (xa->n_dim < 2 || xb->n_dim < 2) return dsc_mul(ctx, xa, xb, out);
+
+    DSC_TRACE_BINARY_OP(xa, xb, out);
 
     const int xa_rows = dsc_tensor_get_dim(xa, -2);
     const int xa_cols = dsc_tensor_get_dim(xa, -1);
@@ -1094,12 +1117,14 @@ dsc_tensor *dsc_compare(dsc_ctx *ctx,
                         const dsc_comparison_op comp,
                         dsc_tensor *out) {
     // Todo: mostly duplicated code from `validate_binary_params` but without the casting
-    DSC_ASSERT(xa != nullptr);                                                                 
+    DSC_TRACE_BINARY_OP(xa, xb, out); // Shall I capture comp as well?
+
+    DSC_ASSERT(xa != nullptr);
     DSC_ASSERT(xb != nullptr);                                                                 
     DSC_ASSERT(can_broadcast(xa, xb));                                                         
     DSC_ASSERT(xa->device == xb->device);                                                      
-                                                                                               
-    const int n_dim = DSC_MAX(xa->n_dim, xb->n_dim);                                           
+
+    const int n_dim = DSC_MAX(xa->n_dim, xb->n_dim);
                                                                                                
     int shape[DSC_MAX_DIMS];                                                                   
     for (int i = 0; i < DSC_MAX_DIMS; ++i) shape[i] = DSC_MAX(xa->shape[i], xb->shape[i]);     
@@ -1128,6 +1153,8 @@ void dsc_masked_fill(dsc_ctx *ctx,
     DSC_ASSERT(mask->dtype == BOOL);
     DSC_ASSERT(x->dtype == F32 || x->dtype == F64);
 
+    DSC_TRACE_MASK_OP(x, mask, value);
+
     // Mask must be broadcastable with the shape of x, not the other way around
     DSC_ASSERT(x->n_dim >= mask->n_dim);
     DSC_ASSERT(can_broadcast(x, mask));
@@ -1144,7 +1171,7 @@ void dsc_masked_fill(dsc_ctx *ctx,
 dsc_tensor *dsc_cos(dsc_ctx *ctx,
                     dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out) {
-    // DSC_TRACE_UNARY_OP(x, out);
+    DSC_TRACE_UNARY_OP(x, out);
 
     validate_unary_params();
 
@@ -1158,7 +1185,7 @@ dsc_tensor *dsc_cos(dsc_ctx *ctx,
 dsc_tensor *dsc_sin(dsc_ctx *ctx,
                     dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out) {
-    // DSC_TRACE_UNARY_OP(x, out);
+    DSC_TRACE_UNARY_OP(x, out);
 
     validate_unary_params();
 
@@ -1172,6 +1199,8 @@ dsc_tensor *dsc_sin(dsc_ctx *ctx,
 dsc_tensor *dsc_tanh(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT x,
                      dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_UNARY_OP(x, out);
+
     validate_unary_params();
 
     DSC_DISPATCH(x->device, tanh, x, out);
@@ -1184,7 +1213,7 @@ dsc_tensor *dsc_tanh(dsc_ctx *ctx,
 dsc_tensor *dsc_exp(dsc_ctx *ctx,
                     dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out) {
-    // DSC_TRACE_UNARY_OP(x, out);
+    DSC_TRACE_UNARY_OP(x, out);
 
     validate_unary_params();
 
@@ -1198,7 +1227,7 @@ dsc_tensor *dsc_exp(dsc_ctx *ctx,
 dsc_tensor *dsc_sqrt(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT x,
                      dsc_tensor *DSC_RESTRICT out) {
-    // DSC_TRACE_UNARY_OP(x, out);
+    DSC_TRACE_UNARY_OP(x, out);
 
     validate_unary_params();
 
@@ -1218,7 +1247,7 @@ dsc_tensor *dsc_sum(dsc_ctx *ctx,
                     dsc_tensor *DSC_RESTRICT out,
                     const int axis,
                     const bool keep_dims) {
-    // DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
+    DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
 
     validate_reduce_params();
 
@@ -1234,7 +1263,7 @@ dsc_tensor *dsc_max(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT out,
                      const int axis,
                      const bool keep_dims) {
-    // DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
+    DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
 
     validate_reduce_params();
 
@@ -1250,7 +1279,7 @@ dsc_tensor *dsc_min(dsc_ctx *ctx,
                      dsc_tensor *DSC_RESTRICT out,
                      const int axis,
                      const bool keep_dims) {
-    // DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
+    DSC_TRACE_UNARY_AXIS_OP(x, out, axis, keep_dims);
 
     validate_reduce_params();
 

@@ -50,6 +50,6 @@ from dsc.tensor import (
     multinomial,
 )
 from dsc.dtype import Dtype
-from dsc.profiler import profile, start_recording, stop_recording
+from dsc.profiler import start_recording, stop_recording, profile, trace
 from dsc.device import Device
 import dsc.nn as nn
