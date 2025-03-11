@@ -10,6 +10,8 @@ import dsc.nn as nn
 from dataclasses import dataclass
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 from time import perf_counter
+import argparse
+
 
 @dataclass
 class GPT2Hparams:
@@ -143,7 +145,7 @@ class GPT2(nn.Module):
         self.kv_pos += T
         return logits
 
-    def generate(self, idx: dsc.Tensor, max_new_tokens: int, temp: float = 1, sample: bool = True) -> dsc.Tensor:
+    def generate(self, idx: dsc.Tensor, tokenizer, max_new_tokens: int, temp: float = 1, sample: bool = True) -> dsc.Tensor:
         assert max_new_tokens < self.hparams.block_size
         # Include the input in the response
         generated = idx
@@ -165,28 +167,36 @@ class GPT2(nn.Module):
                 idx_next = dsc.multinomial(probs, num_samples=1)
             else:
                 _, idx_next = dsc.topk(probs, k=1, axis=-1)
-            
+
+            print(tokenizer.decode(idx_next[0]), end='', flush=True)
             generated = dsc.concat([generated, idx_next], axis=1)
 
+        print()
         return generated
 
 
 if __name__ == '__main__':
-    model = GPT2.from_hf(use_cache=True)
+    cli = argparse.ArgumentParser(description='GPT2 inference CLI')
+    cli.add_argument('--no-cache', action='store_true', help='Disable KV cache')
+    cli.add_argument('-s', type=str, required=True, help='Model prompt')
+
+    args = cli.parse_args()
+
+    use_kv_cache = not args.no_cache
+    prompt = args.s
+
+    model = GPT2.from_hf(use_cache=use_kv_cache)
 
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-    prompt = 'Javascript is a programming language designed'
-    print(f'[In]: {prompt}')
+    print(prompt, end='', flush=True)
     
-    MAX_TOKENS = 10
+    MAX_TOKENS = 50
 
     idx = tokenizer.encode(prompt)
     start = perf_counter()
 
-    with dsc.profile():
-        response_tokens = model.generate(dsc.tensor(idx, dtype=dsc.Dtype.I32).reshape(1, -1), max_new_tokens=MAX_TOKENS)
+    response_tokens = model.generate(dsc.tensor(idx, dtype=dsc.Dtype.I32).reshape(1, -1), tokenizer=tokenizer, max_new_tokens=MAX_TOKENS)
 
     delay = perf_counter() - start
 
-    print(f'[Out]: {tokenizer.decode(response_tokens[0].numpy().tolist())}')
     print(f'Took {round(delay, 2)}s to generate {MAX_TOKENS} tokens ({round(MAX_TOKENS / delay, 2)} tok/s)')

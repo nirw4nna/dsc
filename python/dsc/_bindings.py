@@ -20,7 +20,6 @@ from ctypes import (
     c_double,
     c_void_p,
     Structure,
-    Union,
     POINTER,
 )
 from typing import Union, Tuple
@@ -66,6 +65,8 @@ class _DscTensor(Structure):
 # Tracing stuff
 #
 
+# TODO: validate this stuff, I think it's probably better to collect more
+#  uniform traces, handling the args union stuff is very clunky in Python (and also in C++)
 class _DscTensorArgs(Structure):
     _fields_ = [
         ('shape', c_int * _DSC_MAX_DIMS),
@@ -148,6 +149,9 @@ class _DscPair(Structure):
         ('second', _DscTensor_p)
     ]
 
+def _c_str(py_str: str) -> bytes:
+    return py_str.encode('ascii')
+
 
 # extern dsc_ctx *dsc_ctx_init(usize main_mem, usize scratch_mem);
 def _dsc_ctx_init(mem_size: int) -> _DscCtx:
@@ -218,10 +222,7 @@ _lib.dsc_get_traces.restype = _DscTraces
 #                              u64 ts,
 #                              dsc_trace_phase phase);
 def _dsc_insert_trace(ctx: _DscCtx, name: str, cat: str, ts: int, phase: _DscTracePhase):
-    c_name = name.encode('ascii')
-    c_cat = cat.encode('ascii')
-    c_phase = phase.value.encode('ascii')
-    return _lib.dsc_insert_trace(ctx, c_name, c_cat, c_uint64(ts), c_phase)
+    return _lib.dsc_insert_trace(ctx, _c_str(name), _c_str(cat), c_uint64(ts), _c_str(phase.value))
 
 
 _lib.dsc_insert_trace.argtypes = [_DscCtx, c_char_p, c_char_p, c_uint64, c_char]
@@ -239,8 +240,7 @@ _lib.dsc_clear_traces.restype = None
 
 # extern void dsc_dump_traces(dsc_ctx *ctx, const char *filename);
 def _dsc_dump_traces(ctx: _DscCtx, filename: str):
-    c_filename = filename.encode('ascii')
-    _lib.dsc_dump_traces(ctx, c_filename)
+    _lib.dsc_dump_traces(ctx, _c_str(filename))
 
 
 _lib.dsc_dump_traces.argtypes = [_DscCtx, c_char_p]

@@ -15,16 +15,17 @@ from abc import ABC, abstractmethod
 import torch
 import math
 from numpy import ndarray, ascontiguousarray
+from tqdm import tqdm
 
 
 class Parameter(Tensor):
-    def __init__(self, shape: Tuple[int, ...], dtype: Dtype = Dtype.F32, device: Device = Device.DEFAULT, post_init: Optional[Callable[[ndarray], ndarray]] = None):
+    def __init__(self, shape: Tuple[int, ...], dtype: Dtype = Dtype.F32, device: Device = Device.DEFAULT, on_load: Optional[Callable[[ndarray], ndarray]] = None):
         super().__init__(_dsc_new_tensor(_get_ctx(), shape, dtype, device))
-        self._post_init = post_init
-    
+        self._on_load = on_load
+
     def load(self, x: ndarray):
-        if self._post_init is not None:
-            x = self._post_init(x)
+        if self._on_load is not None:
+            x = self._on_load(x)
         super().load(x)
 
 
@@ -68,28 +69,32 @@ class Module(ABC):
             yield from module.named_parameters(submodule_prefix)
 
     def state_dict(self) -> OrderedDict[str, Parameter]:
-        res = OrderedDict()
+        res = OrderedDict[str, Parameter]()
         for name, param in self.named_parameters():
             res[name] = param
         return res
 
     def from_torch(self, torch_model: torch.nn.Module, on_hook: Optional[List[Tuple[List[str], Callable[[torch.Tensor], torch.Tensor]]]] = None):
         model_dict = torch_model.state_dict()
-        for name, param in self.named_parameters():
-            if name not in model_dict:
-                print(f'DSC parameter "{name}" not found in PyTorch model')
-                continue
-            tensor = model_dict[name]
-            if on_hook:
-                # on_hook defines transformations on torch tensors that are called before loading the tensors in DSC
-                for keys, hook in on_hook:
-                    # If any of the keys starts with 'name' I'll apply the hook
-                    if any(name.endswith(key) for key in keys):
-                        print(f'applying hook to "{name}"')
-                        tensor = hook(tensor)
-            print(f'loading tensor "{name}" shape={tensor.shape} dtype={tensor.dtype}')
-            param.load(tensor.detach().cpu().numpy())
-        
+        with tqdm(total=len(model_dict), desc='Loading model parameters') as pbar:
+            for name, param in self.named_parameters():
+                if name not in model_dict:
+                    pbar.write(f'{name} not found in DSC model')
+                    pbar.update(1)
+                    continue
+
+                tensor = model_dict[name]
+                if on_hook:
+                    # on_hook defines transformations on torch tensors that are called before loading the tensors in DSC
+                    for keys, hook in on_hook:
+                        # If any of the keys starts with 'name' I'll apply the hook
+                        if any(name.endswith(key) for key in keys):
+                            tensor = hook(tensor)
+
+                pbar.set_description(f'{name} {tensor.shape} {tensor.dtype}')
+                param.load(tensor.detach().cpu().numpy())
+                pbar.update(1)
+
         del model_dict
 
     @abstractmethod
@@ -132,7 +137,7 @@ class ModuleDict(Module):
 class Linear(Module):
     def __init__(self, in_features: int, out_features: int, bias: bool = True):
         super().__init__()
-        self.weight = Parameter((in_features, out_features), post_init=lambda x: ascontiguousarray(x.T))
+        self.weight = Parameter((in_features, out_features), on_load=lambda x: ascontiguousarray(x.T))
         self.bias = Parameter((out_features, )) if bias else None
 
     @trace('Linear')

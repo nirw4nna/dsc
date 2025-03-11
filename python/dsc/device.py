@@ -4,7 +4,6 @@
 #  This code is licensed under the terms of the 3-clause BSD license
 #  (https://opensource.org/license/bsd-3-clause).
 
-
 from enum import Enum
 from typing import Union
 

@@ -1,6 +1,9 @@
 # Required by the dsc python library
 numpy
 psutil
+torch # TODO: find a simpler way of loading models without the need to pull PyTorch
+tqdm
+
 
 # Only used for testing and benchmarking
 matplotlib
@@ -10,5 +13,4 @@ tabulate
 ruff
 pyright
 cupy-cuda12x
-torch
-transformers
+transformers # Used to load examples/models

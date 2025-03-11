@@ -3,6 +3,7 @@
 #
 #  This code is licensed under the terms of the 3-clause BSD license
 #  (https://opensource.org/license/bsd-3-clause).
+
 from ._bindings import  _dsc_traces_record, _dsc_clear_traces, _dsc_insert_trace, _dsc_dump_traces, _DscTracePhase
 from .context import _get_ctx
 from time import perf_counter
