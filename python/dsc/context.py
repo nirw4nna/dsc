@@ -4,7 +4,7 @@
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
 
-from ._bindings import _dsc_ctx_init, _dsc_ctx_free
+from ._bindings import _dsc_ctx_init, _dsc_print_mem_usage
 import psutil
 
 _ctx_instance = None
@@ -14,8 +14,9 @@ class _DscContext:
     def __init__(self, main_mem: int):
         self._ctx = _dsc_ctx_init(main_mem)
 
-    def __del__(self):
-        _dsc_ctx_free(self._ctx)
+    # TODO: (3)
+    # def __del__(self):
+        # _dsc_ctx_free(self._ctx)
 
 
 def _get_ctx():
@@ -40,3 +41,6 @@ def init(mem_size: int):
         _ctx_instance = _DscContext(mem_size)
     else:
         raise RuntimeWarning('Context already initialized')
+
+def print_mem_usage():
+    _dsc_print_mem_usage(_get_ctx())

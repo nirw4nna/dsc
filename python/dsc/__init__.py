@@ -4,10 +4,11 @@
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
 
-from dsc.context import init
+from dsc.context import init, print_mem_usage
 from dsc.tensor import (
     Tensor,
     from_numpy,
+    from_buffer,
     reshape,
     concat,
     split,

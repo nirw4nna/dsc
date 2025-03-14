@@ -50,11 +50,13 @@ class _DscDataBuffer(Structure):
         ('refs', c_int),
     ]
 
+_DscDataBuffer_p = POINTER(_DscDataBuffer)
+
 class _DscTensor(Structure):
     _fields_ = [
         ('shape', c_int * _DSC_MAX_DIMS),
         ('stride', c_int * _DSC_MAX_DIMS),
-        ('buf', POINTER(_DscDataBuffer)),
+        ('buf', _DscDataBuffer_p),
         ('ne', c_int),
         ('n_dim', c_int),
         ('dtype', c_uint8),
@@ -257,22 +259,34 @@ _lib.dsc_view.argtypes = [_DscCtx, _DscTensor_p]
 _lib.dsc_view.restype = _DscTensor_p
 
 
+# extern void dsc_tensor_set_buffer(dsc_ctx *,
+#                                   dsc_tensor *DSC_RESTRICT x,
+#                                   dsc_data_buffer *buf);
+def _dsc_tensor_set_buffer(ctx: _DscCtx, x: _DscTensor_p, buf: _DscDataBuffer_p):
+    return _lib.dsc_tensor_set_buffer(ctx, x, buf)
+
+
+_lib.dsc_tensor_set_buffer.argtypes = [_DscCtx, _DscTensor_p, _DscDataBuffer_p]
+_lib.dsc_tensor_set_buffer.restype = None
+
+
 # extern dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
 #                                   int n_dim,
 #                                   const int *shape,
 #                                   dsc_dtype dtype,
 #                                   dsc_device_type device = DEFAULT,
 #                                   dsc_data_buffer *buf = nullptr,
+#                                   bool lazy = false,
 #                                   const void *DSC_RESTRICT data = nullptr,
 #                                   dsc_device_type data_device = DEFAULT);
 def _dsc_new_tensor(
-    ctx: _DscCtx, shape: Tuple[int, ...], dtype: Dtype, device: Device 
+    ctx: _DscCtx, shape: Tuple[int, ...], dtype: Dtype, device: Device, lazy: bool = False
 ) -> _DscTensor_p:
     shape_arr = (c_int * len(shape))(*shape)
-    return _lib.dsc_new_tensor(ctx, len(shape), shape_arr, c_uint8(dtype.value), c_int8(device.value), None, None, c_int8(Device.DEFAULT.value))
+    return _lib.dsc_new_tensor(ctx, len(shape), shape_arr, c_uint8(dtype.value), c_int8(device.value), None, c_bool(lazy), None, c_int8(Device.DEFAULT.value))
 
 
-_lib.dsc_new_tensor.argtypes = [_DscCtx, c_int, POINTER(c_int), c_uint8, c_int8, POINTER(_DscDataBuffer), c_void_p, c_int8]
+_lib.dsc_new_tensor.argtypes = [_DscCtx, c_int, POINTER(c_int), c_uint8, c_int8, _DscDataBuffer_p, c_bool, c_void_p, c_int8]
 _lib.dsc_new_tensor.restype = _DscTensor_p
 
 

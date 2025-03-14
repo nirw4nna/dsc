@@ -168,6 +168,7 @@ dsc_ctx *dsc_ctx_init(const usize mem_size) {
 // ============================================================
 // Cleanup/Teardown
 
+// TODO: (3)
 void dsc_ctx_free(dsc_ctx *ctx) {
     for (int i = 0; i < DSC_MAX_DEVICES; ++i) {
         if (dsc_device *dev = ctx->devices[i]; dev) {
@@ -185,9 +186,11 @@ void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) {
     if (x == nullptr) return;
     DSC_TRACE_TENSOR_FREE(x);
 
-    DSC_GET_DEVICE(ctx, x->device);
-
-    dsc_data_free(dev, x->buf);
+    if (x->buf != nullptr) {
+        // If buf == nullptr then this is a lazy tensor
+        DSC_GET_DEVICE(ctx, x->device);
+        dsc_data_free(dev, x->buf);
+    }
 
     dsc_tensor_set_invalid(x);
 }
@@ -200,10 +203,12 @@ usize dsc_used_mem(dsc_ctx *ctx) {
 }
 
 void dsc_print_mem_usage(dsc_ctx *ctx) {
-    printf("DSC mem usage:");
+    printf("\n");
+    for (int i = 0; i < 40; ++i) printf("=");
+    printf("\nMemory usage:");
     for (int i = 0; i < DSC_MAX_DEVICES; ++i) {
         if (const dsc_device *dev = ctx->devices[i]; dev) {
-            printf("\n %s: %ld/%ld (%.1f%%)",
+            printf("\n %s: %ld/%ld MB (%.1f%%)",
                    DSC_DEVICE_NAMES[dev->type],
                    (usize) DSC_B_TO_MB(dev->used_mem),
                    (usize) DSC_B_TO_MB(dev->mem_size),
@@ -211,6 +216,8 @@ void dsc_print_mem_usage(dsc_ctx *ctx) {
         }
     }
     printf("\n");
+    for (int i = 0; i < 40; ++i) printf("=");
+    printf("\n\n");
 }
 
 // ============================================================
@@ -252,12 +259,20 @@ static DSC_INLINE dsc_tensor *find_empty_tensor(dsc_ctx *ctx) {
     return nullptr;
 }
 
+void dsc_tensor_set_buffer(dsc_ctx *,
+                           dsc_tensor *DSC_RESTRICT x,
+                           dsc_data_buffer *buf) {
+    x->buf = buf;
+    x->buf->refs++;
+}
+
 dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                            const int n_dim,
                            const int *shape,
                            const dsc_dtype dtype,
                            const dsc_device_type device,
                            dsc_data_buffer *buf,
+                           const bool lazy,
                            const void *DSC_RESTRICT data,
                            const dsc_device_type data_device) {
     DSC_ASSERT((unsigned) n_dim <= DSC_MAX_DIMS);
@@ -274,10 +289,10 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
     DSC_ASSERT(new_tensor != nullptr);
 
     if (buf == nullptr) {
-        new_tensor->buf = dsc_data_alloc(dev, ne * DSC_DTYPE_SIZE[dtype]);
+        if (!lazy) new_tensor->buf = dsc_data_alloc(dev, ne * DSC_DTYPE_SIZE[dtype]);
+        else new_tensor->buf = nullptr;
     } else {
-        new_tensor->buf = buf;
-        new_tensor->buf->refs++;
+        dsc_tensor_set_buffer(ctx, new_tensor, buf);
     }
 
     if (data != nullptr) {
@@ -309,7 +324,7 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                   new_tensor, DSC_DEVICE_NAMES[new_tensor->device], n_dim,
                   new_tensor->shape[0], new_tensor->shape[1], new_tensor->shape[2], new_tensor->shape[3],
                   new_tensor->stride[0], new_tensor->stride[1], new_tensor->stride[2], new_tensor->stride[3],
-                  DSC_DTYPE_NAMES[dtype], new_tensor->buf, new_tensor->buf->refs
+                  DSC_DTYPE_NAMES[dtype], new_tensor->buf, new_tensor->buf == nullptr ? 0 : new_tensor->buf->refs
     );
 
     return new_tensor;
@@ -324,7 +339,7 @@ dsc_tensor *dsc_tensor_1d(dsc_ctx *ctx, const dsc_dtype dtype,
                           const void *DSC_RESTRICT data,
                           const dsc_device_type data_device) {
     const int shape[DSC_MAX_DIMS] = {dim1};
-    return dsc_new_tensor(ctx, 1, shape, dtype, device, nullptr, data, data_device);
+    return dsc_new_tensor(ctx, 1, shape, dtype, device, nullptr, false, data, data_device);
 }
 
 dsc_tensor *dsc_tensor_2d(dsc_ctx *ctx, const dsc_dtype dtype,
@@ -333,7 +348,7 @@ dsc_tensor *dsc_tensor_2d(dsc_ctx *ctx, const dsc_dtype dtype,
                           const void *DSC_RESTRICT data,
                           const dsc_device_type data_device) {
     const int shape[DSC_MAX_DIMS] = {dim1, dim2};
-    return dsc_new_tensor(ctx, 2, shape, dtype, device, nullptr, data, data_device);
+    return dsc_new_tensor(ctx, 2, shape, dtype, device, nullptr, false, data, data_device);
 }
 
 dsc_tensor *dsc_tensor_3d(dsc_ctx *ctx, const dsc_dtype dtype,
@@ -343,7 +358,7 @@ dsc_tensor *dsc_tensor_3d(dsc_ctx *ctx, const dsc_dtype dtype,
                           const void *DSC_RESTRICT data,
                           const dsc_device_type data_device) {
     const int shape[DSC_MAX_DIMS] = {dim1, dim2, dim3};
-    return dsc_new_tensor(ctx, 3, shape, dtype, device, nullptr, data, data_device);
+    return dsc_new_tensor(ctx, 3, shape, dtype, device, nullptr, false, data, data_device);
 }
 
 dsc_tensor *dsc_tensor_4d(dsc_ctx *ctx, const dsc_dtype dtype,
@@ -353,7 +368,7 @@ dsc_tensor *dsc_tensor_4d(dsc_ctx *ctx, const dsc_dtype dtype,
                           const void *DSC_RESTRICT data,
                           const dsc_device_type data_device) {
     const int shape[DSC_MAX_DIMS] = {dim1, dim2, dim3, dim4};
-    return dsc_new_tensor(ctx, 4, shape, dtype, device, nullptr, data, data_device);
+    return dsc_new_tensor(ctx, 4, shape, dtype, device, nullptr, false, data, data_device);
 }
 
 template<typename T>

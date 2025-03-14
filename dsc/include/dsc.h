@@ -9,6 +9,15 @@
 // =============================================================== //
 // =========================== Notepad =========================== //
 // =============================================================== //
+// (1) It's probably a good idea to add a struct for the arguments //
+//     of dsc_new_tensor, mixing new params with defaults can lead //
+//     to nasty bugs                                               //
+// (2) Create a macro to validate tensors? It's probably a good    //
+//     idea to always check by defaults both tensor != nullptr and //
+//     tensor->buf != nullptr                                      //
+// (3) Sometimes the context in Python is freed before all the     //
+//     associated tensors are freed. This will SEGFAULT! It makes  //
+//     sense to just not free the context in Python for now        //
 // =============================================================== //
 
 #include <cstdio>
@@ -214,12 +223,18 @@ extern void dsc_dump_traces(dsc_ctx *ctx, const char *filename);
 // ============================================================
 // Tensor Creation
 
+extern void dsc_tensor_set_buffer(dsc_ctx *,
+                                  dsc_tensor *DSC_RESTRICT x,
+                                  dsc_data_buffer *buf);
+
+// TODO: (1) (2)
 extern dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                                   int n_dim,
                                   const int *shape,
                                   dsc_dtype dtype,
                                   dsc_device_type device = DEFAULT,
                                   dsc_data_buffer *buf = nullptr,
+                                  bool lazy = false,
                                   const void *DSC_RESTRICT data = nullptr,
                                   dsc_device_type data_device = DEFAULT);
 

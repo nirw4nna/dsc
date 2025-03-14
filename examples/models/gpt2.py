@@ -8,7 +8,7 @@
 import dsc
 import dsc.nn as nn
 from dataclasses import dataclass
-from transformers import GPT2Tokenizer, GPT2LMHeadModel
+from transformers import GPT2Tokenizer
 from time import perf_counter
 import argparse
 
@@ -100,47 +100,48 @@ class GPT2(nn.Module):
     def __init__(self, hparams: GPT2Hparams, use_cache: bool = True):
         super().__init__()
         self.hparams = hparams
-        self.transformer = nn.ModuleDict(dict(
-            wpe = nn.Embedding(hparams.block_size, hparams.emb_size),
-            wte = nn.Embedding(hparams.vocab_size, hparams.emb_size),
-            h = nn.ModuleList([TransformerBlock(hparams, use_cache) for _ in range(hparams.n_layers)]),
-            ln_f = nn.LayerNorm(hparams.emb_size)
-        ))
+        self.wpe = nn.Embedding(hparams.block_size, hparams.emb_size)
+        self.wte = nn.Embedding(hparams.vocab_size, hparams.emb_size)
+        self.h = nn.ModuleList([TransformerBlock(hparams, use_cache) for _ in range(hparams.n_layers)])
+        self.ln_f = nn.LayerNorm(hparams.emb_size)
         self.lm_head = nn.Linear(hparams.emb_size, hparams.vocab_size, bias=False)
         self.use_cache = use_cache
         self.kv_pos = 0
 
-        n_params = sum([p.ne for p in self.transformer.parameters()])
-        n_params += sum([p.ne for p in self.lm_head.parameters()])
+        n_params = sum([p.ne for p in self.parameters()])
         print(f'Model has {round(n_params / 1e6)}M parameters')
     
     @staticmethod
-    def from_hf(hparams: GPT2Hparams = GPT2Hparams(), use_cache: bool = True) -> 'GPT2':
-        hf_model = GPT2LMHeadModel.from_pretrained('gpt2')
+    def from_pretrained(hparams: GPT2Hparams = GPT2Hparams(), use_cache: bool = True) -> 'GPT2':
         # GPT2 uses Conv1D instead of a Linear layer which means we have to transpose the weights
-        to_transpose = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']
+        state_dict = nn.safe_load('https://huggingface.co/openai-community/gpt2/resolve/main/model.safetensors')
+        for i in range(hparams.n_layers):
+            # The causal mask doesn't need to be loaded so I'll just remove it
+            del state_dict[f'h.{i}.attn.bias']
 
+        to_transpose = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']
         my_model = GPT2(hparams, use_cache)
-        my_model.from_torch(hf_model, on_hook=[
-            (to_transpose, lambda x: x.t().contiguous())
-        ])
-        del hf_model
+        my_model.from_state(state_dict,
+                            on_hook=[(to_transpose, lambda x: x.transpose())],
+                            tied={'lm_head.weight': 'wte.weight'}) # lm_head and wte weights are tied
+        del state_dict
+        dsc.print_mem_usage()
         return my_model
 
     @dsc.trace('GPT2')
     def forward(self, idx: dsc.Tensor) -> dsc.Tensor:
         B, T = idx.shape
-        tok_emb = self.transformer.wte(idx)
+        tok_emb = self.wte(idx)
         if self.use_cache:
-            pos_emb = self.transformer.wpe(dsc.arange(T) + self.kv_pos)
+            pos_emb = self.wpe(dsc.arange(T) + self.kv_pos)
         else:
-            pos_emb = self.transformer.wpe(dsc.arange(T))
+            pos_emb = self.wpe(dsc.arange(T))
     
         x = tok_emb + pos_emb
-        for block in self.transformer.h:
+        for block in self.h:
             x = block(x)
 
-        x = self.transformer.ln_f(x)
+        x = self.ln_f(x)
         logits = self.lm_head(x)
         self.kv_pos += T
         return logits
@@ -185,11 +186,11 @@ if __name__ == '__main__':
     use_kv_cache = not args.no_cache
     prompt = args.s
 
-    model = GPT2.from_hf(use_cache=use_kv_cache)
+    model = GPT2.from_pretrained(use_cache=use_kv_cache)
 
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     print(prompt, end='', flush=True)
-    
+
     MAX_TOKENS = 50
 
     idx = tokenizer.encode(prompt)

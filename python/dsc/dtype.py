@@ -25,6 +25,11 @@ class Dtype(Enum):
     def __str__(self) -> str:
         return repr(self)
 
+    @staticmethod
+    def from_string(val: str) -> 'Dtype':
+        return TYPENAME_REVERSE_LOOKUP[val.lower()]
+
+
 DTYPE_VALUE_LOOKUP = {val.value: val for val in Dtype.__members__.values()}
 
 TYPENAME_LOOKUP = {
@@ -33,6 +38,8 @@ TYPENAME_LOOKUP = {
     Dtype.F32: 'f32',
     Dtype.F64: 'f64',
 }
+
+TYPENAME_REVERSE_LOOKUP = {v: k for k, v in TYPENAME_LOOKUP.items()}
 
 DTYPE_TO_CTYPE = {
     Dtype.BOOL: POINTER(c_bool),

@@ -2,7 +2,8 @@ CXX			=	g++
 AR			=	ar
 
 CXXFLAGS	=	-std=c++20 -I./dsc/include/ -I./dsc/api/ -Wall -Wextra -Wformat -Wnoexcept  \
- 				-Wcast-qual -Wunused -Wdouble-promotion -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti
+ 				-Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
+ 				-Wlogical-op -Wcast-align -fno-exceptions -fno-rtti
 LDFLAGS		=	-lm
 
 UNAME_M		=	$(shell uname -m)

@@ -6,6 +6,7 @@
 
 from ._bindings import (
     _DscTensor_p,
+    _DscDataBuffer_p,
     _OptionalTensor,
     _DSC_MAX_DIMS,
     _DSC_VALUE_NONE,
@@ -28,6 +29,7 @@ from ._bindings import (
     _dsc_tensor_get_tensor,
     _dsc_tensor_set_idx,
     _dsc_tensor_set_slice,
+    _dsc_tensor_set_buffer,
     _dsc_view,
     _dsc_copy,
     _dsc_wrap_bool,
@@ -144,6 +146,7 @@ class Tensor:
         self._shape = c_ptr.contents.shape
         self._n_dim = c_ptr.contents.n_dim
         self._ne = c_ptr.contents.ne
+        self._buf = c_ptr.contents.buf
         self._c_ptr = c_ptr
 
     def __del__(self):
@@ -173,11 +176,15 @@ class Tensor:
     def data(self) -> int:
         if self.device is not Device.CPU:
             raise RuntimeError('can\'t access _data field for a non-CPU tensor')
-        return self.c_ptr.contents.buf.contents.data
+        return self._buf.contents.data
 
     @property
     def c_ptr(self) -> _DscTensor_p:
         return self._c_ptr
+
+    @property
+    def buf_ptr(self) -> _DscDataBuffer_p:
+        return self._buf
 
     def size(self, axis: int) -> int:
         return self.shape[axis]
@@ -337,12 +344,17 @@ class Tensor:
 
         return np_array.reshape(self.shape)
 
-    def load(self, x: np.ndarray):
-        assert x.shape == self.shape
-        assert NP_TO_DTYPE[x.dtype] == self.dtype
+    def load(self, x: TensorType):
+        if isinstance(x, np.ndarray):
+            assert x.shape == self.shape
+            assert NP_TO_DTYPE[x.dtype] == self.dtype
 
-        data_ptr = ctypes.cast(x.ctypes.data, ctypes.c_void_p)
-        _dsc_copy(_get_ctx(), self.c_ptr, data_ptr, x.size * DTYPE_SIZE[NP_TO_DTYPE[x.dtype]], self.device)
+            data_ptr = ctypes.cast(x.ctypes.data, ctypes.c_void_p)
+            _dsc_copy(_get_ctx(), self.c_ptr, data_ptr, x.size * DTYPE_SIZE[NP_TO_DTYPE[x.dtype]], self.device)
+        elif isinstance(x, Tensor):
+            _dsc_tensor_set_buffer(_get_ctx(), self.c_ptr, x.buf_ptr)
+        else:
+            raise RuntimeError(f'invalid argument for load {type(x)}')
 
     def cast(self, dtype: Dtype) -> 'Tensor':
         if self.dtype == dtype:
@@ -426,6 +438,10 @@ def from_numpy(x: np.ndarray, device: DeviceType = Device.DEFAULT) -> Tensor:
 def tensor(x: Iterable, dtype: Dtype, device: DeviceType = Device.DEFAULT) -> Tensor:
     x_ = np.array(x, dtype=DTYPE_TO_NP[dtype])
     return from_numpy(x_, device)
+
+
+def from_buffer(shape: Tuple[int, ...], dtype: Dtype, data: ctypes.c_void_p, device: DeviceType = Device.DEFAULT) -> Tensor:
+    return _create_tensor(dtype, shape, _get_device(device), data)
 
 
 def reshape(x: Tensor, *shape: Union[int, Tuple[int, ...], List[int]]) -> Tensor:

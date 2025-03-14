@@ -10,24 +10,23 @@ from ..device import Device
 from .._bindings import _dsc_new_tensor
 from ..context import _get_ctx
 from ..profiler import trace
-from typing import Iterator, Iterable, Any, Tuple, Callable, Optional, OrderedDict, Mapping, List
+from typing import Iterator, Dict, Iterable, Any, Tuple, Callable, Optional, OrderedDict, Mapping, List
 from abc import ABC, abstractmethod
-import torch
 import math
-from numpy import ndarray, ascontiguousarray
 from tqdm import tqdm
+from .utils import safe_load
 
 
 class Parameter(Tensor):
-    def __init__(self, shape: Tuple[int, ...], dtype: Dtype = Dtype.F32, device: Device = Device.DEFAULT, on_load: Optional[Callable[[ndarray], ndarray]] = None):
-        super().__init__(_dsc_new_tensor(_get_ctx(), shape, dtype, device))
+    def __init__(self, shape: Tuple[int, ...], dtype: Dtype = Dtype.F32, device: Device = Device.DEFAULT, on_load: Optional[Callable[[Tensor], Tensor]] = None):
+        # Parameters are lazy tensors (i.e. Tensors that don't have an underlying buffer)
+        super().__init__(_dsc_new_tensor(_get_ctx(), shape, dtype, device, True))
         self._on_load = on_load
 
-    def load(self, x: ndarray):
+    def load(self, x: Tensor):
         if self._on_load is not None:
             x = self._on_load(x)
         super().load(x)
-
 
 class Module(ABC):
     def __init__(self):
@@ -74,28 +73,31 @@ class Module(ABC):
             res[name] = param
         return res
 
-    def from_torch(self, torch_model: torch.nn.Module, on_hook: Optional[List[Tuple[List[str], Callable[[torch.Tensor], torch.Tensor]]]] = None):
-        model_dict = torch_model.state_dict()
-        with tqdm(total=len(model_dict), desc='Loading model parameters') as pbar:
+    def from_state(self, state_dict: Dict[str, Tensor],
+                   on_hook: Optional[List[Tuple[List[str], Callable[[Tensor], Tensor]]]] = None,
+                   tied: Optional[Dict[str, str]] = None):
+        with tqdm(total=len(state_dict), desc='Loading model parameters') as pbar:
             for name, param in self.named_parameters():
-                if name not in model_dict:
+                real_name = name
+                if tied is not None and name in tied:
+                    name = tied[name]
+
+                if name not in state_dict:
                     pbar.write(f'{name} not found in DSC model')
                     pbar.update(1)
                     continue
 
-                tensor = model_dict[name]
+                tensor = state_dict[name]
                 if on_hook:
-                    # on_hook defines transformations on torch tensors that are called before loading the tensors in DSC
+                    # on_hook defines transformations on tensors that are called before loading the tensors in DSC
                     for keys, hook in on_hook:
                         # If any of the keys starts with 'name' I'll apply the hook
                         if any(name.endswith(key) for key in keys):
                             tensor = hook(tensor)
 
-                pbar.set_description(f'{name} {tensor.shape} {tensor.dtype}')
-                param.load(tensor.detach().cpu().numpy())
+                pbar.set_description(f'{real_name if real_name == name else f"{real_name} (tied to {name})"} {tensor.shape} {tensor.dtype}')
+                param.load(tensor)
                 pbar.update(1)
-
-        del model_dict
 
     @abstractmethod
     def forward(self, *args, **kwargs) -> Tensor:
@@ -137,7 +139,7 @@ class ModuleDict(Module):
 class Linear(Module):
     def __init__(self, in_features: int, out_features: int, bias: bool = True):
         super().__init__()
-        self.weight = Parameter((in_features, out_features), on_load=lambda x: ascontiguousarray(x.T))
+        self.weight = Parameter((in_features, out_features), on_load=lambda x: x.transpose())
         self.bias = Parameter((out_features, )) if bias else None
 
     @trace('Linear')
