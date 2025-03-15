@@ -4,7 +4,7 @@
 #  This code is licensed under the terms of the 3-clause BSD license
 #  (https://opensource.org/license/bsd-3-clause).
 
-from ._bindings import  _dsc_traces_record, _dsc_clear_traces, _dsc_insert_trace, _dsc_dump_traces, _DscTracePhase
+from ._bindings import _DSC_TRACE_FILE, _dsc_traces_record, _dsc_clear_traces, _dsc_insert_trace, _dsc_dump_traces, _DscTracePhase
 from .context import _get_ctx
 from time import perf_counter
 from contextlib import contextmanager
@@ -29,15 +29,15 @@ class _PerfettoServer(SimpleHTTPRequestHandler):
         self.send_error(404, 'File not found')
 
 
-def _serve_traces(traces_file: str):
+def _serve_traces():
     # Taken from https://github.com/jax-ml/jax
     port = 9001
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(('127.0.0.1', port), _PerfettoServer) as httpd:
-        url = f'https://ui.perfetto.dev/#!/?url=http://127.0.0.1:{port}/{traces_file}'
+        url = f'https://ui.perfetto.dev/#!/?url=http://127.0.0.1:{port}/{_DSC_TRACE_FILE}'
         print(f'Open URL in browser: {url}')
 
-        while httpd.__dict__.get('last_request') != '/' + traces_file:
+        while httpd.__dict__.get('last_request') != '/' + _DSC_TRACE_FILE:
             httpd.handle_request()
 
 
@@ -45,26 +45,26 @@ def start_recording():
     _dsc_traces_record(_get_ctx(), True)
 
 
-def stop_recording(traces_file: str = 'traces.json', dump: bool = True, clear: bool = True, serve: bool = False):
+def stop_recording(dump: bool = True, clear: bool = True, serve: bool = False):
     _dsc_traces_record(_get_ctx(), False)
 
     if dump or serve:
-        _dsc_dump_traces(_get_ctx(), traces_file)
+        _dsc_dump_traces(_get_ctx())
 
     if serve:
-        _serve_traces(traces_file)
+        _serve_traces()
 
     if clear:
         _dsc_clear_traces(_get_ctx())
 
 
 @contextmanager
-def profile(traces_file: str = 'traces.json', clear: bool = True, serve: bool = True):
+def profile(clear: bool = True, serve: bool = True):
     start_recording()
     try:
         yield
     finally:
-        stop_recording(traces_file, clear=clear, serve=serve)
+        stop_recording(clear=clear, serve=serve)
 
 
 def trace(name: str, cat: str = 'python'):

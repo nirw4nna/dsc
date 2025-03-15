@@ -218,7 +218,7 @@ extern void dsc_insert_trace(dsc_ctx *ctx,
 
 extern void dsc_clear_traces(dsc_ctx *ctx);
 
-extern void dsc_dump_traces(dsc_ctx *ctx, const char *filename);
+extern void dsc_dump_traces(dsc_ctx *ctx);
 
 // ============================================================
 // Tensor Creation

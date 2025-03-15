@@ -32,6 +32,7 @@ _DSC_MAX_DIMS = 4
 _DSC_TRACE_NAME_MAX = 32
 _DSC_TRACE_CAT_MAX = 16
 _DSC_VALUE_NONE = 2**31 - 1
+_DSC_TRACE_FILE = 'traces.json'
 
 _DscCtx = c_void_p
 
@@ -240,12 +241,12 @@ _lib.dsc_clear_traces.argtypes = [_DscCtx]
 _lib.dsc_clear_traces.restype = None
 
 
-# extern void dsc_dump_traces(dsc_ctx *ctx, const char *filename);
-def _dsc_dump_traces(ctx: _DscCtx, filename: str):
-    _lib.dsc_dump_traces(ctx, _c_str(filename))
+# extern void dsc_dump_traces(dsc_ctx *ctx);
+def _dsc_dump_traces(ctx: _DscCtx):
+    _lib.dsc_dump_traces(ctx)
 
 
-_lib.dsc_dump_traces.argtypes = [_DscCtx, c_char_p]
+_lib.dsc_dump_traces.argtypes = [_DscCtx]
 _lib.dsc_dump_traces.restype = None
 
 

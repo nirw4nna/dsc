@@ -18,6 +18,7 @@
 
 #define DSC_TRACE_NAME_MAX  ((int) 32)
 #define DSC_TRACE_CAT_MAX   ((int) 16)
+#define DSC_TRACE_FILE      "traces.json"
 
 #define DSC_INSERT_TYPED_TRACE(T, cat_, type_) \
     dsc_trace_tracker<T> trace__{ctx->trace_ctx, __FUNCTION__, (cat_), (type_), &args__}
@@ -529,6 +530,7 @@ struct dsc_trace {
 };
 
 struct dsc_trace_ctx {
+    FILE *dump_file;
     dsc_trace *traces;
     u64 n_traces, max_traces;
     bool record;
@@ -540,7 +542,77 @@ DSC_INLINE u64 time_us() {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (u64) (ts.tv_sec * 1'000'000ULL) + (u64) (ts.tv_nsec / 1'000ULL);
 }
+}
 
+static DSC_INLINE void dsc_tracing_clear(dsc_trace_ctx *ctx) {
+    ctx->n_traces = 0;
+}
+
+static DSC_INLINE void dsc_tracing_dump(dsc_trace_ctx *ctx, const bool close = true) {
+    const auto start_ = internal::tracing::time_us();
+
+    if (ctx->dump_file == nullptr) {
+        ctx->dump_file = fopen(DSC_TRACE_FILE, "w+");
+        DSC_ASSERT(ctx->dump_file != nullptr);
+
+        fprintf(ctx->dump_file, "[\n");
+    }
+
+    FILE *f = ctx->dump_file;
+
+    for (u64 i = 0; i < ctx->n_traces; ++i) {
+        dsc_trace *trace = &ctx->traces[i];
+        fprintf(f, "\t"
+                   R"({"name": "%s", "cat": "%s", "ph": "%c", "ts": %ld, "pid": %d, "tid": %ld)",
+                trace->name, trace->cat, trace->phase, trace->ts, trace->pid, trace->tid);
+
+        if (trace->type != DSC_TRACE_EMPY) {
+            fprintf(f, R"(, "args": {)");
+            switch (trace->type) {
+                TYPED_DUMP(DSC_TENSOR_ALLOC, tensor_alloc);
+                TYPED_DUMP(DSC_TENSOR_FREE, tensor_alloc);
+                TYPED_DUMP(DSC_UNARY_OP, unary);
+                TYPED_DUMP(DSC_UNARY_AXIS_OP, unary_axis);
+                TYPED_DUMP(DSC_BINARY_OP, binary);
+                TYPED_DUMP(DSC_MASK_OP, mask);
+                TYPED_DUMP(DSC_GET_IDX, get_idx);
+                TYPED_DUMP(DSC_GET_SLICE, get_slice);
+                TYPED_DUMP(DSC_GET_TENSOR, get_tensor);
+                TYPED_DUMP(DSC_SET_IDX, set_idx);
+                TYPED_DUMP(DSC_SET_SLICE, set_slice);
+                TYPED_DUMP(DSC_CAST_OP, cast);
+                TYPED_DUMP(DSC_RANDN_OP, randn);
+                TYPED_DUMP(DSC_TOPK_OP, topk);
+                TYPED_DUMP(DSC_MULTINOMIAL_OP, multinomial);
+                TYPED_DUMP(DSC_ARANGE_OP, arange);
+                TYPED_DUMP(DSC_COPY_OP, copy);
+                TYPED_DUMP(DSC_CONCAT_OP, concat);
+                TYPED_DUMP(DSC_TRANSPOSE_OP, transpose);
+
+                DSC_INVALID_CASE("unknown trace type=%d", trace->type);
+            }
+            fprintf(f, "}");
+        }
+
+        fprintf(f, "}");
+        if (i < ctx->n_traces - 1) fprintf(f, ",");
+        fprintf(f, "\n");
+    }
+
+    if (close) {
+        // If dump is called directly by the user (i.e. from dsc.cpp) then it means we are done dumping
+        // to the same file and are ready to inspect it so, close the array and close the file.
+        // Next time this function is called the file will be truncated and we'll start over.
+        fprintf(ctx->dump_file, "]");
+        fclose(ctx->dump_file);
+        ctx->dump_file = nullptr;
+    }
+
+    const auto stop_ = internal::tracing::time_us();
+    DSC_LOG_DEBUG("exported %ld Perfetto-compatible traces to \"%s\" in %.0fms", ctx->n_traces, DSC_TRACE_FILE, (stop_ - start_) * 1e-3);
+}
+
+namespace internal::tracing {
 template<typename T = dsc_empty_args>
 DSC_INLINE void fill_trace(dsc_trace *trace, const char *name,
                            const char *cat, const dsc_trace_phase phase,
@@ -574,8 +646,15 @@ DSC_INLINE void fill_trace(dsc_trace *trace, const char *name,
 }
 
 DSC_INLINE bool can_trace(dsc_trace_ctx *ctx) {
-    return ctx->record &&
-           ctx->n_traces < ctx->max_traces;
+    if (!ctx->record) return false;
+
+    if (ctx->n_traces >= ctx->max_traces) {
+        // If the traces buffer is full just dump it and start over
+        dsc_tracing_dump(ctx, false);
+        dsc_tracing_clear(ctx);
+    }
+
+    return true;
 }
 
 DSC_INLINE dsc_trace *next_available_trace(dsc_trace_ctx *ctx) {
@@ -621,6 +700,7 @@ private:
 
 static DSC_INLINE dsc_trace_ctx *dsc_tracing_init() {
     static dsc_trace_ctx ctx = {
+        .dump_file = nullptr,
         .traces = (dsc_trace *) malloc(DSC_MAX_TRACES * sizeof(dsc_trace)),
         .n_traces = 0,
         .max_traces = DSC_MAX_TRACES,
@@ -631,14 +711,11 @@ static DSC_INLINE dsc_trace_ctx *dsc_tracing_init() {
 
 static DSC_INLINE void dsc_tracing_free(dsc_trace_ctx *ctx) {
     free(ctx->traces);
+    if (ctx->dump_file != nullptr) fclose(ctx->dump_file);
 }
 
 static DSC_INLINE void dsc_tracing_record(dsc_trace_ctx *ctx, const bool record) {
     ctx->record = record;
-}
-
-static DSC_INLINE void dsc_tracing_clear(dsc_trace_ctx *ctx) {
-    ctx->n_traces = 0;
 }
 
 static DSC_INLINE void dsc_tracing_insert(dsc_trace_ctx *ctx,
@@ -657,57 +734,6 @@ static DSC_INLINE void dsc_tracing_insert(dsc_trace_ctx *ctx,
 
 static dsc_traces dsc_tracing_get(dsc_trace_ctx *ctx) {
     return {.traces = ctx->traces, .n_traces = ctx->n_traces};
-}
-
-static DSC_INLINE void dsc_tracing_dump(dsc_trace_ctx *ctx, const char *filename) {
-    const auto start_ = internal::tracing::time_us();
-
-    FILE *f = fopen(filename, "wt");
-    DSC_ASSERT(f != nullptr);
-
-    fprintf(f, "[\n");
-    for (u64 i = 0; i < ctx->n_traces; ++i) {
-        dsc_trace *trace = &ctx->traces[i];
-        fprintf(f, "\t" R"({"name": "%s", "cat": "%s", "ph": "%c", "ts": %ld, "pid": %d, "tid": %ld)",
-                trace->name, trace->cat, trace->phase, trace->ts, trace->pid, trace->tid);
-
-        if (trace->type != DSC_TRACE_EMPY) {
-            fprintf(f, R"(, "args": {)");
-            switch (trace->type) {
-                TYPED_DUMP(DSC_TENSOR_ALLOC, tensor_alloc);
-                TYPED_DUMP(DSC_TENSOR_FREE, tensor_alloc);
-                TYPED_DUMP(DSC_UNARY_OP, unary);
-                TYPED_DUMP(DSC_UNARY_AXIS_OP, unary_axis);
-                TYPED_DUMP(DSC_BINARY_OP, binary);
-                TYPED_DUMP(DSC_MASK_OP, mask);
-                TYPED_DUMP(DSC_GET_IDX, get_idx);
-                TYPED_DUMP(DSC_GET_SLICE, get_slice);
-                TYPED_DUMP(DSC_GET_TENSOR, get_tensor);
-                TYPED_DUMP(DSC_SET_IDX, set_idx);
-                TYPED_DUMP(DSC_SET_SLICE, set_slice);
-                TYPED_DUMP(DSC_CAST_OP, cast);
-                TYPED_DUMP(DSC_RANDN_OP, randn);
-                TYPED_DUMP(DSC_TOPK_OP, topk);
-                TYPED_DUMP(DSC_MULTINOMIAL_OP, multinomial);
-                TYPED_DUMP(DSC_ARANGE_OP, arange);
-                TYPED_DUMP(DSC_COPY_OP, copy);
-                TYPED_DUMP(DSC_CONCAT_OP, concat);
-                TYPED_DUMP(DSC_TRANSPOSE_OP, transpose);
-
-                DSC_INVALID_CASE("unknown trace type=%d", trace->type);
-            }
-            fprintf(f, "}");
-        }
-
-        fprintf(f, "}");
-        if (i < ctx->n_traces - 1) fprintf(f, ",");
-        fprintf(f, "\n");
-    }
-    fprintf(f, "]");
-    fclose(f);
-
-    const auto stop_ = internal::tracing::time_us();
-    DSC_LOG_INFO("exported %ld Perfetto-compatible traces to \"%s\" in %.0fms", ctx->n_traces, filename, (stop_ - start_) * 1e-3);
 }
 
 #undef TYPED_FILL
@@ -773,9 +799,8 @@ static dsc_traces dsc_tracing_get(dsc_trace_ctx *ctx) {
     return {};
 }
 
-static void dsc_tracing_dump(dsc_trace_ctx *ctx, const char *filename) {
+static void dsc_tracing_dump(dsc_trace_ctx *ctx) {
     DSC_UNUSED(ctx);
-    DSC_UNUSED(filename);
 }
 
 #endif

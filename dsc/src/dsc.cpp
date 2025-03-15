@@ -243,8 +243,8 @@ void dsc_clear_traces(dsc_ctx *ctx) {
     dsc_tracing_clear(ctx->trace_ctx);
 }
 
-void dsc_dump_traces(dsc_ctx *ctx, const char *filename) {
-    dsc_tracing_dump(ctx->trace_ctx, filename);
+void dsc_dump_traces(dsc_ctx *ctx) {
+    dsc_tracing_dump(ctx->trace_ctx);
 }
 
 // ============================================================
