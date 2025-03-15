@@ -18,6 +18,7 @@
 // (3) Sometimes the context in Python is freed before all the     //
 //     associated tensors are freed. This will SEGFAULT! It makes  //
 //     sense to just not free the context in Python for now        //
+// (4) Evaluate the iterator approach (check codegen with godbolt) //
 // =============================================================== //
 
 #include <cstdio>

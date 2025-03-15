@@ -10,7 +10,7 @@
 
 
 namespace internal::iter {
-// TODO: validate the codegen!
+// TODO: (4)
 template<int Cur = 0>
 constexpr int compute_index(const int *DSC_RESTRICT idx,
                             const int *DSC_RESTRICT stride) {
