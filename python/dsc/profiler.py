@@ -4,7 +4,7 @@
 #  This code is licensed under the terms of the 3-clause BSD license
 #  (https://opensource.org/license/bsd-3-clause).
 
-from ._bindings import _DSC_TRACE_FILE, _dsc_traces_record, _dsc_clear_traces, _dsc_insert_trace, _dsc_dump_traces, _DscTracePhase
+from ._bindings import _DSC_TRACE_FILE, _dsc_traces_record, _dsc_insert_trace, _dsc_dump_traces, _DscTracePhase
 from .context import _get_ctx
 from time import perf_counter
 from contextlib import contextmanager
@@ -45,7 +45,7 @@ def start_recording():
     _dsc_traces_record(_get_ctx(), True)
 
 
-def stop_recording(dump: bool = True, clear: bool = True, serve: bool = False):
+def stop_recording(dump: bool = True, serve: bool = False):
     _dsc_traces_record(_get_ctx(), False)
 
     if dump or serve:
@@ -54,17 +54,14 @@ def stop_recording(dump: bool = True, clear: bool = True, serve: bool = False):
     if serve:
         _serve_traces()
 
-    if clear:
-        _dsc_clear_traces(_get_ctx())
-
 
 @contextmanager
-def profile(clear: bool = True, serve: bool = True):
+def profile(serve: bool = True):
     start_recording()
     try:
         yield
     finally:
-        stop_recording(clear=clear, serve=serve)
+        stop_recording(serve=serve)
 
 
 def trace(name: str, cat: str = 'python'):

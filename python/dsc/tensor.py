@@ -640,9 +640,11 @@ def power(
 def matmul(
     xa: TensorType,
     xb: TensorType,
+    trans_b: bool = False,
     out: Optional[Tensor] = None,
 ) -> Tensor:
-    return _binary_op(xa, xb, out, op_name='_dsc_matmul')
+    xa, xb = _wrap_operands(xa, xb)
+    return Tensor(_dsc_matmul(_get_ctx(), xa.c_ptr, xb.c_ptr, trans_b, _c_ptr_or_none(out)), _has_out(out))
 
 
 def equal(

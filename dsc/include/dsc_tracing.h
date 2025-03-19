@@ -23,6 +23,10 @@
 #define DSC_INSERT_TYPED_TRACE(T, cat_, type_) \
     dsc_trace_tracker<T> trace__{ctx->trace_ctx, __FUNCTION__, (cat_), (type_), &args__}
 
+// Create a trace with an arbitrary name
+#define DSC_INSERT_NAMED_TRACE(T, cat_, type_, name_) \
+    dsc_trace_tracker<T> trace__{ctx->trace_ctx, name_, (cat_), (type_), &args__}
+
 #define DSC_TRACE_SET_TENSOR(X, field)                                                         \
     args__.field.n_dim = (X)->n_dim;                                                           \
     memcpy(args__.field.shape, &dsc_tensor_get_dim((X), 0), (X)->n_dim * sizeof(*(X)->shape)); \
@@ -53,6 +57,17 @@
     }                                       \
     args__.with_out = (OUT) != nullptr;     \
     DSC_INSERT_TYPED_TRACE(dsc_binary_args, "op;binary", DSC_BINARY_OP)
+
+#define DSC_TRACE_MATMUL(XA, XB, trans_b_, OUT, is_gevm_) \
+    dsc_matmul_args args__{};                             \
+    DSC_TRACE_SET_TENSOR(XA, xa);                         \
+    DSC_TRACE_SET_TENSOR(XB, xb);                         \
+    if ((OUT) != nullptr) {                               \
+        DSC_TRACE_SET_TENSOR(OUT, out);                   \
+    }                                                     \
+    args__.with_out = (OUT) != nullptr;                   \
+    args__.trans_b = (trans_b_);                          \
+    DSC_INSERT_NAMED_TRACE(dsc_matmul_args, "op;matmul", DSC_MATMUL_OP, ((trans_b_) && (is_gevm_)) ? "dsc_gevm" : "dsc_gemm")
 
 #define DSC_TRACE_MASK_OP(X, MASK, value_) \
     dsc_mask_args args__{};                \
@@ -233,6 +248,7 @@ enum dsc_trace_type : u8 {
     DSC_UNARY_OP,
     DSC_UNARY_AXIS_OP,
     DSC_BINARY_OP,
+    DSC_MATMUL_OP,
     DSC_MASK_OP,
     DSC_GET_IDX,
     DSC_GET_SLICE,
@@ -288,6 +304,23 @@ struct dsc_binary_args {
         xa.dump(f);
         fprintf(f, R"(, "xb": )");
         xb.dump(f);
+        if (with_out) {
+            fprintf(f, R"(, "out": )");
+            out.dump(f);
+        }
+    }
+};
+
+struct dsc_matmul_args {
+    dsc_tensor_args xa, xb, out;
+    bool with_out, trans_b;
+
+    DUMP() {
+        fprintf(f, R"("xa": )");
+        xa.dump(f);
+        fprintf(f, R"(, "xb": )");
+        xb.dump(f);
+        fprintf(f, R"(, "transposed": "%s")", trans_b ? "True" : "False");
         if (with_out) {
             fprintf(f, R"(, "out": )");
             out.dump(f);
@@ -512,6 +545,7 @@ struct dsc_trace {
         dsc_unary_args unary;
         dsc_unary_axis_args unary_axis;
         dsc_binary_args binary;
+        dsc_matmul_args matmul;
         dsc_mask_args mask;
         dsc_get_idx_args get_idx;
         dsc_get_slice_args get_slice;
@@ -531,8 +565,6 @@ struct dsc_trace {
 
 struct dsc_trace_ctx {
     FILE *dump_file;
-    dsc_trace *traces;
-    u64 n_traces, max_traces;
     bool record;
 };
 
@@ -542,16 +574,10 @@ DSC_INLINE u64 time_us() {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (u64) (ts.tv_sec * 1'000'000ULL) + (u64) (ts.tv_nsec / 1'000ULL);
 }
-}
 
-static DSC_INLINE void dsc_tracing_clear(dsc_trace_ctx *ctx) {
-    ctx->n_traces = 0;
-}
-
-static DSC_INLINE void dsc_tracing_dump(dsc_trace_ctx *ctx, const bool close = true) {
-    const auto start_ = internal::tracing::time_us();
-
-    if (ctx->dump_file == nullptr) {
+DSC_INLINE void dump_trace(dsc_trace_ctx *ctx, const dsc_trace *trace) {
+    const bool already_exists = ctx->dump_file != nullptr;
+    if (!already_exists) {
         ctx->dump_file = fopen(DSC_TRACE_FILE, "w+");
         DSC_ASSERT(ctx->dump_file != nullptr);
 
@@ -559,60 +585,43 @@ static DSC_INLINE void dsc_tracing_dump(dsc_trace_ctx *ctx, const bool close = t
     }
 
     FILE *f = ctx->dump_file;
+    if (already_exists) fprintf(f, ",\n");
 
-    for (u64 i = 0; i < ctx->n_traces; ++i) {
-        dsc_trace *trace = &ctx->traces[i];
-        fprintf(f, "\t"
-                   R"({"name": "%s", "cat": "%s", "ph": "%c", "ts": %ld, "pid": %d, "tid": %ld)",
+    fprintf(f, R"({"name": "%s", "cat": "%s", "ph": "%c", "ts": %ld, "pid": %d, "tid": %ld)",
                 trace->name, trace->cat, trace->phase, trace->ts, trace->pid, trace->tid);
 
-        if (trace->type != DSC_TRACE_EMPY) {
-            fprintf(f, R"(, "args": {)");
-            switch (trace->type) {
-                TYPED_DUMP(DSC_TENSOR_ALLOC, tensor_alloc);
-                TYPED_DUMP(DSC_TENSOR_FREE, tensor_alloc);
-                TYPED_DUMP(DSC_UNARY_OP, unary);
-                TYPED_DUMP(DSC_UNARY_AXIS_OP, unary_axis);
-                TYPED_DUMP(DSC_BINARY_OP, binary);
-                TYPED_DUMP(DSC_MASK_OP, mask);
-                TYPED_DUMP(DSC_GET_IDX, get_idx);
-                TYPED_DUMP(DSC_GET_SLICE, get_slice);
-                TYPED_DUMP(DSC_GET_TENSOR, get_tensor);
-                TYPED_DUMP(DSC_SET_IDX, set_idx);
-                TYPED_DUMP(DSC_SET_SLICE, set_slice);
-                TYPED_DUMP(DSC_CAST_OP, cast);
-                TYPED_DUMP(DSC_RANDN_OP, randn);
-                TYPED_DUMP(DSC_TOPK_OP, topk);
-                TYPED_DUMP(DSC_MULTINOMIAL_OP, multinomial);
-                TYPED_DUMP(DSC_ARANGE_OP, arange);
-                TYPED_DUMP(DSC_COPY_OP, copy);
-                TYPED_DUMP(DSC_CONCAT_OP, concat);
-                TYPED_DUMP(DSC_TRANSPOSE_OP, transpose);
+    if (trace->type != DSC_TRACE_EMPY) {
+        fprintf(f, R"(, "args": {)");
+        switch (trace->type) {
+            TYPED_DUMP(DSC_TENSOR_ALLOC, tensor_alloc);
+            TYPED_DUMP(DSC_TENSOR_FREE, tensor_alloc);
+            TYPED_DUMP(DSC_UNARY_OP, unary);
+            TYPED_DUMP(DSC_UNARY_AXIS_OP, unary_axis);
+            TYPED_DUMP(DSC_BINARY_OP, binary);
+            TYPED_DUMP(DSC_MATMUL_OP, matmul);
+            TYPED_DUMP(DSC_MASK_OP, mask);
+            TYPED_DUMP(DSC_GET_IDX, get_idx);
+            TYPED_DUMP(DSC_GET_SLICE, get_slice);
+            TYPED_DUMP(DSC_GET_TENSOR, get_tensor);
+            TYPED_DUMP(DSC_SET_IDX, set_idx);
+            TYPED_DUMP(DSC_SET_SLICE, set_slice);
+            TYPED_DUMP(DSC_CAST_OP, cast);
+            TYPED_DUMP(DSC_RANDN_OP, randn);
+            TYPED_DUMP(DSC_TOPK_OP, topk);
+            TYPED_DUMP(DSC_MULTINOMIAL_OP, multinomial);
+            TYPED_DUMP(DSC_ARANGE_OP, arange);
+            TYPED_DUMP(DSC_COPY_OP, copy);
+            TYPED_DUMP(DSC_CONCAT_OP, concat);
+            TYPED_DUMP(DSC_TRANSPOSE_OP, transpose);
 
-                DSC_INVALID_CASE("unknown trace type=%d", trace->type);
-            }
-            fprintf(f, "}");
+            DSC_INVALID_CASE("unknown trace type=%d", trace->type);
         }
-
         fprintf(f, "}");
-        if (i < ctx->n_traces - 1) fprintf(f, ",");
-        fprintf(f, "\n");
     }
 
-    if (close) {
-        // If dump is called directly by the user (i.e. from dsc.cpp) then it means we are done dumping
-        // to the same file and are ready to inspect it so, close the array and close the file.
-        // Next time this function is called the file will be truncated and we'll start over.
-        fprintf(ctx->dump_file, "]");
-        fclose(ctx->dump_file);
-        ctx->dump_file = nullptr;
-    }
-
-    const auto stop_ = internal::tracing::time_us();
-    DSC_LOG_DEBUG("exported %ld Perfetto-compatible traces to \"%s\" in %.0fms", ctx->n_traces, DSC_TRACE_FILE, (stop_ - start_) * 1e-3);
+    fprintf(f, "}");
 }
 
-namespace internal::tracing {
 template<typename T = dsc_empty_args>
 DSC_INLINE void fill_trace(dsc_trace *trace, const char *name,
                            const char *cat, const dsc_trace_phase phase,
@@ -627,6 +636,7 @@ DSC_INLINE void fill_trace(dsc_trace *trace, const char *name,
 
     TYPED_FILL(tensor_alloc, dsc_tensor_alloc_args)
     TYPED_FILL(binary, dsc_binary_args)
+    TYPED_FILL(matmul, dsc_matmul_args)
     TYPED_FILL(mask, dsc_mask_args)
     TYPED_FILL(unary, dsc_unary_args)
     TYPED_FILL(unary_axis, dsc_unary_axis_args)
@@ -644,24 +654,15 @@ DSC_INLINE void fill_trace(dsc_trace *trace, const char *name,
     TYPED_FILL(multinomial, dsc_multinomial_args)
     TYPED_FILL(arange, dsc_arange_args)
 }
+}
 
-DSC_INLINE bool can_trace(dsc_trace_ctx *ctx) {
-    if (!ctx->record) return false;
-
-    if (ctx->n_traces >= ctx->max_traces) {
-        // If the traces buffer is full just dump it and start over
-        dsc_tracing_dump(ctx, false);
-        dsc_tracing_clear(ctx);
+static DSC_INLINE void dsc_tracing_dump(dsc_trace_ctx *ctx) {
+    if (ctx->dump_file != nullptr) {
+        fprintf(ctx->dump_file, "]");
+        fclose(ctx->dump_file);
+        ctx->dump_file = nullptr;
     }
-
-    return true;
 }
-
-DSC_INLINE dsc_trace *next_available_trace(dsc_trace_ctx *ctx) {
-    return &ctx->traces[ctx->n_traces++];
-}
-}
-
 
 template<typename T>
 struct dsc_trace_tracker {
@@ -673,20 +674,22 @@ struct dsc_trace_tracker {
                                        cat_(cat), type_(type) {
         using namespace internal::tracing;
 
-        if (can_trace(ctx_)) {
-            dsc_trace *t = next_available_trace(ctx_);
-            fill_trace(t, name_, cat_, BEGIN, type_, args);
-            t->ts = time_us();
+        if (ctx_->record) {
+            dsc_trace trace{};
+            fill_trace(&trace, name_, cat_, BEGIN, type_, args);
+            trace.ts = time_us();
+            dump_trace(ctx_, &trace);
         }
     }
 
     ~dsc_trace_tracker() {
         using namespace internal::tracing;
 
-        if (can_trace(ctx_)) {
-            dsc_trace *t = next_available_trace(ctx_);
-            t->ts = time_us();
-            fill_trace(t, name_, cat_, END, type_, args_);
+        if (ctx_->record) {
+            dsc_trace trace{};
+            trace.ts = time_us();
+            fill_trace(&trace, name_, cat_, END, type_, args_);
+            dump_trace(ctx_, &trace);
         }
     }
 
@@ -701,16 +704,12 @@ private:
 static DSC_INLINE dsc_trace_ctx *dsc_tracing_init() {
     static dsc_trace_ctx ctx = {
         .dump_file = nullptr,
-        .traces = (dsc_trace *) malloc(DSC_MAX_TRACES * sizeof(dsc_trace)),
-        .n_traces = 0,
-        .max_traces = DSC_MAX_TRACES,
         .record = false,
     };
     return &ctx;
 }
 
 static DSC_INLINE void dsc_tracing_free(dsc_trace_ctx *ctx) {
-    free(ctx->traces);
     if (ctx->dump_file != nullptr) fclose(ctx->dump_file);
 }
 
@@ -725,15 +724,12 @@ static DSC_INLINE void dsc_tracing_insert(dsc_trace_ctx *ctx,
                                           const dsc_trace_phase phase) {
     using namespace internal::tracing;
 
-    if (can_trace(ctx)) {
-        dsc_trace *trace = next_available_trace(ctx);
-        fill_trace(trace, name, cat, phase, DSC_TRACE_EMPY);
-        trace->ts = ts;
+    if (ctx->record) {
+        dsc_trace trace{};
+        fill_trace(&trace, name, cat, phase, DSC_TRACE_EMPY);
+        trace.ts = ts;
+        dump_trace(ctx, &trace);
     }
-}
-
-static dsc_traces dsc_tracing_get(dsc_trace_ctx *ctx) {
-    return {.traces = ctx->traces, .n_traces = ctx->n_traces};
 }
 
 #undef TYPED_FILL
@@ -747,6 +743,7 @@ using dsc_trace_ctx = nullptr_t;
 #define DSC_TRACE_TENSOR_NEW(shape_, n_dim_, dtype_, backend_)  ((void) 0)
 #define DSC_TRACE_TENSOR_FREE(X)                                ((void) 0)
 #define DSC_TRACE_BINARY_OP(XA, XB, OUT)                        ((void) 0)
+#define DSC_TRACE_MATMUL(XA, XB, trans_b_, OUT, is_gevm_)       ((void) 0)
 #define DSC_TRACE_MASK_OP(X, MASK, value_)                      ((void) 0)
 #define DSC_TRACE_UNARY_OP(X, OUT)                              ((void) 0)
 #define DSC_TRACE_UNARY_AXIS_OP(X, OUT, axis_, keep_dims_)      ((void) 0)
@@ -778,10 +775,6 @@ static DSC_INLINE void dsc_tracing_record(dsc_trace_ctx *ctx, const bool record)
     DSC_UNUSED(record);
 }
 
-static DSC_INLINE void dsc_tracing_clear(dsc_trace_ctx *ctx) {
-    DSC_UNUSED(ctx);
-}
-
 static DSC_INLINE void dsc_tracing_insert(dsc_trace_ctx *ctx,
                                           const char *name,
                                           const char *cat,
@@ -792,11 +785,6 @@ static DSC_INLINE void dsc_tracing_insert(dsc_trace_ctx *ctx,
     DSC_UNUSED(cat);
     DSC_UNUSED(ts);
     DSC_UNUSED(phase);
-}
-
-static dsc_traces dsc_tracing_get(dsc_trace_ctx *ctx) {
-    DSC_UNUSED(ctx);
-    return {};
 }
 
 static void dsc_tracing_dump(dsc_trace_ctx *ctx) {

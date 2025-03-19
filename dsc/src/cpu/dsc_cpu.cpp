@@ -672,6 +672,7 @@ void dsc_cpu_masked_fill(dsc_device *,
 void dsc_cpu_matmul(dsc_device *dev,
                     const dsc_tensor *DSC_RESTRICT xa,
                     const dsc_tensor *DSC_RESTRICT xb,
+                    const bool trans_b,
                     dsc_tensor *DSC_RESTRICT out) {
     const int stride_a = dsc_tensor_get_stride(xa, -2);
     const int stride_b = dsc_tensor_get_stride(xb, -2);
@@ -679,6 +680,8 @@ void dsc_cpu_matmul(dsc_device *dev,
     const int m = dsc_tensor_get_dim(out, -2);
     const int n = dsc_tensor_get_dim(out, -1);
     const int k = dsc_tensor_get_dim(xa, -1);
+    // If the number of rows in the A matrix is 1 then this is a GEVM
+    const bool is_gevm = m == 1;
 
     const int d0_out = out->shape[0];
     const int d1_out = out->shape[1];
@@ -696,8 +699,8 @@ void dsc_cpu_matmul(dsc_device *dev,
             DSC_DATA(f32, xa);
             DSC_DATA(f32, xb);
             DSC_DATA(f32, out);
-            xa_buf = dsc_data_alloc(dev, dsc_packed_A_size<f32>());
-            xb_buf = dsc_data_alloc(dev, dsc_packed_B_size<f32>());
+            xa_buf = dsc_data_alloc(dev, internal::gemm::packed_a_size<f32>());
+            xb_buf = dsc_data_alloc(dev, internal::gemm::packed_b_size<f32>());
 
             f32 *DSC_RESTRICT packed_a = (f32 *) xa_buf->data;
             f32 *DSC_RESTRICT packed_b = (f32 *) xb_buf->data;
@@ -707,10 +710,24 @@ void dsc_cpu_matmul(dsc_device *dev,
                     const int out_offset = d0 * out->stride[0] + d1 * out->stride[1];
                     const int xa_offset = d0 * xa_stride_d0 + d1 * xa_stride_d1;
                     const int xb_offset = d0 * xb_stride_d0 + d1 * xb_stride_d1;
-                    dsc_gemm<f32>(m, n, k,
-                                  &xa_data[xa_offset], stride_a, packed_a,
-                                  &xb_data[xb_offset], stride_b, packed_b,
-                                  &out_data[out_offset], stride_out);
+                    if (trans_b) {
+                        if (is_gevm) {
+                            dsc_gevm_transposed<f32>(n, k,
+                                                     &xa_data[xa_offset],
+                                                     &xb_data[xb_offset], stride_b,
+                                                     &out_data[out_offset]);
+                        } else {
+                            dsc_gemm<f32, true>(m, n, k,
+                                                &xa_data[xa_offset], stride_a, packed_a,
+                                                &xb_data[xb_offset], stride_b, packed_b,
+                                                &out_data[out_offset], stride_out);
+                        }
+                    } else {
+                        dsc_gemm<f32, false>(m, n, k,
+                                             &xa_data[xa_offset], stride_a, packed_a,
+                                             &xb_data[xb_offset], stride_b, packed_b,
+                                             &out_data[out_offset], stride_out);
+                    }
                 }
             }
             break;
@@ -720,8 +737,8 @@ void dsc_cpu_matmul(dsc_device *dev,
             DSC_DATA(f64, xb);
             DSC_DATA(f64, out);
 
-            xa_buf = dsc_data_alloc(dev, dsc_packed_A_size<f64>());
-            xb_buf = dsc_data_alloc(dev, dsc_packed_B_size<f64>());
+            xa_buf = dsc_data_alloc(dev, internal::gemm::packed_a_size<f64>());
+            xb_buf = dsc_data_alloc(dev, internal::gemm::packed_b_size<f64>());
 
             f64 *DSC_RESTRICT packed_a = (f64 *) xa_buf->data;
             f64 *DSC_RESTRICT packed_b = (f64 *) xb_buf->data;
@@ -731,10 +748,24 @@ void dsc_cpu_matmul(dsc_device *dev,
                     const int out_offset = d0 * out->stride[0] + d1 * out->stride[1];
                     const int xa_offset = d0 * xa_stride_d0 + d1 * xa_stride_d1;
                     const int xb_offset = d0 * xb_stride_d0 + d1 * xb_stride_d1;
-                    dsc_gemm<f64>(m, n, k,
-                                  &xa_data[xa_offset], stride_a, packed_a,
-                                  &xb_data[xb_offset], stride_b, packed_b,
-                                  &out_data[out_offset], stride_out);
+                    if (trans_b) {
+                        if (is_gevm) {
+                            dsc_gevm_transposed<f64>(n, k,
+                                                     &xa_data[xa_offset],
+                                                     &xb_data[xb_offset], stride_b,
+                                                     &out_data[out_offset]);
+                        } else {
+                            dsc_gemm<f64, true>(m, n, k,
+                                                &xa_data[xa_offset], stride_a, packed_a,
+                                                &xb_data[xb_offset], stride_b, packed_b,
+                                                &out_data[out_offset], stride_out);
+                        }
+                    } else {
+                        dsc_gemm<f64, false>(m, n, k,
+                                             &xa_data[xa_offset], stride_a, packed_a,
+                                             &xb_data[xb_offset], stride_b, packed_b,
+                                             &out_data[out_offset], stride_out);
+                    }
                 }
             }
             break;

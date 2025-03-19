@@ -25,11 +25,6 @@
 #include <cstdlib>
 #include "dsc_dtype.h"
 
-// Max number of traces that can be recorded. Changing this will result in more memory
-// allocated during context initialization.
-#if !defined(DSC_MAX_TRACES)
-#    define DSC_MAX_TRACES   ((u64) 100'000)
-#endif
 
 #if !defined(DSC_MAX_OBJS)
 #    define DSC_MAX_OBJS     ((int) 1'000)
@@ -209,15 +204,11 @@ extern void dsc_print_mem_usage(dsc_ctx *ctx);
 extern void dsc_traces_record(dsc_ctx *ctx,
                               bool record = true);
 
-extern dsc_traces dsc_get_traces(dsc_ctx *ctx);
-
 extern void dsc_insert_trace(dsc_ctx *ctx,
                              const char *name,
                              const char *cat,
                              u64 ts,
                              dsc_trace_phase phase);
-
-extern void dsc_clear_traces(dsc_ctx *ctx);
 
 extern void dsc_dump_traces(dsc_ctx *ctx);
 
@@ -399,6 +390,7 @@ extern dsc_tensor *dsc_pow(dsc_ctx *ctx,
 extern dsc_tensor *dsc_matmul(dsc_ctx *ctx,
                               dsc_tensor *DSC_RESTRICT xa,
                               dsc_tensor *DSC_RESTRICT xb,
+                              bool trans_b = false,
                               dsc_tensor *DSC_RESTRICT out = nullptr);
 
 extern dsc_tensor *dsc_compare(dsc_ctx *ctx,

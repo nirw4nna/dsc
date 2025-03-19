@@ -14,13 +14,6 @@
 #   error "DSC requires at least AVX2 support"
 #endif
 
-enum gemm_param : u8 {
-    MC,
-    NC,
-    KC,
-    MR,
-    NR
-};
 
 #define rank1_avx2(A, B, idx)                                              \
     do {                                                                   \
@@ -75,31 +68,39 @@ enum gemm_param : u8 {
         gamma_11 = fmadd(alpha_pj, beta_p, gamma_11);                      \
     } while (0)
 
+namespace internal::gemm {
+enum gemm_param : u8 {
+    MC,
+    NC,
+    KC,
+    MR,
+    NR
+};
 
 template<typename T, gemm_param P>
 consteval int get_gemm_param() {
     static_assert(dsc_is_real<T>(), "get_gemm_param - T must be real");
 
-    if constexpr (dsc_is_type<T, f32>()) {
-        if constexpr (P == MC) return 132;
-        if constexpr (P == NC) return 2824;
-        if constexpr (P == KC) return 284;
-        if constexpr (P == MR) return 12;
-        if constexpr (P == NR) return 8;
+    if (dsc_is_type<T, f32>()) {
+        if (P == MC) return 132;
+        if (P == NC) return 2824;
+        if (P == KC) return 384;
+        if (P == MR) return 12;
+        if (P == NR) return 8;
     } else {
-        if constexpr (P == MC) return 132;
-        if constexpr (P == NC) return 2824;
-        if constexpr (P == KC) return 284;
-        if constexpr (P == MR) return 12;
-        if constexpr (P == NR) return 4;
+        if (P == MC) return 132;
+        if (P == NC) return 2824;
+        if (P == KC) return 384;
+        if (P == MR) return 12;
+        if (P == NR) return 4;
     }
 }
 
 template<typename T>
-static DSC_INLINE void packA(const int m, const int k,
-                             const T *DSC_RESTRICT a, const int stride_a,
-                             T *DSC_RESTRICT packed_a) {
-    static constexpr int Mr = get_gemm_param<T, MR>();
+DSC_INLINE void pack_a(const int m, const int k,
+                      const T *DSC_RESTRICT a, const int stride_a,
+                      T *DSC_RESTRICT packed_a) {
+    const int Mr = get_gemm_param<T, MR>();
 
     for (int i = 0; i < m; i += Mr) {
         const int ib = DSC_MIN(m - i, Mr);
@@ -111,27 +112,31 @@ static DSC_INLINE void packA(const int m, const int k,
     }
 }
 
-template<typename T>
-static DSC_INLINE void packB(const int k, const int n,
-                             const T *DSC_RESTRICT b, const int stride_b,
-                             T *DSC_RESTRICT packed_b) {
-    static constexpr int Nr = get_gemm_param<T, NR>();
+template<typename T, bool trans_b>
+DSC_INLINE void pack_b(const int k, const int n,
+                      const T *DSC_RESTRICT b, const int stride_b,
+                      T *DSC_RESTRICT packed_b) {
+    const int Nr = get_gemm_param<T, NR>();
 
     for (int j = 0; j < n; j += Nr) {
         const int jb = DSC_MIN(n - j, Nr);
 
         for (int p = 0; p < k; ++p) {
-            for (int jj = 0; jj < jb; ++jj) *packed_b++ = b[p * stride_b + (j + jj)];
+            if constexpr (trans_b) {
+                for (int jj = 0; jj < jb; ++jj) *packed_b++ = b[(j + jj) * stride_b + p];
+            } else {
+                for (int jj = 0; jj < jb; ++jj) *packed_b++ = b[p * stride_b + (j + jj)];
+            }
             for (int jj = jb; jj < Nr; ++jj) *packed_b++ = dsc_zero<T>();
         }
     }
 }
 
 template<typename T>
-static DSC_INLINE void ukernel_avx2(const int k,
-                                    const T *DSC_RESTRICT a,
-                                    const T *DSC_RESTRICT b,
-                                    T *DSC_RESTRICT c, const int stride_c) {
+DSC_INLINE void ukernel_avx2(const int k,
+                             const T *DSC_RESTRICT a,
+                             const T *DSC_RESTRICT b,
+                             T *DSC_RESTRICT c, const int stride_c) {
     // TODO: not aligned!
     vec<T> gamma_0 = load(&c[0 * stride_c]);
     vec<T> gamma_1 = load(&c[1 * stride_c]);
@@ -177,27 +182,30 @@ static DSC_INLINE void ukernel_avx2(const int k,
 }
 
 template<typename T>
-consteval usize dsc_packed_A_size() {
+consteval usize packed_a_size() {
     return get_gemm_param<T, MC>() * get_gemm_param<T, KC>() * sizeof(T);
 }
 
 template<typename T>
-consteval usize dsc_packed_B_size() {
+consteval usize packed_b_size() {
     return get_gemm_param<T, NC>() * get_gemm_param<T, KC>() * sizeof(T);
 }
+}
 
-template<typename T>
+template<typename T, bool trans_b = false>
 static DSC_INLINE void dsc_gemm(const int m, const int n, const int k,
                                 const T *DSC_RESTRICT a, const int stride_a,
                                 T *DSC_RESTRICT packed_a,
                                 const T *DSC_RESTRICT b, const int stride_b,
                                 T *DSC_RESTRICT packed_b,
                                 T *DSC_RESTRICT c, const int stride_c) {
-    static constexpr int Nc = get_gemm_param<T, NC>();
-    static constexpr int Mc = get_gemm_param<T, MC>();
-    static constexpr int Kc = get_gemm_param<T, KC>();
-    static constexpr int Mr = get_gemm_param<T, MR>();
-    static constexpr int Nr = get_gemm_param<T, NR>();
+    using namespace internal::gemm;
+
+    const int Nc = get_gemm_param<T, NC>();
+    const int Mc = get_gemm_param<T, MC>();
+    const int Kc = get_gemm_param<T, KC>();
+    const int Mr = get_gemm_param<T, MR>();
+    const int Nr = get_gemm_param<T, NR>();
 
     // 5th loop
     for (int j = 0; j < n; j += Nc) {
@@ -208,14 +216,18 @@ static DSC_INLINE void dsc_gemm(const int m, const int n, const int k,
             const int pb = DSC_MIN(k - p, Kc);
 
             // Pack B
-            packB(pb, jb, &b[p * stride_b + j], stride_b, packed_b);
+            if constexpr (trans_b) {
+                pack_b<T, true>(pb, jb, &b[j * stride_b + p], stride_b, packed_b);
+            } else {
+                pack_b<T, false>(pb, jb, &b[p * stride_b + j], stride_b, packed_b);
+            }
 
             // 3rd loop
             for (int i = 0; i < m; i += Mc) {
                 const int ib = DSC_MIN(m - i, Mc);
 
                 // Pack A
-                packA(ib, pb, &a[i * stride_a + p], stride_a, packed_a);
+                pack_a(ib, pb, &a[i * stride_a + p], stride_a, packed_a);
 
                 for (int jj = 0; jj < jb; jj += Nr) {
                     const int jjb = DSC_MIN(jb - jj, Nr);
@@ -257,6 +269,19 @@ static DSC_INLINE void dsc_gemm(const int m, const int n, const int k,
                     }
                 }
             }
+        }
+    }
+}
+
+template<typename T>
+static DSC_INLINE void dsc_gevm_transposed(const int n, const int k,
+                                           const T *DSC_RESTRICT a,
+                                           const T *DSC_RESTRICT b, const int stride_b,
+                                           T *DSC_RESTRICT c) {
+    // This kernel assumes that the B matrix is transposed in order to access it with stride 1
+    for (int j = 0; j < n; ++j) {
+        for (int p = 0; p < k; ++p) {
+            c[j] += a[p] * b[j * stride_b + p];
         }
     }
 }

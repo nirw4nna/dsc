@@ -64,68 +64,10 @@ class _DscTensor(Structure):
         ('device', c_int8),
     ]
 
-# ============================================================
-# Tracing stuff
-#
-
-# TODO: validate this stuff, I think it's probably better to collect more
-#  uniform traces, handling the args union stuff is very clunky in Python (and also in C++)
-class _DscTensorArgs(Structure):
-    _fields_ = [
-        ('shape', c_int * _DSC_MAX_DIMS),
-        ('addr', c_uint64),
-        ('n_dim', c_int),
-        ('device', c_uint8),
-        ('dtype', c_uint8),
-    ]
-
-class _DscTensorAllocArgs(Structure):
-    _fields_ = [
-        ('x', _DscTensorArgs)
-    ]
-
-class _DscEmptyArgs(Structure):
-    pass
-
-class _DscTraceArgs(ctypes.Union):
-    _fields_ = [
-        ('tensor_alloc', _DscTensorAllocArgs),
-        ('empty', _DscEmptyArgs),
-    ]
-
-class _DscTraceType(Enum):
-    EMPTY = 0
-    TENSOR_ALLOC = 1
-    TENSOR_FREE = 2
-
-_TRACE_VALUE_LOOKUP = {el.value: el for _, el in _DscTraceType.__members__.items()}
-
 class _DscTracePhase(Enum):
     BEGIN = 'B'
     END = 'E'
     COMPLETE = 'X'
-
-class _DscTrace(Structure):
-    _anonymous = ('args',)
-    _fields_ = [
-        ('name', c_char * 32),
-        ('cat', c_char * 16),
-        ('tid', c_uint64),
-        ('ts', c_uint64),
-        ('pid', c_int),
-        ('phase', c_char),
-        ('type', c_uint8),
-        ('args', _DscTraceArgs)
-    ]
-
-_DscTrace_p = POINTER(_DscTrace)
-
-class _DscTraces(Structure):
-    _fields_ = [
-        ('traces', _DscTrace_p),
-        ('n_traces', c_uint64),
-    ]
-
 
 class _DscComparison(Enum):
     EQ = 0
@@ -210,15 +152,6 @@ _lib.dsc_traces_record.argtypes = [_DscCtx, c_bool]
 _lib.dsc_traces_record.restype = None
 
 
-# extern dsc_traces dsc_get_traces(dsc_ctx *);
-def _dsc_get_traces(ctx: _DscCtx):
-    return _lib.dsc_get_traces(ctx)
-
-
-_lib.dsc_get_traces.argtypes = [_DscCtx]
-_lib.dsc_get_traces.restype = _DscTraces
-
-
 # extern void dsc_insert_trace(dsc_ctx *ctx,
 #                              const char *name,
 #                              const char *cat,
@@ -230,15 +163,6 @@ def _dsc_insert_trace(ctx: _DscCtx, name: str, cat: str, ts: int, phase: _DscTra
 
 _lib.dsc_insert_trace.argtypes = [_DscCtx, c_char_p, c_char_p, c_uint64, c_char]
 _lib.dsc_insert_trace.restype = None
-
-
-# extern void dsc_clear_traces(dsc_ctx *);
-def _dsc_clear_traces(ctx: _DscCtx):
-    _lib.dsc_clear_traces(ctx)
-
-
-_lib.dsc_clear_traces.argtypes = [_DscCtx]
-_lib.dsc_clear_traces.restype = None
 
 
 # extern void dsc_dump_traces(dsc_ctx *ctx);
@@ -570,14 +494,15 @@ _lib.dsc_pow.restype = _DscTensor_p
 # extern dsc_tensor *dsc_matmul(dsc_ctx *ctx,
 #                               dsc_tensor *DSC_RESTRICT xa,
 #                               dsc_tensor *DSC_RESTRICT xb,
+#                               bool trans_b = false,
 #                               dsc_tensor *DSC_RESTRICT out = nullptr);
 def _dsc_matmul(
-    ctx: _DscCtx, xa: _DscTensor_p, xb: _DscTensor_p, out: _OptionalTensor
+    ctx: _DscCtx, xa: _DscTensor_p, xb: _DscTensor_p, trans_b: bool, out: _OptionalTensor
 ) -> _DscTensor_p:
-    return _lib.dsc_matmul(ctx, xa, xb, out)
+    return _lib.dsc_matmul(ctx, xa, xb, c_bool(trans_b), out)
 
 
-_lib.dsc_matmul.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, _DscTensor_p]
+_lib.dsc_matmul.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_bool, _DscTensor_p]
 _lib.dsc_matmul.restype = _DscTensor_p
 
 

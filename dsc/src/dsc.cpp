@@ -227,20 +227,12 @@ void dsc_traces_record(dsc_ctx *ctx, const bool record) {
     dsc_tracing_record(ctx->trace_ctx, record);
 }
 
-dsc_traces dsc_get_traces(dsc_ctx *ctx) {
-    return dsc_tracing_get(ctx->trace_ctx);
-}
-
 void dsc_insert_trace(dsc_ctx *ctx,
                       const char *name,
                       const char *cat,
                       const u64 ts,
                       const dsc_trace_phase phase) {
     dsc_tracing_insert(ctx->trace_ctx, name, cat, ts, phase);
-}
-
-void dsc_clear_traces(dsc_ctx *ctx) {
-    dsc_tracing_clear(ctx->trace_ctx);
 }
 
 void dsc_dump_traces(dsc_ctx *ctx) {
@@ -1072,19 +1064,23 @@ dsc_tensor *dsc_pow(dsc_ctx *ctx,
 dsc_tensor *dsc_matmul(dsc_ctx *ctx,
                        dsc_tensor *DSC_RESTRICT xa,
                        dsc_tensor *DSC_RESTRICT xb,
+                       const bool trans_b,
                        dsc_tensor *DSC_RESTRICT out) {
-    // Notes: it would make sense to add also a 'transpose' flag for xa and xb
-    //        as well as an 'alpha' coefficient (so we end up performing out = alpha * (xa @ xb))
     DSC_ASSERT(xa->device == xb->device);
-
-    if (xa->n_dim < 2 || xb->n_dim < 2) return dsc_mul(ctx, xa, xb, out);
-
-    DSC_TRACE_BINARY_OP(xa, xb, out);
 
     const int xa_rows = dsc_tensor_get_dim(xa, -2);
     const int xa_cols = dsc_tensor_get_dim(xa, -1);
-    const int xb_rows = dsc_tensor_get_dim(xb, -2);
-    const int xb_cols = dsc_tensor_get_dim(xb, -1);
+
+    DSC_TRACE_MATMUL(xa, xb, trans_b, out, xa_rows == 1);
+
+    int xb_rows, xb_cols;
+    if (trans_b) {
+        xb_rows = dsc_tensor_get_dim(xb, -1);
+        xb_cols = dsc_tensor_get_dim(xb, -2);
+    } else {
+        xb_rows = dsc_tensor_get_dim(xb, -2);
+        xb_cols = dsc_tensor_get_dim(xb, -1);
+    }
     if (xa_cols != xb_rows) DSC_LOG_FATAL("can't multiply (%d, %d) by (%d, %d)",
                                           xa_rows, xa_cols, xb_rows, xb_cols);
 
@@ -1119,7 +1115,7 @@ dsc_tensor *dsc_matmul(dsc_ctx *ctx,
     DSC_DATA(void, out);
     dev->memset(out_data, 0, out->ne * DSC_DTYPE_SIZE[out->dtype]);
 
-    DSC_DISPATCH(xa->device, matmul, xa, xb, out);
+    DSC_DISPATCH(xa->device, matmul, xa, xb, trans_b, out);
 
     cleanup_binary_params();
 

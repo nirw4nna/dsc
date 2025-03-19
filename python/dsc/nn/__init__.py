@@ -4,7 +4,7 @@
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
 
-from ..tensor import Tensor, sum, max, tanh, exp, power
+from ..tensor import Tensor, sum, max, tanh, exp, power, matmul
 from ..dtype import Dtype
 from ..device import Device
 from .._bindings import _dsc_new_tensor
@@ -139,12 +139,12 @@ class ModuleDict(Module):
 class Linear(Module):
     def __init__(self, in_features: int, out_features: int, bias: bool = True):
         super().__init__()
-        self.weight = Parameter((in_features, out_features), on_load=lambda x: x.transpose())
+        self.weight = Parameter((out_features, in_features))
         self.bias = Parameter((out_features, )) if bias else None
 
     @trace('Linear')
     def forward(self, x: Tensor) -> Tensor:
-        out = x @ self.weight
+        out = matmul(x, self.weight, trans_b=True)
         if self.bias:
             out += self.bias
         return out

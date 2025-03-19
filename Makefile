@@ -24,20 +24,14 @@ endif
 
 CXXFLAGS	+=	-DDSC_LOG_LEVEL=$(DSC_LOG_LEVEL)
 
-# Defining the __FAST_MATH__ macro makes computations faster even without adding any actual -ffast-math like flag.
-# On the other hand, -ffast-math makes the FFTs slower.
 ifdef DSC_FAST
-	CXXFLAGS	+=	-O3 -D__FAST_MATH__ -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
+	CXXFLAGS	+=	-Ofast -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
 else
 	CXXFLAGS	+=	-O0 -fno-omit-frame-pointer -g
 endif
 
 ifdef DSC_ENABLE_TRACING
 	CXXFLAGS	+=	-DDSC_ENABLE_TRACING -pthread
-endif
-
-ifdef DSC_MAX_TRACES
-	CXXFLAGS	+=	-DDSC_MAX_TRACES=$(DSC_MAX_TRACES)
 endif
 
 # If we are not compiling the shared object and are in debug mode then run in ASAN mode
