@@ -58,40 +58,54 @@ due to this feature.
 must not erase these updates if it's re-run.
 
 
-## Profiling
-I need a mechanism to profile DSC code. The key points to keep in mind are:
-- Python overhead can be ignored for kernels that are dispatched directly (ie. matmul: here
-most of the time is spent in C++, the Python overhead is only a few us)
-- Kernels that are defined in Python (ie. gelu, var, LayerNorm) must be profiled
-- Traces must be available in Python
-- Tracing must be opt-in, both in Python (using env vars?) and in C++ (compile-time flags?)
-
-One possibility is to use C++ to generate also the Python traces but in this case it's hard to capture the context
-(what parameters should we print? what metrics?).
-
-Another possibility is to use the C++ portion to collect traces but then expose those traces via the standard low-level
-API so that all the manipulations like sorting, grouping, filtering ecc... can be done in Python.
-Then, it would be great if I could 'group' events together. For example:
+## Kernel Generation
+This is somewhat related to the previous point. The idea is that for 'high-level' kernels (i.e. kernels that are defined
+directly in Python) the overhead of going back and forth between Python and C++ can be significant.
+Take for example the softmax kernel:
 ```python
+@trace('softmax')
 def softmax(x: Tensor, axis: int = -1) -> Tensor:
     e = exp((x - max(x, axis=axis, keepdims=True)))
     sum_e = sum(e, axis=axis, keepdims=True)
     return e / sum_e
 ```
-This code will generate a bunch of events (a reduction along an axis, a binary op, lots of allocations...), I need a mechanism
-to mark them as one big meta-operation, this way I know when looking at the traces where they come from.
-Same goes for the forward step of an `nn.Module`.
-
-An idea could be marking the 'meta-functions' with some decorators like:
-```python3
-@trace('Softmax')
-def softmax(...):
-   ...
+This is a correct softmax that uses native operations under the hood, this means each operation will produce a new tensor
+that Python must wrap and track and so on. Just be re-writing these same operations in C++ naively, without anything extra,
+we get a **~20% speedup**. The Python side will then be replaced by:
+```python
+@trace('softmax')
+def softmax(x: Tensor, axis: int = -1) -> Tensor:
+    return Tensor(_dsc_softmax(_get_ctx(), x.c_ptr, axis))
 ```
-Here the decorator basically creates a new trace (ask the C++ code to generate the trace?) before and after the function
-call.
 
-**Questions:**
-- How does grouping (ie. an event that spans multiple, smaller, events) work in chrome-traces/Perfetto?
-- What's the latency of this decorator mechanism?
-- How can we exchange events efficiently between Python and C++?
+The idea is to add a mechanism to do this sort of code generation automatically. There are a few things to keep in mind:
+- Kernels may depend on other 'high-level' kernels (i.e. LayerNorm depends on mean and var).
+- It should be possible to switch between the naive Python version and the generated version i.e. when debugging
+
+
+## Memory Management
+It's clear that for model inference the general purpose allocator approach is not good enough. Right now, between allocations
+and de-allocations more than 6% of the total execution time is wasted managing memory.
+I don't know if using a proper arena for everything will work with Python garbage collector but at least on the C++ side
+I should add that (opt-in ?).
+This would be even more important if I manage to implement native kernel generation because the softmax example above
+otherwise will turn out to look like this:
+```c++
+dsc_tensor *dsc_softmax(dsc_ctx *ctx,
+                        dsc_tensor *DSC_RESTRICT x,
+                        const int axis) {
+    dsc_tensor *m = dsc_max(ctx, x, nullptr, axis);
+    dsc_tensor *dif = dsc_sub(ctx, x, m);
+    dsc_tensor *e = dsc_exp(ctx, dif);
+    dsc_tensor *sum_e = dsc_sum(ctx, e, nullptr, axis);
+
+    dsc_tensor *out = dsc_div(ctx, e, sum_e);
+
+    dsc_tensor_free(ctx, m);
+    dsc_tensor_free(ctx, dif);
+    dsc_tensor_free(ctx, e);
+    dsc_tensor_free(ctx, sum_e);
+    return out;
+}
+```
+Which is very ugly and cumbersome.

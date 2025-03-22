@@ -1252,7 +1252,6 @@ dsc_tensor *dsc_sqrt(dsc_ctx *ctx,
 // ============================================================
 // Unary Operations Along Axis
 
-
 dsc_tensor *dsc_sum(dsc_ctx *ctx,
                     dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out,
