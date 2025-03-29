@@ -98,8 +98,8 @@ consteval int get_gemm_param() {
 
 template<typename T>
 DSC_INLINE void pack_a(const int m, const int k,
-                      const T *DSC_RESTRICT a, const int stride_a,
-                      T *DSC_RESTRICT packed_a) {
+                       const T *DSC_RESTRICT a, const int stride_a,
+                       T *DSC_RESTRICT packed_a) {
     const int Mr = get_gemm_param<T, MR>();
 
     for (int i = 0; i < m; i += Mr) {
@@ -114,8 +114,8 @@ DSC_INLINE void pack_a(const int m, const int k,
 
 template<typename T, bool trans_b>
 DSC_INLINE void pack_b(const int k, const int n,
-                      const T *DSC_RESTRICT b, const int stride_b,
-                      T *DSC_RESTRICT packed_b) {
+                       const T *DSC_RESTRICT b, const int stride_b,
+                       T *DSC_RESTRICT packed_b) {
     const int Nr = get_gemm_param<T, NR>();
 
     for (int j = 0; j < n; j += Nr) {

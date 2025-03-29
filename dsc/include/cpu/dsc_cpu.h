@@ -142,7 +142,7 @@ extern void dsc_cpu_sin(dsc_device *,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_cpu_tanh(dsc_device *,
+extern void dsc_cpu_tanh(dsc_device *dev,
                          const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
 

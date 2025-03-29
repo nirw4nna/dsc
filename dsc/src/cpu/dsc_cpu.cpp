@@ -9,8 +9,7 @@
 #include "cpu/dsc_iter.h"
 #include "cpu/dsc_ops.h"
 #include "dsc_device.h"
-#include <cpu/dsc_gemm.h>
-#include <cstring>// memcpy
+#include <cstring> // memcpy
 #include <random>
 
 
@@ -19,7 +18,8 @@
 //
 
 template<typename Tx, typename To>
-static DSC_INLINE void cast_op(const dsc_tensor *DSC_RESTRICT x,
+static DSC_INLINE void cast_op(dsc_device *,
+                               const dsc_tensor *DSC_RESTRICT x,
                                dsc_tensor *DSC_RESTRICT out) {
     DSC_DATA(Tx, x);
     DSC_DATA(To, out);
@@ -30,39 +30,41 @@ static DSC_INLINE void cast_op(const dsc_tensor *DSC_RESTRICT x,
 }
 
 template<typename Tx>
-static DSC_INLINE void cast_op(const dsc_tensor *DSC_RESTRICT x,
+static DSC_INLINE void cast_op(dsc_device *dev,
+                               const dsc_tensor *DSC_RESTRICT x,
                                dsc_tensor *DSC_RESTRICT out) {
     switch (out->dtype) {
         case BOOL:
-            cast_op<Tx, bool>(x, out);
+            cast_op<Tx, bool>(dev, x, out);
             break;
         case I32:
-            cast_op<Tx, i32>(x, out);
+            cast_op<Tx, i32>(dev, x, out);
             break;
         case F32:
-            cast_op<Tx, f32>(x, out);
+            cast_op<Tx, f32>(dev, x, out);
             break;
         case F64:
-            cast_op<Tx, f64>(x, out);
+            cast_op<Tx, f64>(dev, x, out);
             break;
         DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
 }
 
-void dsc_cpu_cast(dsc_device *, const dsc_tensor *DSC_RESTRICT x,
+void dsc_cpu_cast(dsc_device *dev,
+                  const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT out) {
     switch (x->dtype) {
         case BOOL:
-            cast_op<bool>(x, out);
+            cast_op<bool>(dev, x, out);
             break;
         case I32:
-            cast_op<i32>(x, out);
+            cast_op<i32>(dev, x, out);
             break;
         case F32:
-            cast_op<f32>(x, out);
+            cast_op<f32>(dev, x, out);
             break;
         case F64:
-            cast_op<f64>(x, out);
+            cast_op<f64>(dev, x, out);
             break;
         DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
@@ -495,10 +497,11 @@ void dsc_cpu_set_slice(dsc_device *,
 // Binary Operations
 
 template<typename Tout, typename Tx = Tout, typename Op>
-static DSC_INLINE void binary_op(const dsc_tensor *xa,
-                                 const dsc_tensor *xb,
-                                 dsc_tensor *out,
-                                 Op op) {
+static void binary_op(dsc_device *,
+                      const dsc_tensor *xa,
+                      const dsc_tensor *xb,
+                      dsc_tensor *out,
+                      Op op) {
     DSC_DATA_ALIAS(Tx, xa);
     DSC_DATA_ALIAS(Tx, xb);
     DSC_DATA_ALIAS(Tout, out);
@@ -532,7 +535,8 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
 }
 
 template<typename Op>
-static DSC_INLINE void binary_op(const dsc_tensor *xa,
+static DSC_INLINE void binary_op(dsc_device *dev,
+                                 const dsc_tensor *xa,
                                  const dsc_tensor *xb,
                                  dsc_tensor *out,
                                  Op op) {
@@ -543,98 +547,98 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
             if constexpr (is_comparison_op<Op>()) {
                 switch (xa->dtype) {
                     case BOOL:
-                        binary_op<bool, bool>(xa, xb, out, op);
+                        binary_op<bool, bool>(dev, xa, xb, out, op);
                         break;
                     case I32:
-                        binary_op<bool, i32>(xa, xb, out, op);
+                        binary_op<bool, i32>(dev, xa, xb, out, op);
                         break;
                     case F32:
-                        binary_op<bool, f32>(xa, xb, out, op);
+                        binary_op<bool, f32>(dev, xa, xb, out, op);
                         break;
                     case F64:
-                        binary_op<bool, f64>(xa, xb, out, op);
+                        binary_op<bool, f64>(dev, xa, xb, out, op);
                         break;
                     DSC_INVALID_CASE("unknown dtype=%d", xa->dtype);
                 }
             } else if constexpr (is_bool_arith_op<Op>()) {
                 // This is handled as a normal math op but the catch is that the operator is actually a
                 // boolean operator
-                binary_op<bool>(xa, xb, out, op);
+                binary_op<bool>(dev, xa, xb, out, op);
             } else {
                 DSC_LOG_FATAL("invalid op");
             }
             break;
         case I32:
-            binary_op<i32>(xa, xb, out, op);
+            binary_op<i32>(dev, xa, xb, out, op);
             break;
         case F32:
-            binary_op<f32>(xa, xb, out, op);
+            binary_op<f32>(dev, xa, xb, out, op);
             break;
         case F64:
-            binary_op<f64>(xa, xb, out, op);
+            binary_op<f64>(dev, xa, xb, out, op);
             break;
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
     }
 }
 
-void dsc_cpu_add(dsc_device *,
+void dsc_cpu_add(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
-    binary_op(xa, xb, out, cpu_add_op());
+    binary_op(dev, xa, xb, out, cpu_add_op());
 }
 
-void dsc_cpu_sub(dsc_device *,
+void dsc_cpu_sub(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
-    binary_op(xa, xb, out, cpu_sub_op());
+    binary_op(dev, xa, xb, out, cpu_sub_op());
 }
 
-void dsc_cpu_mul(dsc_device *,
+void dsc_cpu_mul(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
-    binary_op(xa, xb, out, cpu_mul_op());
+    binary_op(dev, xa, xb, out, cpu_mul_op());
 }
 
-void dsc_cpu_div(dsc_device *,
+void dsc_cpu_div(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
-    binary_op(xa, xb, out, cpu_div_op());
+    binary_op(dev, xa, xb, out, cpu_div_op());
 }
 
-void dsc_cpu_pow(dsc_device *,
+void dsc_cpu_pow(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
-    binary_op(xa, xb, out, cpu_pow_op());
+    binary_op(dev, xa, xb, out, cpu_pow_op());
 }
 
-void dsc_cpu_compare(dsc_device *,
+void dsc_cpu_compare(dsc_device *dev,
                      const dsc_tensor *xa,
                      const dsc_tensor *xb,
                      const dsc_comparison_op comp,
                      dsc_tensor *out) {
     switch (comp) {
         case EQ:
-            binary_op(xa, xb, out, cpu_eq_op());
+            binary_op(dev, xa, xb, out, cpu_eq_op());
             break;
         case NE:
-            binary_op(xa, xb, out, cpu_ne_op());
+            binary_op(dev, xa, xb, out, cpu_ne_op());
             break;
         case LT:
-            binary_op(xa, xb, out, cpu_lt_op());
+            binary_op(dev, xa, xb, out, cpu_lt_op());
             break;
         case LE:
-            binary_op(xa, xb, out, cpu_le_op());
+            binary_op(dev, xa, xb, out, cpu_le_op());
             break;
         case GT:
-            binary_op(xa, xb, out, cpu_gt_op());
+            binary_op(dev, xa, xb, out, cpu_gt_op());
             break;
         case GE:
-            binary_op(xa, xb, out, cpu_ge_op());
+            binary_op(dev, xa, xb, out, cpu_ge_op());
             break;
         DSC_INVALID_CASE("unknown comparison=%d", comp);
     }
@@ -781,60 +785,62 @@ void dsc_cpu_matmul(dsc_device *dev,
 // Unary Operations
 
 template<typename Tx, typename To = Tx, typename Op>
-static DSC_INLINE void unary_op(const dsc_tensor *DSC_RESTRICT x,
+static DSC_INLINE void unary_op(dsc_device *,
+                                const dsc_tensor *DSC_RESTRICT x,
                                 dsc_tensor *DSC_RESTRICT out,
                                 Op op) {
     DSC_DATA(Tx, x);
     DSC_DATA(To, out);
-    
+
     dsc_for(i, out) {
         out_data[i] = op(x_data[i]);
     }
 }
 
 template<typename Op>
-static DSC_INLINE void unary_op(const dsc_tensor *DSC_RESTRICT x,
+static DSC_INLINE void unary_op(dsc_device *dev,
+                                const dsc_tensor *DSC_RESTRICT x,
                                 dsc_tensor *DSC_RESTRICT out,
                                 Op op) {
     switch (x->dtype) {
         case F32:
-            unary_op<f32>(x, out, op);
+            unary_op<f32>(dev, x, out, op);
             break;
         case F64:
-            unary_op<f64>(x, out, op);
+            unary_op<f64>(dev, x, out, op);
             break;
         DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
 }
 
-void dsc_cpu_cos(dsc_device *,
+void dsc_cpu_cos(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out) {
-    unary_op(x, out, cpu_cos_op());
+    unary_op(dev, x, out, cpu_cos_op());
 }
 
-void dsc_cpu_sin(dsc_device *,
+void dsc_cpu_sin(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out) {
-    unary_op(x, out, cpu_sin_op());
+    unary_op(dev, x, out, cpu_sin_op());
 }
 
-void dsc_cpu_tanh(dsc_device *,
+void dsc_cpu_tanh(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT out) {
-    unary_op(x, out, cpu_tanh_op());
+    unary_op(dev, x, out, cpu_tanh_op());
 }
 
-void dsc_cpu_exp(dsc_device *,
+void dsc_cpu_exp(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out) {
-    unary_op(x, out, cpu_exp_op());
+    unary_op(dev, x, out, cpu_exp_op());
 }
 
-void dsc_cpu_sqrt(dsc_device *,
+void dsc_cpu_sqrt(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT out) {
-    unary_op(x, out, cpu_sqrt_op());
+    unary_op(dev, x, out, cpu_sqrt_op());
 }
 
 // ============================================================
