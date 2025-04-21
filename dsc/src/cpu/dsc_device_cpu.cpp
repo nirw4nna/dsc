@@ -4,6 +4,7 @@
 // This code is licensed under the terms of the 3-clause BSD license
 // (https://opensource.org/license/bsd-3-clause).
 
+#include "cpu/dsc_blas.h"
 #include "dsc_device.h"
 #include <cstring>
 
@@ -31,6 +32,8 @@ static void cpu_memset(void *dst, const int c, const usize nb) {
 
 static void cpu_dispose(dsc_device *dev) {
     dsc_aligned_free(dev->device_mem);
+    dsc_blas_ctx *blas_ctx = (dsc_blas_ctx *) dev->extra_info;
+    dsc_blas_destroy(blas_ctx);
 
     DSC_LOG_INFO("%s device disposed", DSC_DEVICE_NAMES[dev->type]);
 }
@@ -42,7 +45,7 @@ dsc_device *dsc_cpu_device(const usize mem_size) {
         .head = {},
         .device_mem = {},
         .alignment = 64, // I don't know about this...
-        .extra_info = {},
+        .extra_info = dsc_blas_init(),
         .mem_size = DSC_ALIGN(mem_size, DSC_DEVICE_CPU_ALIGN),
         .used_mem = 0,
         .type = CPU,

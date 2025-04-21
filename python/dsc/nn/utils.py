@@ -13,6 +13,7 @@ from ..dtype import Dtype
 import struct, pathlib, os, hashlib, urllib.request, json, ctypes
 from tqdm import tqdm
 
+
 def _fetch(url: str, invalidate_cache: bool = False) -> pathlib.Path:
     cache_dir = pathlib.Path.home() / '.cache' / 'dsc' / 'blob'
     if invalidate_cache and cache_dir.exists():

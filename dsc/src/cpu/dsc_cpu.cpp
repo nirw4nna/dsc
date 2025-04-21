@@ -5,7 +5,7 @@
 // (https://opensource.org/license/bsd-3-clause).
 
 #include "cpu/dsc_cpu.h"
-#include "cpu/dsc_gemm.h"
+#include "cpu/dsc_blas.h"
 #include "cpu/dsc_iter.h"
 #include "cpu/dsc_ops.h"
 #include "dsc_device.h"
@@ -678,6 +678,8 @@ void dsc_cpu_matmul(dsc_device *dev,
                     const dsc_tensor *DSC_RESTRICT xb,
                     const bool trans_b,
                     dsc_tensor *DSC_RESTRICT out) {
+    dsc_blas_ctx *blas_ctx = (dsc_blas_ctx *) dev->extra_info;
+
     const int stride_a = dsc_tensor_get_stride(xa, -2);
     const int stride_b = dsc_tensor_get_stride(xb, -2);
     const int stride_out = dsc_tensor_get_stride(out, -2);
@@ -696,18 +698,11 @@ void dsc_cpu_matmul(dsc_device *dev,
     const int xb_stride_d1 = xb->shape[1] != d1_out ? 0 : xb->stride[1];
 
     // Packed buffers
-    dsc_data_buffer *xa_buf;
-    dsc_data_buffer *xb_buf;
     switch (xa->dtype) {
         case F32: {
             DSC_DATA(f32, xa);
             DSC_DATA(f32, xb);
             DSC_DATA(f32, out);
-            xa_buf = dsc_data_alloc(dev, internal::gemm::packed_a_size<f32>());
-            xb_buf = dsc_data_alloc(dev, internal::gemm::packed_b_size<f32>());
-
-            f32 *DSC_RESTRICT packed_a = (f32 *) xa_buf->data;
-            f32 *DSC_RESTRICT packed_b = (f32 *) xb_buf->data;
 
             for (int d0 = 0; d0 < d0_out; ++d0) {
                 for (int d1 = 0; d1 < d1_out; ++d1) {
@@ -716,21 +711,21 @@ void dsc_cpu_matmul(dsc_device *dev,
                     const int xb_offset = d0 * xb_stride_d0 + d1 * xb_stride_d1;
                     if (trans_b) {
                         if (is_gevm) {
-                            dsc_gevm_transposed<f32>(n, k,
-                                                     &xa_data[xa_offset],
-                                                     &xb_data[xb_offset], stride_b,
-                                                     &out_data[out_offset]);
+                            dsc_sgevm_trans(blas_ctx, n, k,
+                                            &xa_data[xa_offset],
+                                            &xb_data[xb_offset], stride_b,
+                                            &out_data[out_offset]);
                         } else {
-                            dsc_gemm<f32, true>(m, n, k,
-                                                &xa_data[xa_offset], stride_a, packed_a,
-                                                &xb_data[xb_offset], stride_b, packed_b,
-                                                &out_data[out_offset], stride_out);
+                            dsc_sgemm(blas_ctx, TRANS, m, n, k,
+                                      &xa_data[xa_offset], stride_a,
+                                      &xb_data[xb_offset], stride_b,
+                                      &out_data[out_offset], stride_out);
                         }
                     } else {
-                        dsc_gemm<f32, false>(m, n, k,
-                                             &xa_data[xa_offset], stride_a, packed_a,
-                                             &xb_data[xb_offset], stride_b, packed_b,
-                                             &out_data[out_offset], stride_out);
+                        dsc_sgemm(blas_ctx, NO_TRANS, m, n, k,
+                                  &xa_data[xa_offset], stride_a,
+                                  &xb_data[xb_offset], stride_b,
+                                  &out_data[out_offset], stride_out);
                     }
                 }
             }
@@ -741,12 +736,6 @@ void dsc_cpu_matmul(dsc_device *dev,
             DSC_DATA(f64, xb);
             DSC_DATA(f64, out);
 
-            xa_buf = dsc_data_alloc(dev, internal::gemm::packed_a_size<f64>());
-            xb_buf = dsc_data_alloc(dev, internal::gemm::packed_b_size<f64>());
-
-            f64 *DSC_RESTRICT packed_a = (f64 *) xa_buf->data;
-            f64 *DSC_RESTRICT packed_b = (f64 *) xb_buf->data;
-
             for (int d0 = 0; d0 < d0_out; ++d0) {
                 for (int d1 = 0; d1 < d1_out; ++d1) {
                     const int out_offset = d0 * out->stride[0] + d1 * out->stride[1];
@@ -754,21 +743,21 @@ void dsc_cpu_matmul(dsc_device *dev,
                     const int xb_offset = d0 * xb_stride_d0 + d1 * xb_stride_d1;
                     if (trans_b) {
                         if (is_gevm) {
-                            dsc_gevm_transposed<f64>(n, k,
-                                                     &xa_data[xa_offset],
-                                                     &xb_data[xb_offset], stride_b,
-                                                     &out_data[out_offset]);
+                            dsc_dgevm_trans(blas_ctx, n, k,
+                                            &xa_data[xa_offset],
+                                            &xb_data[xb_offset], stride_b,
+                                            &out_data[out_offset]);
                         } else {
-                            dsc_gemm<f64, true>(m, n, k,
-                                                &xa_data[xa_offset], stride_a, packed_a,
-                                                &xb_data[xb_offset], stride_b, packed_b,
-                                                &out_data[out_offset], stride_out);
+                            dsc_dgemm(blas_ctx, TRANS, m, n, k,
+                                      &xa_data[xa_offset], stride_a,
+                                      &xb_data[xb_offset], stride_b,
+                                      &out_data[out_offset], stride_out);
                         }
                     } else {
-                        dsc_gemm<f64, false>(m, n, k,
-                                             &xa_data[xa_offset], stride_a, packed_a,
-                                             &xb_data[xb_offset], stride_b, packed_b,
-                                             &out_data[out_offset], stride_out);
+                        dsc_dgemm(blas_ctx, NO_TRANS, m, n, k,
+                                  &xa_data[xa_offset], stride_a,
+                                  &xb_data[xb_offset], stride_b,
+                                  &out_data[out_offset], stride_out);
                     }
                 }
             }
@@ -776,9 +765,6 @@ void dsc_cpu_matmul(dsc_device *dev,
         }
         DSC_INVALID_CASE("unsupported dtype=%d", xa->dtype);
     }
-
-    dsc_data_free(dev, xa_buf);
-    dsc_data_free(dev, xb_buf);
 }
 
 // ============================================================
