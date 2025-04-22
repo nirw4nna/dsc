@@ -5,6 +5,10 @@
 // (https://opensource.org/license/bsd-3-clause).
 
 #include "cpu/dsc_blas.h"
+#include <atomic>
+#include <cstring>
+#include <pthread.h>
+#include <sys/sysinfo.h> // get_nprocs()
 
 #if defined(__AVX2__)
 #   include <immintrin.h>
@@ -122,11 +126,52 @@
         gamma_11 = _mm256_fmadd_pd(alpha_pj, beta_p, gamma_11);                 \
     } while (0)
 
+#define task_lock(WORKER) pthread_mutex_lock(&(WORKER)->mtx)
+
+#define task_signal(WORKER)                   \
+    do {                                      \
+        (WORKER)->has_work = true;            \
+        pthread_cond_signal(&(WORKER)->cond); \
+        pthread_mutex_unlock(&(WORKER)->mtx); \
+    } while (0)
+
+
+enum op_type : u8 {
+    GEVM,
+    DONE
+};
+
+struct gevm_data {
+    const void *a, *b;
+    void *c;
+    int n, k, stride_b;
+    dsc_dtype dtype;
+};
+
+struct task {
+    union {
+        gevm_data gevm;
+    };
+    std::atomic_int *progress;
+    op_type op;
+};
+
+struct worker {
+    pthread_mutex_t mtx;
+    pthread_cond_t cond;
+    task work;
+    pthread_t id;
+    bool has_work;
+};
 
 struct dsc_blas_ctx {
     f64 *packed_a_f64, *packed_b_f64;
     f32 *packed_a_f32, *packed_b_f32;
+
+    worker *workers;
+    int n_workers;
 };
+
 
 enum gemm_param : u8 {
     MC,
@@ -157,11 +202,70 @@ consteval int param() {
 
 
 // ============================================================
+// Forward declarations
+//
+
+template<typename T>
+static DSC_INLINE void gevm_trans(int n, int k,
+                                  const T *DSC_RESTRICT a,
+                                  const T *DSC_RESTRICT b, int stride_b,
+                                  T *DSC_RESTRICT c);
+
+// ============================================================
 // Setup / Teardown
 //
 
+static void *worker_thread(void *arg) {
+    worker *self = (worker *) arg;
+
+    bool done = false;
+    while (!done) {
+        pthread_mutex_lock(&self->mtx);
+        while (!self->has_work) pthread_cond_wait(&self->cond, &self->mtx);
+
+        self->has_work = false;
+        pthread_mutex_unlock(&self->mtx);
+
+        switch (const task *work = &self->work; work->op) {
+            case GEVM: {
+                switch (const auto &[a, b, c,
+                                     n, k, stride_b, dtype] = work->gevm;
+                        dtype) {
+                    case F32:
+                        gevm_trans<f32>(n, k,
+                                        (const f32 *) a, (const f32 *) b,
+                                        stride_b, (f32 *) c);
+                        break;
+                    case F64:
+                        gevm_trans<f64>(n, k,
+                                        (const f64 *) a, (const f64 *) b,
+                                        stride_b, (f64 *) c);
+                        break;
+                    DSC_INVALID_CASE("invalid dtype=%d", dtype);
+                }
+                // Increase the progress counter
+                work->progress->fetch_add(1);
+                break;
+            }
+            case DONE: {
+                done = true;
+                break;
+            }
+            DSC_INVALID_CASE("unknown op=%d", work->op);
+        }
+    }
+    pthread_exit(nullptr);
+}
+
 dsc_blas_ctx *dsc_blas_init() {
-    DSC_LOG_INFO("initializing BLAS context");
+    const char *n_threads_str = std::getenv("DSC_NUM_THREADS");
+    int n_threads = std::atoi(n_threads_str);
+    const int n_cores = get_nprocs();
+
+    if (n_threads == -1) n_threads = n_cores / 2;
+
+    n_threads = DSC_MIN(DSC_MAX(n_threads, 1), n_cores);
+
     dsc_blas_ctx *ctx = (dsc_blas_ctx *) malloc(sizeof(dsc_blas_ctx));
 
     ctx->packed_a_f64 = (f64 *) calloc(param<f64, MC>() * param<f64, MC>(), sizeof(f64));
@@ -169,19 +273,49 @@ dsc_blas_ctx *dsc_blas_init() {
     ctx->packed_b_f64 = (f64 *) calloc(param<f64, NC>() * param<f64, KC>(), sizeof(f64));
     ctx->packed_b_f32 = (f32 *) calloc(param<f32, NC>() * param<f32, KC>(), sizeof(f32));
 
+    ctx->n_workers = n_threads;
+    if (n_threads > 1) {
+        ctx->workers = (worker *) calloc(n_threads - 1, sizeof(worker));
+        for (int i = 0; i < n_threads - 1; ++i) {
+            worker *w = &ctx->workers[i];
+            pthread_mutex_init(&w->mtx, nullptr);
+            pthread_cond_init(&w->cond, nullptr);
+            w->has_work = false;
+            pthread_create(&w->id, nullptr, worker_thread, w);
+        }
+    }
+
+    DSC_LOG_INFO("initialized BLAS context with %d threads", n_threads);
+
     return ctx;
 }
 
 void dsc_blas_destroy(dsc_blas_ctx *ctx) {
     free(ctx->packed_a_f64), free(ctx->packed_a_f32);
     free(ctx->packed_b_f64), free(ctx->packed_b_f32);
+    if (ctx->n_workers > 1) {
+        for (int i = 0; i < ctx->n_workers - 1; ++i) {
+            worker *w = &ctx->workers[i];
+            task_lock(w);
+            w->work.op = DONE;
+            task_signal(w);
+        }
 
+        for (int i = 0; i < ctx->n_workers - 1; ++i) {
+            worker *w = &ctx->workers[i];
+            pthread_join(w->id, nullptr);
+            pthread_mutex_destroy(&w->mtx);
+            pthread_cond_destroy(&w->cond);
+        }
+
+        free(ctx->workers);
+    }
     free(ctx);
     DSC_LOG_INFO("BLAS context disposed");
 }
 
 // ============================================================
-// Matmul operations
+// GEMM-related functions
 //
 
 template<typename T>
@@ -394,7 +528,7 @@ void dsc_dgemm(dsc_blas_ctx *ctx, const dsc_blas_trans trans_b,
     }
 }
 
-extern void dsc_sgemm(dsc_blas_ctx *ctx, const dsc_blas_trans trans_b,
+void dsc_sgemm(dsc_blas_ctx *ctx, const dsc_blas_trans trans_b,
                       const int m, const int n, const int k,
                       const f32 *DSC_RESTRICT a, const int stride_a,
                       const f32 *DSC_RESTRICT b, const int stride_b,
@@ -472,11 +606,15 @@ extern void dsc_sgemm(dsc_blas_ctx *ctx, const dsc_blas_trans trans_b,
     }
 }
 
-extern void dsc_dgevm_trans(dsc_blas_ctx *,
-                            const int n, const int k,
-                            const f64 *DSC_RESTRICT a,
-                            const f64 *DSC_RESTRICT b, const int stride_b,
-                            f64 *DSC_RESTRICT c) {
+// ============================================================
+// GEVM-related functions
+//
+
+template<typename T>
+static DSC_INLINE void gevm_trans(const int n, const int k,
+                                  const T *DSC_RESTRICT a,
+                                  const T *DSC_RESTRICT b, const int stride_b,
+                                  T *DSC_RESTRICT c) {
     for (int j = 0; j < n; ++j) {
         for (int p = 0; p < k; ++p) {
             c[j] += a[p] * b[j * stride_b + p];
@@ -484,14 +622,63 @@ extern void dsc_dgevm_trans(dsc_blas_ctx *,
     }
 }
 
-extern void dsc_sgevm_trans(dsc_blas_ctx *,
-                            const int n, const int k,
-                            const f32 *DSC_RESTRICT a,
-                            const f32 *DSC_RESTRICT b, const int stride_b,
-                            f32 *DSC_RESTRICT c) {
-    for (int j = 0; j < n; ++j) {
-        for (int p = 0; p < k; ++p) {
-            c[j] += a[p] * b[j * stride_b + p];
-        }
+template<typename T>
+static DSC_INLINE void schedule_gevm_trans(dsc_blas_ctx *ctx,
+                                           const int n, const int k,
+                                           const T *DSC_RESTRICT a,
+                                           const T *DSC_RESTRICT b, const int stride_b,
+                                           T *DSC_RESTRICT c) {
+    std::atomic_int progress(1);
+
+    // Split N by n_workers
+    const int n_work = n / ctx->n_workers;
+    // Remember that n_workers is at least 1, also the main thread should have at least
+    // n_work rows of B to work on
+    const int leftover_n = n - (n_work * (ctx->n_workers - 1));
+
+    // Enqueue tasks for the workers
+    for (int i = 1; i < ctx->n_workers; ++i) {
+        worker *w = &ctx->workers[i - 1];
+        task_lock(w);
+
+        task *t = &w->work;
+        t->gevm.a = a;
+        t->gevm.b = &b[(i - 1) * n_work * stride_b];
+        t->gevm.c = &c[(i - 1) * n_work];
+        t->gevm.k = k;
+        t->gevm.n = n_work;
+        t->gevm.stride_b = stride_b;
+        t->gevm.dtype = dsc_type_mapping<T>::value;
+        t->progress = &progress;
+        t->op = GEVM;
+
+        task_signal(w);
     }
+
+    // Do the leftover work on the main thread
+    gevm_trans(leftover_n, k,
+               a,
+               &b[(ctx->n_workers - 1) * n_work * stride_b],
+               stride_b,
+               &c[(ctx->n_workers - 1) * n_work]);
+
+    // Wait for the other threads
+    while (progress.load() != ctx->n_workers)
+        ;
+}
+
+void dsc_dgevm_trans(dsc_blas_ctx *ctx,
+                     const int n, const int k,
+                     const f64 *DSC_RESTRICT a,
+                     const f64 *DSC_RESTRICT b, const int stride_b,
+                     f64 *DSC_RESTRICT c) {
+    schedule_gevm_trans(ctx, n, k, a, b, stride_b, c);
+}
+
+void dsc_sgevm_trans(dsc_blas_ctx *ctx,
+                     const int n, const int k,
+                     const f32 *DSC_RESTRICT a,
+                     const f32 *DSC_RESTRICT b, const int stride_b,
+                     f32 *DSC_RESTRICT c) {
+    schedule_gevm_trans(ctx, n, k, a, b, stride_b, c);
 }

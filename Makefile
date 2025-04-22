@@ -3,7 +3,7 @@ AR			=	ar
 
 CXXFLAGS	=	-std=c++20 -I./dsc/include/ -I./dsc/api/ -Wall -Wextra -Wformat -Wnoexcept  \
  				-Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
- 				-Wlogical-op -Wcast-align -fno-exceptions -fno-rtti
+ 				-Wlogical-op -Wcast-align -fno-exceptions -fno-rtti -pthread
 LDFLAGS		=	-lm
 
 UNAME_M		=	$(shell uname -m)
@@ -31,7 +31,7 @@ else
 endif
 
 ifdef DSC_ENABLE_TRACING
-	CXXFLAGS	+=	-DDSC_ENABLE_TRACING -pthread
+	CXXFLAGS	+=	-DDSC_ENABLE_TRACING
 endif
 
 # If we are not compiling the shared object and are in debug mode then run in ASAN mode

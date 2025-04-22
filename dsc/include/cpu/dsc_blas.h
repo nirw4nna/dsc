@@ -24,7 +24,7 @@ extern dsc_blas_ctx *dsc_blas_init();
 extern void dsc_blas_destroy(dsc_blas_ctx *ctx);
 
 // ============================================================
-// Matmul operations
+// GEMM-related functions
 //
 
 extern void dsc_dgemm(dsc_blas_ctx *ctx, dsc_blas_trans trans_b,
@@ -38,6 +38,10 @@ extern void dsc_sgemm(dsc_blas_ctx *ctx, dsc_blas_trans trans_b,
                       const f32 *DSC_RESTRICT a, int stride_a,
                       const f32 *DSC_RESTRICT b, int stride_b,
                       f32 *DSC_RESTRICT c, int stride_c);
+
+// ============================================================
+// GEVM-related functions
+//
 
 extern void dsc_dgevm_trans(dsc_blas_ctx *ctx,
                             int n, int k,
