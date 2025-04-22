@@ -152,7 +152,14 @@ class GPT2(nn.Module):
         generated = idx
         # The first time process the entire prompt then only the last token
         idx_next = idx
-        for _ in range(max_new_tokens):
+        sampling_start = None; sampling_stop = None
+        generation_start = None; generation_stop = None
+        for counter in range(max_new_tokens):
+            if counter == 0:
+                sampling_start = perf_counter()
+            elif counter == 1:
+                generation_start = perf_counter()
+
             if self.use_cache:
                 logits = self(idx_next)
             else:
@@ -171,8 +178,19 @@ class GPT2(nn.Module):
 
             print(tokenizer.decode(idx_next[0]), end='', flush=True)
             generated = dsc.concat([generated, idx_next], axis=1)
+            if counter == 0:
+                sampling_stop = perf_counter()
 
-        print()
+        generation_stop = perf_counter()
+        print('\n')
+        
+        # Report metrics
+        prompt_processing_time_ms = (sampling_stop - sampling_start) * 1e3
+        generation_processing_time_ms = (generation_stop - generation_start) * 1e3
+        total_processing_time_ms = (generation_stop - sampling_start) * 1e3
+        print(f'prompt processing time\t= {round(prompt_processing_time_ms, 1)}ms')
+        print(f'generation time\t\t= {round(generation_processing_time_ms, 1)} ms | {round(generation_processing_time_ms / max_new_tokens, 2)} ms/tok')
+        print(f'total time\t\t= {round(total_processing_time_ms, 1)} ms | {round(max_new_tokens / (total_processing_time_ms / 1e3), 2)} tok/s')
         return generated
 
 
@@ -194,10 +212,4 @@ if __name__ == '__main__':
     MAX_TOKENS = 50
 
     idx = tokenizer.encode(prompt)
-    start = perf_counter()
-
     response_tokens = model.generate(dsc.tensor(idx, dtype=dsc.Dtype.I32).reshape(1, -1), tokenizer=tokenizer, max_new_tokens=MAX_TOKENS)
-
-    delay = perf_counter() - start
-
-    print(f'Took {round(delay, 2)}s to generate {MAX_TOKENS} tokens ({round(MAX_TOKENS / delay, 2)} tok/s)')
