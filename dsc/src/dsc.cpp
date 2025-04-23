@@ -223,6 +223,10 @@ void dsc_print_mem_usage(dsc_ctx *ctx) {
 // ============================================================
 // Tracing
 
+bool DSC_STRICTLY_PURE dsc_tracing_enabled(dsc_ctx *) {
+    return DSC_TRACING > 0;
+}
+
 void dsc_traces_record(dsc_ctx *ctx, const bool record) {
     dsc_tracing_record(ctx->trace_ctx, record);
 }

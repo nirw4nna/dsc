@@ -4,12 +4,13 @@
 #  This code is licensed under the terms of the 3-clause BSD license
 #  (https://opensource.org/license/bsd-3-clause).
 
-from ._bindings import _DSC_TRACE_FILE, _dsc_traces_record, _dsc_insert_trace, _dsc_dump_traces, _DscTracePhase
+from ._bindings import _DSC_TRACE_FILE, _dsc_tracing_enabled, _dsc_traces_record, _dsc_insert_trace, _dsc_dump_traces, _DscTracePhase
 from .context import _get_ctx
 from time import perf_counter
 from contextlib import contextmanager
 from http.server import SimpleHTTPRequestHandler
 import socketserver
+from functools import wraps
 
 
 class _PerfettoServer(SimpleHTTPRequestHandler):
@@ -54,6 +55,8 @@ def stop_recording(dump: bool = True, serve: bool = False):
     if serve:
         _serve_traces()
 
+def _is_tracing_enabled() -> bool:
+    return bool(_dsc_tracing_enabled(_get_ctx()))
 
 @contextmanager
 def profile(serve: bool = True):
@@ -64,12 +67,22 @@ def profile(serve: bool = True):
         stop_recording(serve=serve)
 
 
+_BEGIN_PHASE = _DscTracePhase.BEGIN.value.encode('ascii')
+_END_PHASE = _DscTracePhase.END.value.encode('ascii')
+
 def trace(name: str, cat: str = 'python'):
     def _decorator(func):
+        if not _is_tracing_enabled():
+            return func
+
+        # Encode name and cat once
+        name_ = name.encode('ascii')
+        cat_ = cat.encode('ascii')
+        @wraps(func)
         def _wrapper(*args, **kwargs):
-            _dsc_insert_trace(_get_ctx(), name, cat, int(perf_counter() * 1e6) ,_DscTracePhase.BEGIN)
+            _dsc_insert_trace(_get_ctx(), name_, cat_, int(perf_counter() * 1e6), _BEGIN_PHASE)
             res = func(*args, **kwargs)
-            _dsc_insert_trace(_get_ctx(), name, cat, int(perf_counter() * 1e6), _DscTracePhase.END)
+            _dsc_insert_trace(_get_ctx(), name_, cat_, int(perf_counter() * 1e6), _END_PHASE)
             return res
         return _wrapper
     return _decorator

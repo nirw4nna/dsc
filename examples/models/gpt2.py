@@ -90,7 +90,7 @@ class TransformerBlock(nn.Module):
         ))
 
     @dsc.trace('TransformerBlock')
-    def forward(self, x):
+    def forward(self, x: dsc.Tensor) -> dsc.Tensor:
         m = self.mlp
         x = x + self.attn(self.ln_1(x))
         return x + m.c_proj(nn.gelu(m.c_fc(self.ln_2(x))))

@@ -94,9 +94,6 @@ class _DscPair(Structure):
         ('second', _DscTensor_p)
     ]
 
-def _c_str(py_str: str) -> bytes:
-    return py_str.encode('ascii')
-
 
 # extern dsc_ctx *dsc_ctx_init(usize main_mem, usize scratch_mem);
 def _dsc_ctx_init(mem_size: int) -> _DscCtx:
@@ -143,6 +140,15 @@ _lib.dsc_print_mem_usage.argtypes = [_DscCtx]
 _lib.dsc_print_mem_usage.restype = None
 
 
+# extern bool DSC_STRICTLY_PURE dsc_tracing_enabled(dsc_ctx *);
+def _dsc_tracing_enabled(ctx: _DscCtx) -> c_bool:
+    return _lib.dsc_tracing_enabled(ctx)
+
+
+_lib.dsc_tracing_enabled.argtypes = [_DscCtx]
+_lib.dsc_tracing_enabled.restype = c_bool
+
+
 # extern void dsc_traces_record(dsc_ctx *ctx, bool record);
 def _dsc_traces_record(ctx: _DscCtx, record: bool):
     _lib.dsc_traces_record(ctx, c_bool(record))
@@ -157,9 +163,8 @@ _lib.dsc_traces_record.restype = None
 #                              const char *cat,
 #                              u64 ts,
 #                              dsc_trace_phase phase);
-def _dsc_insert_trace(ctx: _DscCtx, name: str, cat: str, ts: int, phase: _DscTracePhase):
-    return _lib.dsc_insert_trace(ctx, _c_str(name), _c_str(cat), c_uint64(ts), _c_str(phase.value))
-
+def _dsc_insert_trace(ctx: _DscCtx, name: bytes, cat: bytes, ts: int, phase: bytes):
+    return _lib.dsc_insert_trace(ctx, name, cat, c_uint64(ts), phase)
 
 _lib.dsc_insert_trace.argtypes = [_DscCtx, c_char_p, c_char_p, c_uint64, c_char]
 _lib.dsc_insert_trace.restype = None

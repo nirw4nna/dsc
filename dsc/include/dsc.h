@@ -201,6 +201,8 @@ extern void dsc_print_mem_usage(dsc_ctx *ctx);
 // ============================================================
 // Tracing
 
+extern bool DSC_STRICTLY_PURE dsc_tracing_enabled(dsc_ctx *);
+
 extern void dsc_traces_record(dsc_ctx *ctx,
                               bool record = true);
 

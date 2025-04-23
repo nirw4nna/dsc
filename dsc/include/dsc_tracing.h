@@ -15,6 +15,7 @@
 #include <pthread.h>    // pthread_self()
 #include <cinttypes>    // PRIxPTR
 
+#define DSC_TRACING         ((int) 1)
 
 #define DSC_TRACE_NAME_MAX  ((int) 32)
 #define DSC_TRACE_CAT_MAX   ((int) 16)
@@ -739,6 +740,8 @@ static DSC_INLINE void dsc_tracing_insert(dsc_trace_ctx *ctx,
 #else
 
 using dsc_trace_ctx = nullptr_t;
+
+#define DSC_TRACING                                             ((int) 0)
 
 #define DSC_TRACE_TENSOR_NEW(shape_, n_dim_, dtype_, backend_)  ((void) 0)
 #define DSC_TRACE_TENSOR_FREE(X)                                ((void) 0)
