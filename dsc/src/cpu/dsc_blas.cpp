@@ -259,7 +259,13 @@ static void *worker_thread(void *arg) {
 
 dsc_blas_ctx *dsc_blas_init() {
     const char *n_threads_str = std::getenv("DSC_NUM_THREADS");
-    int n_threads = std::atoi(n_threads_str);
+    int n_threads = 1;
+
+    if (n_threads_str != nullptr) {
+        // getenv will return nullptr if the required variable is not set
+        n_threads = std::atoi(n_threads_str);
+    }
+
     const int n_cores = get_nprocs();
 
     if (n_threads == -1) n_threads = n_cores / 2;
