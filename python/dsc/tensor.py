@@ -284,11 +284,17 @@ class Tensor:
     def __radd__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return add(other, self)
 
+    def __iadd__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
+        return add(self, other, self)
+
     def __sub__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return sub(self, other)
 
     def __rsub__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return sub(other, self)
+
+    def __isub__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
+        return sub(self, other, self)
 
     def __mul__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return mul(self, other)
@@ -296,17 +302,26 @@ class Tensor:
     def __rmul__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return mul(other, self)
 
+    def __imul__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
+        return mul(self, other, self)
+
     def __truediv__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return true_div(self, other)
 
     def __rtruediv__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return true_div(other, self)
 
+    def __itruediv__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
+        return true_div(self, other, self)
+
     def __pow__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return power(self, other)
 
     def __rpow__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return power(other, self)
+
+    def __ipow__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
+        return power(self, other, self)
 
     def __matmul__(self, other: TensorType) -> 'Tensor':
         return matmul(self, other)
