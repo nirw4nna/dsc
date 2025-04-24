@@ -223,7 +223,7 @@ void dsc_print_mem_usage(dsc_ctx *ctx) {
 // ============================================================
 // Tracing
 
-bool DSC_STRICTLY_PURE dsc_tracing_enabled(dsc_ctx *) {
+bool dsc_tracing_enabled(dsc_ctx *) {
     return DSC_TRACING > 0;
 }
 
@@ -246,7 +246,7 @@ void dsc_dump_traces(dsc_ctx *ctx) {
 // ============================================================
 // Tensor Creation
 
-static DSC_INLINE dsc_tensor *find_empty_tensor(dsc_ctx *ctx) {
+static __attribute_malloc__ DSC_INLINE dsc_tensor *find_empty_tensor(dsc_ctx *ctx) {
     for (int i = 0; i < DSC_MAX_OBJS; ++i) {
         if (dsc_tensor *x = &ctx->tensors[i]; dsc_tensor_invalid(x)) {
             return x;

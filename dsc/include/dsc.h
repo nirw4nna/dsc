@@ -90,14 +90,13 @@ static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the cod
 // that a 'pure' function can take in and read the value of parameters passed by pointer even if that value
 // changes between subsequent invocations.
 #if defined(__GNUC__)
-#    define DSC_INLINE           inline __attribute__((always_inline))
-#    define DSC_STRICTLY_PURE    __attribute__((const))
-#    define DSC_PURE             __attribute__((pure))
+#    define DSC_INLINE          inline __attribute__((always_inline))
+#    define DSC_STRICTLY_PURE   __attribute__((const))
+#    define DSC_PURE            __attribute__((pure))
 #else
-#    define DSC_INLINE           inline
+#    define DSC_INLINE          inline
 #    define DSC_STRICTLY_PURE
 #    define DSC_PURE
-#    define DSC_MALLOC
 #endif
 
 #define DSC_RESTRICT __restrict
@@ -201,7 +200,7 @@ extern void dsc_print_mem_usage(dsc_ctx *ctx);
 // ============================================================
 // Tracing
 
-extern bool DSC_STRICTLY_PURE dsc_tracing_enabled(dsc_ctx *);
+extern bool dsc_tracing_enabled(dsc_ctx *);
 
 extern void dsc_traces_record(dsc_ctx *ctx,
                               bool record = true);
