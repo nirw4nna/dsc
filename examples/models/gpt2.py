@@ -147,6 +147,7 @@ class GPT2(nn.Module):
         self.kv_pos += T
         return logits
 
+    @dsc.profile()
     def generate(self, idx: dsc.Tensor, tokenizer, max_new_tokens: int, temp: float = 1, sample: bool = True) -> dsc.Tensor:
         assert max_new_tokens < self.hparams.block_size
         # Include the input in the response
@@ -213,4 +214,4 @@ if __name__ == '__main__':
     MAX_TOKENS = 50
 
     idx = tokenizer.encode(prompt)
-    response_tokens = model.generate(dsc.tensor(idx, dtype=dsc.i32).reshape(1, -1), tokenizer=tokenizer, max_new_tokens=MAX_TOKENS)
+    model.generate(dsc.tensor(idx, dtype=dsc.i32).reshape(1, -1), tokenizer=tokenizer, max_new_tokens=MAX_TOKENS)

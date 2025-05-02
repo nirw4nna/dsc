@@ -59,13 +59,18 @@ def _is_tracing_enabled() -> bool:
     # TODO: should I just remove ctx?
     return bool(_dsc_tracing_enabled(None))
 
-@contextmanager
 def profile(serve: bool = True):
-    start_recording()
-    try:
-        yield
-    finally:
-        stop_recording(serve=serve)
+    def _decorator(func):
+        if not _is_tracing_enabled():
+            return func
+        @wraps(func)
+        def _wrapper(*args, **kwargs):
+            start_recording()
+            res = func(*args, **kwargs)
+            stop_recording(serve=serve)
+            return res
+        return _wrapper
+    return _decorator
 
 
 _BEGIN_PHASE = _DscTracePhase.BEGIN.value.encode('ascii')
