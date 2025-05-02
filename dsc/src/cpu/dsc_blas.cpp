@@ -274,10 +274,11 @@ dsc_blas_ctx *dsc_blas_init() {
 
     dsc_blas_ctx *ctx = (dsc_blas_ctx *) malloc(sizeof(dsc_blas_ctx));
 
-    ctx->packed_a_f64 = (f64 *) calloc(param<f64, MC>() * param<f64, MC>(), sizeof(f64));
-    ctx->packed_a_f32 = (f32 *) calloc(param<f32, MC>() * param<f32, MC>(), sizeof(f32));
-    ctx->packed_b_f64 = (f64 *) calloc(param<f64, NC>() * param<f64, KC>(), sizeof(f64));
-    ctx->packed_b_f32 = (f32 *) calloc(param<f32, NC>() * param<f32, KC>(), sizeof(f32));
+    // TODO: align
+    ctx->packed_a_f64 = (f64 *) malloc(param<f64, KC>() * param<f64, MC>() * sizeof(f64));
+    ctx->packed_a_f32 = (f32 *) malloc(param<f32, KC>() * param<f32, MC>() * sizeof(f32));
+    ctx->packed_b_f64 = (f64 *) malloc(param<f64, KC>() * param<f64, NC>() * sizeof(f64));
+    ctx->packed_b_f32 = (f32 *) malloc(param<f32, KC>() * param<f32, NC>() * sizeof(f32));
 
     ctx->n_workers = n_threads;
     if (n_threads > 1) {
@@ -364,18 +365,18 @@ static DSC_INLINE void ukernel_avx2_f32(const int k,
                                         const f32 *DSC_RESTRICT a,
                                         const f32 *DSC_RESTRICT b,
                                         f32 *DSC_RESTRICT c, const int stride_c) {
-    __m256 gamma_0 = _mm256_load_ps(&c[0 * stride_c]);
-    __m256 gamma_1 = _mm256_load_ps(&c[1 * stride_c]);
-    __m256 gamma_2 = _mm256_load_ps(&c[2 * stride_c]);
-    __m256 gamma_3 = _mm256_load_ps(&c[3 * stride_c]);
-    __m256 gamma_4 = _mm256_load_ps(&c[4 * stride_c]);
-    __m256 gamma_5 = _mm256_load_ps(&c[5 * stride_c]);
-    __m256 gamma_6 = _mm256_load_ps(&c[6 * stride_c]);
-    __m256 gamma_7 = _mm256_load_ps(&c[7 * stride_c]);
-    __m256 gamma_8 = _mm256_load_ps(&c[8 * stride_c]);
-    __m256 gamma_9 = _mm256_load_ps(&c[9 * stride_c]);
-    __m256 gamma_10 = _mm256_load_ps(&c[10 * stride_c]);
-    __m256 gamma_11 = _mm256_load_ps(&c[11 * stride_c]);
+    __m256 gamma_0 = _mm256_loadu_ps(&c[0 * stride_c]);
+    __m256 gamma_1 = _mm256_loadu_ps(&c[1 * stride_c]);
+    __m256 gamma_2 = _mm256_loadu_ps(&c[2 * stride_c]);
+    __m256 gamma_3 = _mm256_loadu_ps(&c[3 * stride_c]);
+    __m256 gamma_4 = _mm256_loadu_ps(&c[4 * stride_c]);
+    __m256 gamma_5 = _mm256_loadu_ps(&c[5 * stride_c]);
+    __m256 gamma_6 = _mm256_loadu_ps(&c[6 * stride_c]);
+    __m256 gamma_7 = _mm256_loadu_ps(&c[7 * stride_c]);
+    __m256 gamma_8 = _mm256_loadu_ps(&c[8 * stride_c]);
+    __m256 gamma_9 = _mm256_loadu_ps(&c[9 * stride_c]);
+    __m256 gamma_10 = _mm256_loadu_ps(&c[10 * stride_c]);
+    __m256 gamma_11 = _mm256_loadu_ps(&c[11 * stride_c]);
 
     __m256 alpha_pj;
 
@@ -411,18 +412,18 @@ static DSC_INLINE void ukernel_avx2_f64(const int k,
                                         const f64 *DSC_RESTRICT a,
                                         const f64 *DSC_RESTRICT b,
                                         f64 *DSC_RESTRICT c, const int stride_c) {
-    __m256d gamma_0 = _mm256_load_pd(&c[0 * stride_c]);
-    __m256d gamma_1 = _mm256_load_pd(&c[1 * stride_c]);
-    __m256d gamma_2 = _mm256_load_pd(&c[2 * stride_c]);
-    __m256d gamma_3 = _mm256_load_pd(&c[3 * stride_c]);
-    __m256d gamma_4 = _mm256_load_pd(&c[4 * stride_c]);
-    __m256d gamma_5 = _mm256_load_pd(&c[5 * stride_c]);
-    __m256d gamma_6 = _mm256_load_pd(&c[6 * stride_c]);
-    __m256d gamma_7 = _mm256_load_pd(&c[7 * stride_c]);
-    __m256d gamma_8 = _mm256_load_pd(&c[8 * stride_c]);
-    __m256d gamma_9 = _mm256_load_pd(&c[9 * stride_c]);
-    __m256d gamma_10 = _mm256_load_pd(&c[10 * stride_c]);
-    __m256d gamma_11 = _mm256_load_pd(&c[11 * stride_c]);
+    __m256d gamma_0 = _mm256_loadu_pd(&c[0 * stride_c]);
+    __m256d gamma_1 = _mm256_loadu_pd(&c[1 * stride_c]);
+    __m256d gamma_2 = _mm256_loadu_pd(&c[2 * stride_c]);
+    __m256d gamma_3 = _mm256_loadu_pd(&c[3 * stride_c]);
+    __m256d gamma_4 = _mm256_loadu_pd(&c[4 * stride_c]);
+    __m256d gamma_5 = _mm256_loadu_pd(&c[5 * stride_c]);
+    __m256d gamma_6 = _mm256_loadu_pd(&c[6 * stride_c]);
+    __m256d gamma_7 = _mm256_loadu_pd(&c[7 * stride_c]);
+    __m256d gamma_8 = _mm256_loadu_pd(&c[8 * stride_c]);
+    __m256d gamma_9 = _mm256_loadu_pd(&c[9 * stride_c]);
+    __m256d gamma_10 = _mm256_loadu_pd(&c[10 * stride_c]);
+    __m256d gamma_11 = _mm256_loadu_pd(&c[11 * stride_c]);
 
     __m256d alpha_pj;
 
@@ -468,6 +469,8 @@ void dsc_dgemm(dsc_blas_ctx *ctx, const dsc_blas_trans trans_b,
     f64 *DSC_RESTRICT packed_a = ctx->packed_a_f64;
     f64 *DSC_RESTRICT packed_b = ctx->packed_b_f64;
 
+    memset(packed_a, 0, Kc * Mc * sizeof(f64));
+    memset(packed_b, 0, Kc * Nc * sizeof(f64));
 
     // 5th loop
     for (int j = 0; j < n; j += Nc) {
@@ -535,10 +538,10 @@ void dsc_dgemm(dsc_blas_ctx *ctx, const dsc_blas_trans trans_b,
 }
 
 void dsc_sgemm(dsc_blas_ctx *ctx, const dsc_blas_trans trans_b,
-                      const int m, const int n, const int k,
-                      const f32 *DSC_RESTRICT a, const int stride_a,
-                      const f32 *DSC_RESTRICT b, const int stride_b,
-                      f32 *DSC_RESTRICT c, const int stride_c) {
+               const int m, const int n, const int k,
+               const f32 *DSC_RESTRICT a, const int stride_a,
+               const f32 *DSC_RESTRICT b, const int stride_b,
+               f32 *DSC_RESTRICT c, const int stride_c) {
     static constexpr int Nc = param<f32, NC>();
     static constexpr int Mc = param<f32, MC>();
     static constexpr int Kc = param<f32, KC>();
@@ -547,6 +550,10 @@ void dsc_sgemm(dsc_blas_ctx *ctx, const dsc_blas_trans trans_b,
 
     f32 *DSC_RESTRICT packed_a = ctx->packed_a_f32;
     f32 *DSC_RESTRICT packed_b = ctx->packed_b_f32;
+
+    memset(packed_a, 0, Kc * Mc * sizeof(f32));
+    memset(packed_b, 0, Kc * Nc * sizeof(f32));
+
     // 5th loop
     for (int j = 0; j < n; j += Nc) {
         const int jb = DSC_MIN(n - j, Nc);
