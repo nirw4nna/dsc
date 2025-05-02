@@ -281,9 +281,16 @@ extern dsc_tensor *dsc_wrap_f64(dsc_ctx *ctx,
                                 dsc_device_type device = DEFAULT);
 
 extern dsc_tensor *dsc_arange(dsc_ctx *ctx,
-                              int n,
+                              f64 stop,
+                              f64 start = 0,
+                              f64 step = 1,
                               dsc_dtype dtype = I32,
                               dsc_device_type device = DEFAULT);
+
+extern dsc_tensor *dsc_repeat(dsc_ctx *ctx,
+                              const dsc_tensor *DSC_RESTRICT x,
+                              int repeats,
+                              int axis = -1);
 
 extern dsc_tensor *dsc_randn(dsc_ctx *ctx,
                              int n_dim,
@@ -404,6 +411,17 @@ extern void dsc_masked_fill(dsc_ctx *ctx,
                             dsc_tensor *x,
                             const dsc_tensor *mask,
                             f64 value);
+
+extern dsc_tensor *dsc_outer(dsc_ctx *ctx,
+                             dsc_tensor *DSC_RESTRICT xa,
+                             dsc_tensor *DSC_RESTRICT xb,
+                             dsc_tensor *DSC_RESTRICT out = nullptr);
+
+extern dsc_tensor *dsc_where(dsc_ctx *ctx,
+                             const dsc_tensor *DSC_RESTRICT condition,
+                             const dsc_tensor *DSC_RESTRICT input,
+                             const dsc_tensor *DSC_RESTRICT other,
+                             dsc_tensor *DSC_RESTRICT out = nullptr);
 
 // ============================================================
 // Unary Operations

@@ -7,6 +7,7 @@
 
 import dsc
 import dsc.nn as nn
+import dsc.nn.functional as F
 from dataclasses import dataclass
 from transformers import GPT2Tokenizer
 from time import perf_counter
@@ -71,7 +72,7 @@ class MultiHeadAttention(nn.Module):
             # Masking is needed when we are not using the cache or when using the cache and we are processing the prompt
             attention = attention.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
 
-        attention = nn.softmax(attention, axis=-1)
+        attention = F.softmax(attention, axis=-1)
         out = attention @ v # (B, nh, T, T) @ (B, nh, T, hs) = (B, nh, T, hs)
         out = out.transpose((0, 2, 1, 3)).reshape(B, T, C)
 
@@ -93,7 +94,7 @@ class TransformerBlock(nn.Module):
     def forward(self, x: dsc.Tensor) -> dsc.Tensor:
         m = self.mlp
         x = x + self.attn(self.ln_1(x))
-        return x + m.c_proj(nn.gelu(m.c_fc(self.ln_2(x))))
+        return x + m.c_proj(F.gelu(m.c_fc(self.ln_2(x))))
 
 
 class GPT2(nn.Module):
@@ -170,7 +171,7 @@ class GPT2(nn.Module):
             # NOTE: the point here is that I want v[:, -1] to be broadcast to the entire logits tensor
             # in DSC this is the case if v[:, -1] is a scalar (ie. 1D with 1 element)
             logits = logits.masked_fill(logits < v[:, -1], -float('Inf'))
-            probs = nn.softmax(logits, axis=-1)
+            probs = F.softmax(logits, axis=-1)
             if sample:
                 idx_next = dsc.multinomial(probs, num_samples=1)
             else:

@@ -12,7 +12,7 @@
 #include <limits>
 
 
-#define DSC_DTYPES       ((int) 4)
+#define DSC_DTYPES       ((int) 5)
 #define DSC_DEFAULT_TYPE (dsc_dtype::F32)
 
 
@@ -29,10 +29,12 @@ using usize = size_t;
 using byte = char;
 using f32 = float;
 using f64 = double;
+using bf16 = u16;
 
 enum dsc_dtype : u8 {
     BOOL,
     I32,
+    BF16,
     F32,
     F64,
 };
@@ -40,6 +42,7 @@ enum dsc_dtype : u8 {
 constexpr static usize DSC_DTYPE_SIZE[DSC_DTYPES] = {
         sizeof(bool),
         sizeof(i32),
+        sizeof(bf16),
         sizeof(f32),
         sizeof(f64),
 };
@@ -47,21 +50,27 @@ constexpr static usize DSC_DTYPE_SIZE[DSC_DTYPES] = {
 constexpr static const char *DSC_DTYPE_NAMES[DSC_DTYPES] = {
         "bool",
         "i32",
+        "bf16",
         "f32",
         "f64",
 };
 
+// BF16 on CPU is not a real type, for now we just support its creation but all the operations
+// will implicitly convert to F32
+
 // Conversion rules when we have two operands
 constexpr static dsc_dtype DSC_DTYPE_CONVERSION_TABLE[DSC_DTYPES][DSC_DTYPES] = {
-        {BOOL, I32, F32, F64},
-        {I32, I32, F32, F64},
-        {F32, F32, F32, F64},
-        {F64, F64, F64, F64},
+        {BOOL, I32, F32, F32, F64},
+        {I32, I32, F32, F32, F64},
+        {F32, F32, F32, F32, F64}, // BF16 is always upcasted to F32
+        {F32, F32, F32, F32, F64},
+        {F64, F64, F64, F64, F64},
 };
 
 constexpr static dsc_dtype DSC_TYPE_AT_LEAST_FLOAT_TABLE[DSC_DTYPES] = {
         F32, // BOOL
         F32, // I32
+        F32, // BF16
         F32, // F32
         F64, // F64
 };
@@ -81,6 +90,11 @@ struct dsc_type_mapping<i32> {
 };
 
 template<>
+struct dsc_type_mapping<bf16> {
+    static constexpr dsc_dtype value = BF16;
+};
+
+template<>
 struct dsc_type_mapping<f32> {
     static constexpr dsc_dtype value = F32;
 };
@@ -97,7 +111,7 @@ consteval bool dsc_is_type() {
 
 template<typename T>
 consteval bool dsc_is_real() {
-    return dsc_is_type<T, f32>() || dsc_is_type<T, f64>();
+    return dsc_is_type<T, bf16>() || dsc_is_type<T, f32>() || dsc_is_type<T, f64>();
 }
 
 template<typename T>

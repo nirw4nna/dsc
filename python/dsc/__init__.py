@@ -15,6 +15,7 @@ from dsc.tensor import (
     transpose,
     tril,
     arange,
+    repeat,
     randn,
     cos,
     sin,
@@ -29,6 +30,7 @@ from dsc.tensor import (
     mean,
     var,
     matmul,
+    outer,
     max,
     min,
     power,
@@ -49,6 +51,7 @@ from dsc.tensor import (
     empty_like,
     topk,
     multinomial,
+    where,
 )
 from dsc.dtype import Dtype
 from dsc.profiler import start_recording, stop_recording, profile, trace

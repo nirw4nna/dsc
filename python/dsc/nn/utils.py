@@ -7,7 +7,7 @@
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
 
-from typing import Dict
+from typing import Dict, Optional
 from ..tensor import Tensor, from_buffer
 from ..dtype import Dtype
 import struct, pathlib, os, hashlib, urllib.request, json, ctypes
@@ -31,7 +31,9 @@ def _fetch(url: str, invalidate_cache: bool = False) -> pathlib.Path:
     return fp
 
 
-def safe_load(url: str, invalidate_cache: bool = False) -> Dict[str, Tensor]:
+def safe_load(url: str, invalidate_cache: bool = False,
+              trim_prefix: Optional[str] = None,
+              use_dtype: Optional[Dtype] = None) -> Dict[str, Tensor]:
     fp = _fetch(url, invalidate_cache)
     b = fp.read_bytes()
     n = struct.unpack_from('<Q', b)[0]
@@ -42,6 +44,9 @@ def safe_load(url: str, invalidate_cache: bool = False) -> Dict[str, Tensor]:
     for key, val in header.items():
         if key == '__metadata__':
             continue
+        
+        if trim_prefix is not None:
+            key = key.removeprefix(trim_prefix)
 
         dtype = Dtype.from_string(val['dtype'])
         shape = val['shape']
@@ -50,6 +55,10 @@ def safe_load(url: str, invalidate_cache: bool = False) -> Dict[str, Tensor]:
 
         data_ptr = ctypes.cast(ctypes.c_char_p(b[8+n+offset_start:8+n+offset_stop]), ctypes.c_void_p)
 
-        res[key] = from_buffer(shape, dtype, data_ptr)
+        raw_tensor = from_buffer(shape, dtype, data_ptr)
+        if use_dtype is not None and use_dtype != dtype:
+            raw_tensor = raw_tensor.cast(use_dtype)
+
+        res[key] = raw_tensor
 
     return res

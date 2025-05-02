@@ -12,7 +12,6 @@ from typing import List
 import math
 from itertools import permutations
 
-
 @pytest.fixture(scope='session', autouse=True)
 def session_fixture():
     # This is invoked once before starting the test session
@@ -76,7 +75,6 @@ class TestOps:
             'less_equal': (np.less_equal, dsc.less_equal),
             'greater': (np.greater, dsc.greater),
             'greater_equal': (np.greater_equal, dsc.greater_equal),
-
         }
         for op_name in ops.keys():
             np_op, dsc_op = ops[op_name]
@@ -127,6 +125,18 @@ class TestOps:
 
                 assert all_close(res_dsc_s, res_np_s)
                 assert all_close(r_res_dsc_s, r_res_np_s)
+
+    def test_outer(self):
+        for dtype in DTYPES:
+            for _ in range(10):
+                xa = random_nd([randint(2, 50)], dtype)
+                xb = random_nd([randint(2, 50)], dtype)
+                xa_dsc = dsc.from_numpy(xa)
+                xb_dsc = dsc.from_numpy(xb)
+
+                out = np.outer(xa, xb)
+                out_dsc = dsc.outer(xa_dsc, xb_dsc)
+                assert all_close(out_dsc, out)
 
     @pytest.mark.skip(reason='not properly implemented yet')
     def test_matmul(self):

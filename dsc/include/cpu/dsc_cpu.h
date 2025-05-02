@@ -19,7 +19,14 @@ struct dsc_device;
 extern void dsc_cpu_cast(dsc_device *, const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_cpu_arange(dsc_device *, dsc_tensor *DSC_RESTRICT x);
+extern void dsc_cpu_arange(dsc_device *,
+                           dsc_tensor *DSC_RESTRICT x,
+                           f64 start, f64 step);
+
+extern void dsc_cpu_repeat(dsc_device *,
+                           const dsc_tensor *DSC_RESTRICT x,
+                           dsc_tensor *DSC_RESTRICT out,
+                           int repeats, int axis_idx);
 
 extern void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x);
 
@@ -130,6 +137,17 @@ extern void dsc_cpu_masked_fill(dsc_device *,
                                 dsc_tensor *x,
                                 const dsc_tensor *mask,
                                 f64 value);
+
+extern void dsc_cpu_outer(dsc_device *,
+                          const dsc_tensor *DSC_RESTRICT xa,
+                          const dsc_tensor *DSC_RESTRICT xb,
+                          dsc_tensor *DSC_RESTRICT out);
+
+extern void dsc_cpu_where(dsc_device *,
+                          const dsc_tensor *DSC_RESTRICT condition,
+                          const dsc_tensor *DSC_RESTRICT input,
+                          const dsc_tensor *DSC_RESTRICT other,
+                          dsc_tensor *DSC_RESTRICT out);
 
 // ============================================================
 // Unary Operations

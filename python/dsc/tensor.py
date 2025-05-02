@@ -16,7 +16,9 @@ from ._bindings import (
     _dsc_reshape,
     _dsc_concat,
     _dsc_compare,
+    _dsc_where,
     _dsc_masked_fill,
+    _dsc_outer,
     _dsc_multinomial,
     _dsc_transpose,
     _dsc_tril,
@@ -43,6 +45,7 @@ from ._bindings import (
     _dsc_pow,
     _dsc_matmul,
     _dsc_arange,
+    _dsc_repeat,
     _dsc_randn,
     _dsc_cos,
     _dsc_sin,
@@ -334,7 +337,7 @@ class Tensor:
 
     def __ne__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return not_equal(self, other)
-
+    
     def __lt__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return less(self, other)
 
@@ -346,6 +349,9 @@ class Tensor:
 
     def __ge__(self, other: Union[ScalarType, TensorType]) -> 'Tensor':
         return greater_equal(self, other)
+
+    def __neg__(self) -> 'Tensor':
+        return -1 * self
 
     def __bytes__(self) -> bytes:
         byte_array = (ctypes.c_byte * self.ne * DTYPE_SIZE[self.dtype]).from_address(self.data)
@@ -662,6 +668,25 @@ def matmul(
     return Tensor(_dsc_matmul(_get_ctx(), xa.c_ptr, xb.c_ptr, trans_b, _c_ptr_or_none(out)), _has_out(out))
 
 
+def outer(
+    xa: Union[ScalarType, TensorType],
+    xb: Union[ScalarType, TensorType],
+    out: Optional[Tensor] = None
+) -> Tensor:
+    return _binary_op(xa, xb, out, op_name='_dsc_outer')
+
+
+def where(
+    condition: TensorType,
+    input: Union[ScalarType, TensorType],
+    other: Union[ScalarType, TensorType],
+    out: Optional[Tensor] = None
+) -> Tensor:
+    condition_ = _wrap(condition)
+    input_, other_ = _wrap_operands(input, other)
+    return Tensor(_dsc_where(_get_ctx(), condition_.c_ptr, input_.c_ptr, other_.c_ptr, _c_ptr_or_none(out)), _has_out(out))
+
+
 def equal(
     xa: Union[ScalarType, TensorType],
     xb: Union[ScalarType, TensorType],
@@ -730,6 +755,11 @@ def sqrt(x: Tensor, out: Optional[Tensor] = None) -> Tensor:
     return _unary_op(x, out, op_name='_dsc_sqrt')
 
 
+def rsqrt(x: Tensor, out: Optional[Tensor] = None) -> Tensor:
+    out = sqrt(x, out)
+    return true_div(1, out, out)
+
+
 def sum(
     x: Tensor, out: Optional[Tensor] = None, axis: int = -1, keepdims: bool = True
 ) -> Tensor:
@@ -739,7 +769,9 @@ def sum(
 def mean(
     x: Tensor, out: Optional[Tensor] = None, axis: int = -1, keepdims: bool = True
 ) -> Tensor:
-    return sum(x, out, axis, keepdims) * (1. / x.size(axis))
+    out = sum(x, out, axis, keepdims)
+    out *= (1. / x.size(axis))
+    return out
 
 
 def var(
@@ -761,9 +793,17 @@ def min(
 
 
 def arange(
-    n: int, dtype: Dtype = Dtype.I32, device: DeviceType = Device.DEFAULT
+    stop: Union[int, float],
+    start: Union[int, float] = 0,
+    step: Union[int, float] = 1,
+    dtype: Dtype = Dtype.I32,
+    device: DeviceType = Device.DEFAULT
 ) -> Tensor:
-    return Tensor(_dsc_arange(_get_ctx(), n, dtype, _get_device(device)))
+    return Tensor(_dsc_arange(_get_ctx(), stop, start, step, dtype, _get_device(device)))
+
+
+def repeat(x: Tensor, repeats: int, axis: int = -1) -> Tensor:
+    return Tensor(_dsc_repeat(_get_ctx(), x.c_ptr, repeats, axis))
 
 
 def randn(

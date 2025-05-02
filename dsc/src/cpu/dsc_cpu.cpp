@@ -60,6 +60,9 @@ void dsc_cpu_cast(dsc_device *dev,
         case I32:
             cast_op<i32>(dev, x, out);
             break;
+        case BF16:
+            cast_op<bf16>(dev, x, out);
+            break;
         case F32:
             cast_op<f32>(dev, x, out);
             break;
@@ -82,16 +85,54 @@ static DSC_INLINE void assign_op(dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_cpu_arange(dsc_device *, dsc_tensor *DSC_RESTRICT x) {
+void dsc_cpu_arange(dsc_device *,
+                    dsc_tensor *DSC_RESTRICT x,
+                    const f64 start, const f64 step) {
     switch (x->dtype) {
         case I32:
-            assign_op<i32>(x, 0, 1);
+            assign_op<i32>(x, (i32) start, (i32) step);
             break;
         case F32:
-            assign_op<f32>(x, 0.f, 1.f);
+            assign_op<f32>(x, (f32) start, (f32) step);
             break;
         case F64:
-            assign_op<f64>(x, 0, 1);
+            assign_op<f64>(x, start, step);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
+    }
+}
+
+template<typename T>
+static DSC_INLINE void repeat(const dsc_tensor *DSC_RESTRICT x,
+                              dsc_tensor *DSC_RESTRICT out,
+                              const int repeats, const int axis_idx) {
+    DSC_DATA(T, x);
+    DSC_DATA(T, out);
+
+    dsc_axis_iterator x_it(x, axis_idx), out_it(out, axis_idx);
+    while (x_it.has_next()) {
+        const int x_idx = x_it.index();
+        const T x_val = x_data[x_idx];
+
+        for (int i = 0; i < repeats; ++i) {
+            out_data[out_it.index()] = x_val;
+            out_it.next();
+        }
+
+        x_it.next();
+    }
+}
+
+void dsc_cpu_repeat(dsc_device *,
+                    const dsc_tensor *DSC_RESTRICT x,
+                    dsc_tensor *DSC_RESTRICT out,
+                    const int repeats, const int axis_idx) {
+    switch (x->dtype) {
+        case F32:
+            repeat<f32>(x, out, repeats, axis_idx);
+            break;
+        case F64:
+            repeat<f64>(x, out, repeats, axis_idx);
             break;
         DSC_INVALID_CASE("unknown dtype=%d", x->dtype);
     }
@@ -195,17 +236,20 @@ static DSC_INLINE void multinomial(const dsc_tensor *DSC_RESTRICT x,
     DSC_DATA(i32, out);
 
     const int rows = dsc_tensor_get_dim(x, -2);
-    const int cols = dsc_tensor_get_dim(x, -1);
+    const int x_cols = dsc_tensor_get_dim(x, -1);
+    const int out_cols = dsc_tensor_get_dim(out, -1);
 
     std::random_device rd;
     std::mt19937 rng(rd());
     for (int i = 0; i < rows; ++i) {
         // Create a discrete distribution using the probabilities (x[i, 0], ..., x[i, cols - 1])
-        std::discrete_distribution<> dist(&x_data[i * cols], &x_data[(i+1) * cols]);
+        std::discrete_distribution<> dist(&x_data[i * x_cols], &x_data[(i+1) * x_cols]);
 
         // Sample num_samples values from the distribution
         for (int sample = 0; sample < num_samples; ++sample) {
-            out_data[i * cols + sample] = dist(rng);
+            const int o = dist(rng);
+            // printf("sampled %d\n", o);
+            out_data[i * out_cols + sample] = o;
         }
     }
 }
@@ -673,6 +717,94 @@ void dsc_cpu_masked_fill(dsc_device *,
     }
 }
 
+template <typename T>
+static DSC_INLINE void outer(const dsc_tensor *DSC_RESTRICT xa,
+                             const dsc_tensor *DSC_RESTRICT xb,
+                             dsc_tensor *DSC_RESTRICT out) {
+    DSC_DATA(T, xa);
+    DSC_DATA(T, xb);
+    DSC_DATA(T, out);
+
+    for (int i = 0; i < xa->ne; ++i) {
+        for (int j = 0; j < xb->ne; ++j) {
+            out_data[i * xb->ne + j] = cpu_mul_op()(xa_data[i], xb_data[j]);
+        }
+    }
+}
+
+void dsc_cpu_outer(dsc_device *,
+                   const dsc_tensor *DSC_RESTRICT xa,
+                   const dsc_tensor *DSC_RESTRICT xb,
+                   dsc_tensor *DSC_RESTRICT out) {
+    switch (xa->dtype) {
+        case BOOL:
+            outer<bool>(xa, xb, out);
+            break;
+        case I32:
+            outer<i32>(xa, xb, out);
+            break;
+        case F32:
+            outer<f32>(xa, xb, out);
+            break;
+        case F64:
+            outer<f64>(xa, xb, out);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", xa->dtype);
+    }
+}
+
+template<typename T>
+static DSC_INLINE void where(const dsc_tensor *DSC_RESTRICT condition,
+                             const dsc_tensor *DSC_RESTRICT input,
+                             const dsc_tensor *DSC_RESTRICT other,
+                             dsc_tensor *DSC_RESTRICT out) {
+    DSC_DATA(bool, condition);
+    DSC_DATA(T, input);
+    DSC_DATA(T, other);
+    DSC_DATA(T, out);
+
+    const bool input_scalar = dsc_is_scalar(input);
+    const bool other_scalar = dsc_is_scalar(other);
+
+    const T in_scalar_val = input_data[0];
+    const T oth_scalar_val = other_data[0];
+
+    dsc_broadcast_iterator cond_it(condition, out->shape);
+
+    dsc_for(i, out) {
+        const int idx = cond_it.index();
+        if (condition_data[idx]) {
+            out_data[i] = input_scalar ? in_scalar_val : input_data[idx];
+        } else {
+            out_data[i] = other_scalar ? oth_scalar_val : other_data[idx];
+        }
+        cond_it.next();
+    }
+}
+
+void dsc_cpu_where(dsc_device *,
+                   const dsc_tensor *DSC_RESTRICT condition,
+                   const dsc_tensor *DSC_RESTRICT input,
+                   const dsc_tensor *DSC_RESTRICT other,
+                   dsc_tensor *DSC_RESTRICT out) {
+    switch (input->dtype) {
+        case BOOL:
+            where<bool>(condition, input, other, out);
+            break;
+        case I32:
+            where<i32>(condition, input, other, out);
+            break;
+        case F32:
+            where<f32>(condition, input, other, out);
+            break;
+        case F64:
+            where<f64>(condition, input, other, out);
+            break;
+        DSC_INVALID_CASE("unknown dtype=%d", input->dtype);
+    }
+}
+
+
 void dsc_cpu_matmul(dsc_device *dev,
                     const dsc_tensor *DSC_RESTRICT xa,
                     const dsc_tensor *DSC_RESTRICT xb,
@@ -697,7 +829,6 @@ void dsc_cpu_matmul(dsc_device *dev,
     const int xb_stride_d0 = xb->shape[0] != d0_out ? 0 : xb->stride[0];
     const int xb_stride_d1 = xb->shape[1] != d1_out ? 0 : xb->stride[1];
 
-    // Packed buffers
     switch (xa->dtype) {
         case F32: {
             DSC_DATA(f32, xa);

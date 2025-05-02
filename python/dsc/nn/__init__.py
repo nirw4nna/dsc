@@ -4,7 +4,7 @@
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
 
-from ..tensor import Tensor, sum, max, tanh, exp, power, matmul
+from ..tensor import Tensor, power, matmul, rsqrt
 from ..dtype import Dtype
 from ..device import Device
 from .._bindings import _dsc_new_tensor
@@ -12,9 +12,9 @@ from ..context import _get_ctx
 from ..profiler import trace
 from typing import Iterator, Dict, Iterable, Any, Tuple, Callable, Optional, OrderedDict, Mapping, List
 from abc import ABC, abstractmethod
-import math
 from tqdm import tqdm
 from .utils import safe_load
+from . import functional
 
 
 class Parameter(Tensor):
@@ -100,10 +100,10 @@ class Module(ABC):
                 pbar.update(1)
 
     @abstractmethod
-    def forward(self, *args, **kwargs) -> Tensor:
+    def forward(self, *args, **kwargs):
         pass
 
-    def __call__(self, *args, **kwargs) -> Tensor:
+    def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
 class ModuleList(Module):
@@ -166,6 +166,18 @@ class LayerNorm(Module):
     
         return out
 
+class RMSNorm(Module):
+    def __init__(self, in_shape: int, epsilon: float = 1e-6):
+        super().__init__()
+        self.epsilon = epsilon
+        self.weight = Parameter((in_shape, ))
+
+    @trace('RMSNorm')
+    def forward(self, x: Tensor) -> Tensor:
+        var = power(x, 2).mean(-1, keepdims=True)
+        out = x * rsqrt(var + self.epsilon)
+        return out * self.weight
+
 class Embedding(Module):
     def __init__(self, num_embeddings: int, embedding_size: int):
         super().__init__()
@@ -173,15 +185,3 @@ class Embedding(Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return self.weight[x]
-
-
-@trace('gelu')
-def gelu(x: Tensor) -> Tensor:
-    return 0.5 * x * (1.0 + tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * power(x, 3))))
-
-
-@trace('softmax')
-def softmax(x: Tensor, axis: int = -1) -> Tensor:
-    e = exp((x - max(x, axis=axis, keepdims=True)))
-    sum_e = sum(e, axis=axis, keepdims=True)
-    return e / sum_e

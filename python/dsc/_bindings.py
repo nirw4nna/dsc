@@ -362,17 +362,31 @@ _lib.dsc_wrap_f64.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_arange(dsc_ctx *ctx,
-#                               int n,
+#                               f64 stop,
+#                               f64 start,
+#                               f64 step,
 #                               dsc_dtype dtype = I32,
 #                               dsc_device_type device = DEFAULT);
 def _dsc_arange(
-    ctx: _DscCtx, n: int, dtype: Dtype, device: Device
+    ctx: _DscCtx, stop: float, start: float, step: float, dtype: Dtype, device: Device
 ) -> _DscTensor_p:
-    return _lib.dsc_arange(ctx, c_int(n), c_uint8(dtype.value), c_int8(device.value))
+    return _lib.dsc_arange(ctx, c_double(stop), c_double(start), c_double(step), c_uint8(dtype.value), c_int8(device.value))
 
 
-_lib.dsc_arange.argtypes = [_DscCtx, c_int, c_uint8, c_int8]
+_lib.dsc_arange.argtypes = [_DscCtx, c_double, c_double, c_double, c_uint8, c_int8]
 _lib.dsc_arange.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_repeat(dsc_ctx *ctx,
+#                               const dsc_tensor *DSC_RESTRICT x,
+#                               int repeats,
+#                               int axis = -1);
+def _dsc_repeat(ctx: _DscCtx, x: _DscTensor_p, repeats: int, axis: int) -> _DscTensor_p:
+    return _lib.dsc_repeat(ctx, x, c_int(repeats), c_int(axis))
+
+
+_lib.dsc_repeat.argtypes = [_DscCtx, _DscTensor_p, c_int,c_int]
+_lib.dsc_repeat.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_randn(dsc_ctx *ctx,
@@ -395,11 +409,11 @@ _lib.dsc_randn.argtypes = [_DscCtx, c_int, POINTER(c_int), c_uint8, c_int8]
 _lib.dsc_randn.restype = _DscTensor_p
 
 
-# extern dsc_tensor *dsc_topk(dsc_ctx *ctx,
-#                             const dsc_tensor *DSC_RESTRICT x,
-#                             int k,
-#                             int axis = -1,
-#                             bool largest = true);
+# extern dsc_pair dsc_topk(dsc_ctx *ctx,
+#                          const dsc_tensor *DSC_RESTRICT x,
+#                          int k,
+#                          int axis = -1,
+#                          bool largest = true);
 def _dsc_topk(
         ctx: _DscCtx,
         x: _DscTensor_p,
@@ -539,6 +553,34 @@ def _dsc_masked_fill(
 _lib.dsc_masked_fill.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_double]
 _lib.dsc_masked_fill.restype = None
 
+
+# extern dsc_tensor *dsc_outer(dsc_ctx *ctx,
+#                              dsc_tensor *DSC_RESTRICT xa,
+#                              dsc_tensor *DSC_RESTRICT xb,
+#                              dsc_tensor *DSC_RESTRICT out);
+def _dsc_outer(
+        ctx: _DscCtx, xa: _DscTensor_p, xb: _DscTensor_p, out: _OptionalTensor
+) -> _DscTensor_p:
+    return _lib.dsc_outer(ctx, xa, xb, out)
+
+
+_lib.dsc_outer.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, _DscTensor_p]
+_lib.dsc_outer.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_where(dsc_ctx *ctx,
+#                               const dsc_tensor *DSC_RESTRICT condition,
+#                               const dsc_tensor *DSC_RESTRICT input,
+#                               const dsc_tensor *DSC_RESTRICT other,
+#                               dsc_tensor *DSC_RESTRICT out = nullptr);
+def _dsc_where(
+        ctx: _DscCtx, condition: _DscTensor_p, input: _DscTensor_p, other: _DscTensor_p, out: _OptionalTensor
+) -> _DscTensor_p:
+    return _lib.dsc_where(ctx, condition, input, other, out)
+
+
+_lib.dsc_where.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, _DscTensor_p, _DscTensor_p]
+_lib.dsc_where.restype = _DscTensor_p
 
 # extern dsc_tensor *dsc_cast(dsc_ctx *ctx,
 #                             dsc_tensor *__restrict x,

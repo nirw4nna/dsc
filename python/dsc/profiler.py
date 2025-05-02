@@ -56,7 +56,8 @@ def stop_recording(dump: bool = True, serve: bool = False):
         _serve_traces()
 
 def _is_tracing_enabled() -> bool:
-    return bool(_dsc_tracing_enabled(_get_ctx()))
+    # TODO: should I just remove ctx?
+    return bool(_dsc_tracing_enabled(None))
 
 @contextmanager
 def profile(serve: bool = True):

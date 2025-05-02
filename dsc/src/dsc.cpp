@@ -399,13 +399,39 @@ dsc_tensor *dsc_wrap_f64(dsc_ctx *ctx, const f64 val,
 }
 
 dsc_tensor *dsc_arange(dsc_ctx *ctx,
-                       const int n,
+                       const f64 stop,
+                       const f64 start,
+                       const f64 step,
                        const dsc_dtype dtype,
                        const dsc_device_type device) {
-    DSC_TRACE_ARANGE_OP(n, dtype);
+    DSC_TRACE_ARANGE_OP(start, stop, step, dtype);
 
-    dsc_tensor *out = dsc_tensor_1d(ctx, dtype, n, device);
-    DSC_DISPATCH(device, arange, out);
+    const int ne = DSC_CEIL((stop - start), step);
+    dsc_tensor *out = dsc_tensor_1d(ctx, dtype, ne, device);
+
+    DSC_DISPATCH(device, arange, out, start, step);
+
+    return out;
+}
+
+dsc_tensor *dsc_repeat(dsc_ctx *ctx,
+                       const dsc_tensor *DSC_RESTRICT x,
+                       const int repeats,
+                       const int axis) {
+    DSC_ASSERT(x != nullptr);
+    DSC_ASSERT(repeats > 1);
+
+    DSC_TRACE_REPEAT_OP(x, repeats, axis);
+
+    const int axis_idx = dsc_tensor_dim_idx(x, axis);
+
+    int out_shape[DSC_MAX_DIMS];
+    for (int i = 0; i < DSC_MAX_DIMS; ++i) out_shape[i] = (i == axis_idx) ? (x->shape[i] * repeats) : x->shape[i];
+
+    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], x->dtype, x->device);
+
+    DSC_DISPATCH(x->device, repeat, x, out, repeats, axis_idx);
+
     return out;
 }
 
@@ -1178,6 +1204,78 @@ void dsc_masked_fill(dsc_ctx *ctx,
     }
 
     DSC_DISPATCH(x->device, masked_fill, x, mask, value);
+}
+
+dsc_tensor *dsc_outer(dsc_ctx *ctx,
+                      dsc_tensor *DSC_RESTRICT xa,
+                      dsc_tensor *DSC_RESTRICT xb,
+                      dsc_tensor *DSC_RESTRICT out) {
+    DSC_ASSERT(xa != nullptr);
+    DSC_ASSERT(xb != nullptr);
+    // For now only support 1D vectors
+    DSC_ASSERT(xa->n_dim == 1);
+    DSC_ASSERT(xb->n_dim == 1);
+    DSC_ASSERT(xa->device == xb->device);
+
+    DSC_TRACE_OUTER_OP(xa, xb, out);
+
+    const dsc_dtype out_dtype = DSC_DTYPE_CONVERSION_TABLE[xa->dtype][xb->dtype];
+
+    const int out_shape[] = {dsc_tensor_get_dim(xa, 0), dsc_tensor_get_dim(xb, 0)};
+
+    if (out != nullptr) {
+        DSC_ASSERT(out->dtype == out_dtype);
+        DSC_ASSERT(out->n_dim == 2);
+        DSC_ASSERT(dsc_tensor_get_dim(out, 0) == out_shape[0] && dsc_tensor_get_dim(out, 1) == out_shape[1]);
+    } else {
+        out = dsc_new_tensor(ctx, 2, out_shape, out_dtype, xa->device);
+    }
+
+    cast_binary_params();
+
+    DSC_DISPATCH(xa->device, outer, xa, xb, out);
+
+    cleanup_binary_params();
+
+    return out;
+}
+
+dsc_tensor *dsc_where(dsc_ctx *ctx,
+                      const dsc_tensor *DSC_RESTRICT condition,
+                      const dsc_tensor *DSC_RESTRICT input,
+                      const dsc_tensor *DSC_RESTRICT other,
+                      dsc_tensor *DSC_RESTRICT out) {
+    DSC_ASSERT(condition != nullptr);
+    DSC_ASSERT(condition->dtype == BOOL);
+    DSC_ASSERT(input != nullptr);
+    DSC_ASSERT(other != nullptr);
+    DSC_ASSERT(can_broadcast(condition, input));
+    DSC_ASSERT(can_broadcast(condition, other));
+    DSC_ASSERT(input->dtype == other->dtype);
+    DSC_ASSERT(condition->device == input->device);
+    DSC_ASSERT(condition->device == other->device);
+
+    DSC_TRACE_WHERE_OP(condition, input, other, out);
+
+    int out_shape[DSC_MAX_DIMS];
+    for (int i = 0; i < DSC_MAX_DIMS; ++i) out_shape[i] = DSC_MAX(DSC_MAX(condition->shape[i], input->shape[i]), other->shape[i]);
+
+    const dsc_dtype out_dtype = input->dtype;
+    const dsc_device_type out_device = condition->device;
+    const int out_ndim = DSC_MAX(DSC_MAX(condition->n_dim, input->n_dim), other->n_dim);
+
+    if (out == nullptr) {
+        out = dsc_new_tensor(ctx, out_ndim, &out_shape[DSC_MAX_DIMS - out_ndim], out_dtype, out_device);
+    } else {
+        DSC_ASSERT(out->n_dim == out_ndim);
+        DSC_ASSERT(out->dtype == out_dtype);
+        DSC_ASSERT(out->device == out_device);
+        DSC_ASSERT(memcmp(out, out_shape, DSC_MAX_DIMS * sizeof(*out->shape)) == 0);
+    }
+
+    DSC_DISPATCH(out_device, where, condition, input, other, out);
+
+    return out;
 }
 
 // ============================================================

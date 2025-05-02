@@ -77,6 +77,27 @@
     args__.value = (value_);               \
     DSC_INSERT_TYPED_TRACE(dsc_mask_args, "op;mask", DSC_MASK_OP)
 
+#define DSC_TRACE_OUTER_OP(XA, XB, OUT) \
+    dsc_outer_args args__{};            \
+    DSC_TRACE_SET_TENSOR(XA, xa);       \
+    DSC_TRACE_SET_TENSOR(XB, xb);       \
+    if ((OUT) != nullptr) {             \
+        DSC_TRACE_SET_TENSOR(OUT, out); \
+    }                                   \
+    args__.with_out = (OUT) != nullptr; \
+    DSC_INSERT_TYPED_TRACE(dsc_outer_args, "op;outer", DSC_OUTER_OP)
+
+#define DSC_TRACE_WHERE_OP(CONDITION, INPUT, OTHER, OUT) \
+    dsc_where_args args__{};                             \
+    DSC_TRACE_SET_TENSOR(CONDITION, condition);          \
+    DSC_TRACE_SET_TENSOR(INPUT, input);                  \
+    DSC_TRACE_SET_TENSOR(OTHER, other);                  \
+    if ((OUT) != nullptr) {                              \
+        DSC_TRACE_SET_TENSOR(OUT, out);                  \
+    }                                                    \
+    args__.with_out = (OUT) != nullptr;                  \
+    DSC_INSERT_TYPED_TRACE(dsc_where_args, "op;where", DSC_WHERE_OP)
+
 #define DSC_TRACE_UNARY_OP(X, OUT)      \
     dsc_unary_args args__{};            \
     DSC_TRACE_SET_TENSOR(X, x);         \
@@ -160,11 +181,20 @@
     args__.num_samples = (num_samples_);          \
     DSC_INSERT_TYPED_TRACE(dsc_multinomial_args, "op;multinomial", DSC_MULTINOMIAL_OP)
 
-#define DSC_TRACE_ARANGE_OP(n_, dtype_) \
-    dsc_arange_args args__{};           \
-    args__.n = (n_);                    \
-    args__.dtype = (dtype_);            \
+#define DSC_TRACE_ARANGE_OP(start_, stop_, step_, dtype_) \
+    dsc_arange_args args__{};                             \
+    args__.start = (start_);                              \
+    args__.stop = (stop_);                                \
+    args__.step = (step_);                                \
+    args__.dtype = (dtype_);                              \
     DSC_INSERT_TYPED_TRACE(dsc_arange_args, "op;arange", DSC_ARANGE_OP)
+
+#define DSC_TRACE_REPEAT_OP(X, repeats_, axis_) \
+    dsc_repeat_args args__{};                   \
+    DSC_TRACE_SET_TENSOR(X, x);                 \
+    args__.repeats = (repeats_);                \
+    args__.axis = (axis_);                      \
+    DSC_INSERT_TYPED_TRACE(dsc_repeat_args, "op;repeat", DSC_REPEAT_OP)
 
 #define DSC_TRACE_COPY_OP(X, data_, nb_, data_device_) \
     dsc_copy_args args__{};                            \
@@ -251,6 +281,8 @@ enum dsc_trace_type : u8 {
     DSC_BINARY_OP,
     DSC_MATMUL_OP,
     DSC_MASK_OP,
+    DSC_OUTER_OP,
+    DSC_WHERE_OP,
     DSC_GET_IDX,
     DSC_GET_SLICE,
     DSC_GET_TENSOR,
@@ -261,6 +293,7 @@ enum dsc_trace_type : u8 {
     DSC_TOPK_OP,
     DSC_MULTINOMIAL_OP,
     DSC_ARANGE_OP,
+    DSC_REPEAT_OP,
     DSC_COPY_OP,
     DSC_CONCAT_OP,
     DSC_TRANSPOSE_OP,
@@ -341,6 +374,40 @@ struct dsc_mask_args {
         mask.dump(f);
         snprintf(value_str, 16, "%f", value);
         fprintf(f, R"(, "value": "%s")", value_str);
+    }
+};
+
+struct dsc_outer_args {
+    dsc_tensor_args xa, xb, out;
+    bool with_out;
+
+    DUMP() {
+        fprintf(f, R"("xa": )");
+        xa.dump(f);
+        fprintf(f, R"(, "xb": )");
+        xb.dump(f);
+        if (with_out) {
+            fprintf(f, R"(, "out": )");
+            out.dump(f);
+        }
+    }
+};
+
+struct dsc_where_args {
+    dsc_tensor_args condition, input, other, out;
+    bool with_out;
+
+    DUMP() {
+        fprintf(f, R"("cond": )");
+        condition.dump(f);
+        fprintf(f, R"(, "input": )");
+        input.dump(f);
+        fprintf(f, R"(, "other": )");
+        other.dump(f);
+        if (with_out) {
+            fprintf(f, R"(, "out": )");
+            out.dump(f);
+        }
     }
 };
 
@@ -487,11 +554,23 @@ struct dsc_multinomial_args {
 };
 
 struct dsc_arange_args {
-    int n;
+    f64 start, stop, step;
     dsc_dtype dtype;
 
     DUMP() {
-        fprintf(f, R"("n": %d, "dtype": "%s")", n, DSC_DTYPE_NAMES[dtype]);
+        fprintf(f, R"("start": %.1f, "stop": %.1f, "step":%.1f, "dtype": "%s")",
+                start, stop, step, DSC_DTYPE_NAMES[dtype]);
+    }
+};
+
+struct dsc_repeat_args {
+    dsc_tensor_args x;
+    int repeats, axis;
+
+    DUMP() {
+        fprintf(f, R"("x": )");
+        x.dump(f);
+        fprintf(f, R"("repeats": %d, "axis": %d)", repeats, axis);
     }
 };
 
@@ -548,6 +627,8 @@ struct dsc_trace {
         dsc_binary_args binary;
         dsc_matmul_args matmul;
         dsc_mask_args mask;
+        dsc_outer_args outer;
+        dsc_where_args where;
         dsc_get_idx_args get_idx;
         dsc_get_slice_args get_slice;
         dsc_get_tensor_args get_tensor;
@@ -558,6 +639,7 @@ struct dsc_trace {
         dsc_topk_args topk;
         dsc_multinomial_args multinomial;
         dsc_arange_args arange;
+        dsc_repeat_args repeat;
         dsc_copy_args copy;
         dsc_concat_args concat;
         dsc_transpose_args transpose;
@@ -601,6 +683,8 @@ DSC_INLINE void dump_trace(dsc_trace_ctx *ctx, const dsc_trace *trace) {
             TYPED_DUMP(DSC_BINARY_OP, binary);
             TYPED_DUMP(DSC_MATMUL_OP, matmul);
             TYPED_DUMP(DSC_MASK_OP, mask);
+            TYPED_DUMP(DSC_OUTER_OP, outer);
+            TYPED_DUMP(DSC_WHERE_OP, where);
             TYPED_DUMP(DSC_GET_IDX, get_idx);
             TYPED_DUMP(DSC_GET_SLICE, get_slice);
             TYPED_DUMP(DSC_GET_TENSOR, get_tensor);
@@ -611,6 +695,7 @@ DSC_INLINE void dump_trace(dsc_trace_ctx *ctx, const dsc_trace *trace) {
             TYPED_DUMP(DSC_TOPK_OP, topk);
             TYPED_DUMP(DSC_MULTINOMIAL_OP, multinomial);
             TYPED_DUMP(DSC_ARANGE_OP, arange);
+            TYPED_DUMP(DSC_REPEAT_OP, repeat);
             TYPED_DUMP(DSC_COPY_OP, copy);
             TYPED_DUMP(DSC_CONCAT_OP, concat);
             TYPED_DUMP(DSC_TRANSPOSE_OP, transpose);
@@ -639,6 +724,8 @@ DSC_INLINE void fill_trace(dsc_trace *trace, const char *name,
     TYPED_FILL(binary, dsc_binary_args)
     TYPED_FILL(matmul, dsc_matmul_args)
     TYPED_FILL(mask, dsc_mask_args)
+    TYPED_FILL(outer, dsc_outer_args)
+    TYPED_FILL(where, dsc_where_args)
     TYPED_FILL(unary, dsc_unary_args)
     TYPED_FILL(unary_axis, dsc_unary_axis_args)
     TYPED_FILL(cast, dsc_cast_args)
@@ -654,6 +741,7 @@ DSC_INLINE void fill_trace(dsc_trace *trace, const char *name,
     TYPED_FILL(topk, dsc_topk_args)
     TYPED_FILL(multinomial, dsc_multinomial_args)
     TYPED_FILL(arange, dsc_arange_args)
+    TYPED_FILL(repeat, dsc_repeat_args)
 }
 }
 
@@ -748,6 +836,8 @@ using dsc_trace_ctx = nullptr_t;
 #define DSC_TRACE_BINARY_OP(XA, XB, OUT)                        ((void) 0)
 #define DSC_TRACE_MATMUL(XA, XB, trans_b_, OUT, is_gevm_)       ((void) 0)
 #define DSC_TRACE_MASK_OP(X, MASK, value_)                      ((void) 0)
+#define DSC_TRACE_OUTER_OP(XA, XB, OUT)                         ((void) 0)
+#define DSC_TRACE_WHERE_OP(CONDITION, INPUT, OTHER, OUT)        ((void) 0)
 #define DSC_TRACE_UNARY_OP(X, OUT)                              ((void) 0)
 #define DSC_TRACE_UNARY_AXIS_OP(X, OUT, axis_, keep_dims_)      ((void) 0)
 #define DSC_TRACE_GET_IDX(X, indexes_, n_indexes_)              ((void) 0)
@@ -759,7 +849,8 @@ using dsc_trace_ctx = nullptr_t;
 #define DSC_TRACE_RANDN_OP(shape_, n_dim_, dtype_)              ((void) 0)
 #define DSC_TRACE_TOPK_OP(X, k_, axis_, largest_)               ((void) 0)
 #define DSC_TRACE_MULTINOMIAL_OP(X, num_samples_)               ((void) 0)
-#define DSC_TRACE_ARANGE_OP(n_, dtype_)                         ((void) 0)
+#define DSC_TRACE_ARANGE_OP(start_, stop_, step_, dtype_)       ((void) 0)
+#define DSC_TRACE_REPEAT_OP(X, repeats_, axis_)                 ((void) 0)
 #define DSC_TRACE_COPY_OP(X, data_, nb_, data_device_)          ((void) 0)
 #define DSC_TRACE_CONCAT_OP(tensors_, axis_)                    ((void) 0)
 #define DSC_TRACE_TRANSPOSE_OP(X, swap_axes_)                   ((void) 0)
