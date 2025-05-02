@@ -30,6 +30,11 @@ class Dtype(Enum):
     def from_string(val: str) -> 'Dtype':
         return TYPENAME_REVERSE_LOOKUP[val.lower()]
 
+bool_ = Dtype.BOOL
+i32 = Dtype.I32
+bf16 = Dtype.BF16
+f32 = Dtype.F32
+f64 = Dtype.F64
 
 DTYPE_VALUE_LOOKUP = {val.value: val for val in Dtype.__members__.values()}
 

@@ -55,8 +55,8 @@ class MLP(nn.Module):
 
 
 def _pre_compute_freqs(dim: int, theta: float, max_seq_len: int) -> Tuple[dsc.Tensor, dsc.Tensor]:
-    freqs = 1.0 / (theta ** ((dsc.arange(start=0, stop=dim, step=2)[: (dim // 2)]).cast(dsc.Dtype.F32) / dim))
-    t = dsc.arange(stop=max_seq_len, dtype=dsc.Dtype.F32)
+    freqs = 1.0 / (theta ** ((dsc.arange(start=0, stop=dim, step=2)[: (dim // 2)]).cast(dsc.f32) / dim))
+    t = dsc.arange(stop=max_seq_len, dtype=dsc.f32)
     freqs = dsc.outer(t, freqs)
     cos_cache_half = dsc.cos(freqs)
     sin_cache_half = dsc.sin(freqs)
@@ -209,7 +209,7 @@ class Qwen25Model(nn.Module):
     def from_pretrained(config: Config = Config()) -> 'Qwen25Model':
         state_dict = nn.safe_load('https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct/resolve/main/model.safetensors',
                                   trim_prefix='model.',
-                                  use_dtype=dsc.Dtype.F32)
+                                  use_dtype=dsc.f32)
         model = Qwen25Model(config)
         model.from_state(state_dict,
                          tied={'lm_head.weight': 'embed_tokens.weight'})
@@ -274,7 +274,7 @@ class Qwen25Model(nn.Module):
 
             input_ids = next_token_id
             # TODO: need a fast way of generating a tensor from a scalar
-            position_ids = dsc.tensor([current_len], dtype=dsc.Dtype.I32).reshape(1, -1)
+            position_ids = dsc.tensor([current_len], dtype=dsc.i32).reshape(1, -1)
 
             # Run forward with caching
             logits, next_past_key_values = self(
@@ -325,5 +325,5 @@ if __name__ == '__main__':
 
     model_input_ids = dsc.from_numpy(model_inputs.input_ids.astype(np.int32))
 
-    with dsc.profile():
-        generated_ids = model.generate(model_input_ids, tokenizer, max_new_tokens=max_tokens, top_k=top_k)
+    # with dsc.profile():
+    model.generate(model_input_ids, tokenizer, max_new_tokens=max_tokens, top_k=top_k)

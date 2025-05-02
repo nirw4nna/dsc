@@ -45,10 +45,10 @@ def random_nd(shape: List[int], dtype: np.dtype = np.float64):
 
 DTYPES = [np.bool, np.int32, np.float32, np.float64]
 DSC_DTYPES = {
-    np.bool: dsc.Dtype.BOOL,
-    np.int32: dsc.Dtype.I32,
-    np.float32: dsc.Dtype.F32,
-    np.float64: dsc.Dtype.F64,
+    np.bool: dsc.bool_,
+    np.int32: dsc.i32,
+    np.float32: dsc.f32,
+    np.float64: dsc.f64,
 }
 
 def is_float(dtype) -> bool:

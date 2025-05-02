@@ -213,4 +213,4 @@ if __name__ == '__main__':
     MAX_TOKENS = 50
 
     idx = tokenizer.encode(prompt)
-    response_tokens = model.generate(dsc.tensor(idx, dtype=dsc.Dtype.I32).reshape(1, -1), tokenizer=tokenizer, max_new_tokens=MAX_TOKENS)
+    response_tokens = model.generate(dsc.tensor(idx, dtype=dsc.i32).reshape(1, -1), tokenizer=tokenizer, max_new_tokens=MAX_TOKENS)
