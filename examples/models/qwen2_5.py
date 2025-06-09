@@ -224,7 +224,7 @@ class Qwen25Model(nn.Module):
         past_key_values: Optional[Cache] = None,
         use_cache: bool = True
     ) -> Tuple[dsc.Tensor, Optional[Cache]]:
-        h = self.embed_tokens(x)
+        h = self.embed_tokens(x.to('cpu'))
 
         next_kv_caches = [] if use_cache else None
         for i, layer in enumerate(self.layers):
@@ -248,7 +248,7 @@ class Qwen25Model(nn.Module):
         prompt_tokens = idx.reshape(1, -1)
         prompt_len = prompt_tokens.size(1)
 
-        prompt_position_ids = dsc.arange(stop=prompt_len).reshape(1, -1)
+        prompt_position_ids = dsc.arange(stop=prompt_len, device='cpu').reshape(1, -1)
         # Run forward without caching
         logits, past_key_values = self(prompt_tokens, position_ids=prompt_position_ids, past_key_values=None)
         next_token_logits = logits[:, -1, :]
@@ -274,8 +274,7 @@ class Qwen25Model(nn.Module):
             print(tokenizer.decode(tok_id_scalar, skip_special_tokens=True), end='', flush=True)
 
             input_ids = next_token_id
-            # TODO: need a fast way of generating a tensor from a scalar
-            position_ids = dsc.tensor([current_len], dtype=dsc.i32).reshape(1, -1)
+            position_ids = dsc.tensor([current_len], dtype=dsc.i32, device='cpu').reshape(1, -1)
 
             # Run forward with caching
             logits, next_past_key_values = self(
@@ -284,7 +283,7 @@ class Qwen25Model(nn.Module):
                 past_key_values=past_key_values
             )
             past_key_values = next_past_key_values
-            next_token_logits = logits[:, -1, :]
+            next_token_logits = logits[:, -1, :] # Note: this is probably useless
             current_len += 1
 
         generation_stop = perf_counter()
@@ -299,18 +298,18 @@ class Qwen25Model(nn.Module):
 
 
 if __name__ == '__main__':
-    dsc.init(5*2**30)
     cli = argparse.ArgumentParser(description='QWEN 2.5 inference CLI')
     cli.add_argument('prompt', type=str, help='Model prompt')
     cli.add_argument('-n', type=int, default=100, help='Tokens to generate (default=100)')
     cli.add_argument('-top-k', type=int, default=10, help='Top K sampling (default=10)')
+    cli.add_argument('--device', choices=['cpu', 'cuda'], default='cpu', help='Device on which to run the model')
 
     args = cli.parse_args()
 
+    dsc.set_default_device(args.device)
     prompt = args.prompt
     max_tokens = args.n
     top_k = args.top_k
-
     model = Qwen25Model.from_pretrained()
     tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen2.5-Coder-0.5B-Instruct')
     messages = [
@@ -324,6 +323,6 @@ if __name__ == '__main__':
     )
     model_inputs = tokenizer([tokens], return_tensors="np")
 
-    model_input_ids = dsc.from_numpy(model_inputs.input_ids.astype(np.int32))
+    model_input_ids = dsc.from_numpy(model_inputs.input_ids.astype(np.int32), device='cpu')
 
     model.generate(model_input_ids, tokenizer, max_new_tokens=max_tokens, top_k=top_k)

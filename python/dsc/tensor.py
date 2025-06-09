@@ -34,6 +34,7 @@ from ._bindings import (
     _dsc_tensor_set_buffer,
     _dsc_view,
     _dsc_copy,
+    _dsc_to,
     _dsc_wrap_bool,
     _dsc_wrap_i32,
     _dsc_wrap_f32,
@@ -82,7 +83,8 @@ def _unwrap(x: 'Tensor') -> Union[ScalarType, 'Tensor']:
     # If x is not wrapping a single value return it
     if x.n_dim != 1 or len(x) != 1:
         return x
-
+    # If x is a scalar on the GPU move it to to CPU first
+    x = x.to('cpu')
     return ctypes.cast(x.data, DTYPE_TO_CTYPE[x.dtype]).contents.value
 
 
@@ -358,7 +360,9 @@ class Tensor:
         return bytes(byte_array)
 
     def numpy(self) -> np.ndarray:
-        typed_data = ctypes.cast(self.data, DTYPE_TO_CTYPE[self.dtype])
+        self_cpu = self.to('cpu')
+
+        typed_data = ctypes.cast(self_cpu.data, DTYPE_TO_CTYPE[self.dtype])
 
         # Create a copy of the underlying data buffer
         np_array = np.ctypeslib.as_array(typed_data, shape=self.shape).copy()
@@ -382,7 +386,13 @@ class Tensor:
             return self
         out_ptr = _dsc_cast(_get_ctx(), self.c_ptr, dtype)
         return Tensor(out_ptr, _pointers_are_equals(self.c_ptr, out_ptr))
-    
+
+    def to(self, device: DeviceType) -> 'Tensor':
+        device = _get_device(device)
+        if self.device == device:
+            return self
+        return Tensor(_dsc_to(_get_ctx(), self.c_ptr, device))
+
     def tobytes(self) -> bytes:
         return bytes(self)
 
@@ -809,6 +819,7 @@ def repeat(x: Tensor, repeats: int, axis: int = -1) -> Tensor:
 def randn(
     *shape: int, dtype: Dtype = Dtype.F32, device: DeviceType = Device.DEFAULT
 ) -> Tensor:
+    # TODO: (6)
     return Tensor(_dsc_randn(_get_ctx(), shape, dtype, _get_device(device)))
 
 

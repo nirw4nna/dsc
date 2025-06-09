@@ -12,8 +12,8 @@
 #include <limits>
 
 
-#define DSC_DTYPES       ((int) 5)
-#define DSC_DEFAULT_TYPE (dsc_dtype::F32)
+#define DSC_DTYPES          ((int) 5)
+#define DSC_DEFAULT_TYPE    F32
 
 
 using i8 = int8_t;

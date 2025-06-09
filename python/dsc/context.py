@@ -4,7 +4,8 @@
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
 
-from ._bindings import _dsc_ctx_init, _dsc_print_mem_usage
+from ._bindings import _dsc_ctx_init, _dsc_print_mem_usage, _dsc_set_default_device
+from .device import _get_device, DeviceType
 import psutil
 
 _ctx_instance = None
@@ -44,3 +45,6 @@ def init(mem_size: int):
 
 def print_mem_usage():
     _dsc_print_mem_usage(_get_ctx())
+
+def set_default_device(device: DeviceType):
+    _dsc_set_default_device(_get_ctx(), _get_device(device))

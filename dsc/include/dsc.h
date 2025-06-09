@@ -19,6 +19,8 @@
 //     associated tensors are freed. This will SEGFAULT! It makes  //
 //     sense to just not free the context in Python for now        //
 // (4) Evaluate the iterator approach (check codegen with godbolt) //
+// (5) Scratch buffer to allocate temporary results on a device    //
+// (6) Use the same approach to pass shape as `full`               //
 // =============================================================== //
 
 #include <cstdio>
@@ -29,11 +31,11 @@
 #if !defined(DSC_MAX_OBJS)
 #    define DSC_MAX_OBJS     ((int) 1'000)
 #endif
-#define DSC_MAX_DEVICES      ((int) 1)
+#define DSC_MAX_DEVICES      ((int) 2)
 #define DSC_DEFAULT_DEVICE   CPU
 #define DSC_COMPARISON_OPS   ((int) 6)
 
-static_assert(DSC_MAX_DEVICES == 1, "DSC_MAX_DEVICES != 1 - update the code");
+static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the code");
 
 #define DSC_ASSERT(x)                                                           \
@@ -89,7 +91,11 @@ static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the cod
 // A 'pure' function is basically the same thing without the restriction on global state change, this means
 // that a 'pure' function can take in and read the value of parameters passed by pointer even if that value
 // changes between subsequent invocations.
-#if defined(__GNUC__)
+#if defined(__NVCC__)
+#    define DSC_INLINE           __forceinline__
+#    define DSC_STRICTLY_PURE    __attribute__((const))
+#    define DSC_PURE             __attribute__((pure))
+#elif defined(__GNUC__)
 #    define DSC_INLINE          inline __attribute__((always_inline))
 #    define DSC_STRICTLY_PURE   __attribute__((const))
 #    define DSC_PURE            __attribute__((pure))
@@ -116,6 +122,7 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 #define dsc_tensor_get_dim(X, dim)    ((X)->shape[dsc_tensor_dim_idx((X), (dim))])
 #define dsc_tensor_get_stride(X, dim) ((X)->stride[dsc_tensor_dim_idx((X), (dim))])
 #define dsc_new_like(CTX, X)          (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (X)->device))
+#define dsc_copy_of(CTX, X, dev)      (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (dev), nullptr, false, (X)->buf->data, (X)->device))
 #define dsc_new_view(CTX, X)          (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (X)->device, (X)->buf))
 #define dsc_for(idx, X)               for (int idx = 0; idx < (X)->ne; ++idx)
 #define dsc_is_scalar(X)              (X)->ne == 1
@@ -137,10 +144,12 @@ struct dsc_traces {
 enum dsc_device_type : i8 {
     DEFAULT = -1,
     CPU,
+    CUDA,
 };
 
 static constexpr const char *DSC_DEVICE_NAMES[DSC_MAX_DEVICES] = {
         "CPU",
+        "CUDA",
 };
 
 enum dsc_comparison_op : u8 {
@@ -196,6 +205,20 @@ extern void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x);
 extern usize dsc_used_mem(dsc_ctx *ctx);
 
 extern void dsc_print_mem_usage(dsc_ctx *ctx);
+
+extern void dsc_set_default_device(dsc_ctx *ctx, dsc_device_type device);
+
+extern void dsc_cuda_set_device(dsc_ctx *ctx, int device);
+
+extern bool dsc_cuda_available(dsc_ctx *);
+
+extern int dsc_cuda_devices(dsc_ctx *);
+
+extern int dsc_cuda_dev_capability(dsc_ctx *, int device);
+
+extern usize dsc_cuda_dev_mem(dsc_ctx *, int device);
+
+extern void dsc_cuda_sync(dsc_ctx *);
 
 // ============================================================
 // Tracing
@@ -321,6 +344,10 @@ extern void dsc_copy(dsc_ctx *ctx,
                      usize nb,
                      dsc_device_type data_device = DEFAULT);
 
+extern dsc_tensor *dsc_to(dsc_ctx *ctx,
+                          dsc_tensor *DSC_RESTRICT x,
+                          dsc_device_type new_device);
+
 extern dsc_tensor *dsc_reshape(dsc_ctx *ctx,
                                const dsc_tensor *DSC_RESTRICT x,
                                int dimensions...);
@@ -408,8 +435,8 @@ extern dsc_tensor *dsc_compare(dsc_ctx *ctx,
                                dsc_tensor *out = nullptr);
 
 extern void dsc_masked_fill(dsc_ctx *ctx,
-                            dsc_tensor *x,
-                            const dsc_tensor *mask,
+                            dsc_tensor *DSC_RESTRICT x,
+                            const dsc_tensor *DSC_RESTRICT mask,
                             f64 value);
 
 extern dsc_tensor *dsc_outer(dsc_ctx *ctx,

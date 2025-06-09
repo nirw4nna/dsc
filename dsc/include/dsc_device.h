@@ -29,10 +29,18 @@ struct dsc_free_node {
 };
 
 enum dsc_memcpy_dir : u8 {
+    UNUSED,
     FROM_DEVICE,
     TO_DEVICE,
     ON_DEVICE
 };
+
+
+static constexpr dsc_memcpy_dir DSC_MEMCPY_DIRECTIONS_LOOKUP[DSC_MAX_DEVICES][DSC_MAX_DEVICES] = {
+    {UNUSED, TO_DEVICE},
+    {FROM_DEVICE, ON_DEVICE},
+};
+
 
 struct dsc_device {
     dsc_data_buffer used_nodes[DSC_MAX_OBJS];
@@ -54,8 +62,8 @@ struct dsc_device {
 
 namespace internal::alloc {
 DSC_INLINE dsc_free_node *find_best(dsc_device *dev,
-                                           const usize required_size,
-                                           dsc_free_node **prev) {
+                                    const usize required_size,
+                                    dsc_free_node **prev) {
     dsc_free_node *node = dev->head;
     dsc_free_node *best = node->size >= required_size ? node : nullptr;
     dsc_free_node *prev_node = nullptr;
@@ -75,8 +83,8 @@ DSC_INLINE dsc_free_node *find_best(dsc_device *dev,
 }
 
 DSC_INLINE void node_insert(dsc_free_node **head,
-                                   dsc_free_node *prev,
-                                   dsc_free_node *to_insert) {
+                            dsc_free_node *prev,
+                            dsc_free_node *to_insert) {
     if (prev == nullptr) {
         if (*head != nullptr) {
             to_insert->next = *head;
@@ -94,8 +102,8 @@ DSC_INLINE void node_insert(dsc_free_node **head,
 }
 
 DSC_INLINE void node_remove(dsc_free_node **head,
-                                   dsc_free_node *prev,
-                                   dsc_free_node *to_remove) {
+                            dsc_free_node *prev,
+                            dsc_free_node *to_remove) {
     if (prev == nullptr) {
         *head = to_remove->next;
     } else {
@@ -208,6 +216,14 @@ static DSC_INLINE void dsc_data_free(dsc_device *dev, dsc_data_buffer *ptr) {
 }
 
 extern dsc_device *dsc_cpu_device(usize mem_size);
+
+#if defined(DSC_CUDA)
+    extern dsc_device *dsc_cuda_device(usize mem_size, int cuda_dev);
+#else
+    static DSC_INLINE dsc_device *dsc_cuda_device(usize, int) {
+        return nullptr;
+    }
+#endif
 
 #undef dsc_node_is_free
 #undef dsc_node_mark_free

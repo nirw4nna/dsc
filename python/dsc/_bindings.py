@@ -140,7 +140,69 @@ _lib.dsc_print_mem_usage.argtypes = [_DscCtx]
 _lib.dsc_print_mem_usage.restype = None
 
 
-# extern bool DSC_STRICTLY_PURE dsc_tracing_enabled(dsc_ctx *);
+# extern void dsc_set_default_device(dsc_ctx *ctx, dsc_device_type device);
+def _dsc_set_default_device(ctx: _DscCtx, device: Device):
+    _lib.dsc_set_default_device(ctx, c_int8(device.value))
+
+
+_lib.dsc_set_default_device.argtypes = [_DscCtx, c_int8]
+_lib.dsc_set_default_device.restype = None
+
+
+# extern void dsc_cuda_set_device(dsc_ctx *ctx, int device);
+def _dsc_cuda_set_device(ctx: _DscCtx, device: int):
+    _lib.dsc_cuda_set_device(ctx, c_int(device))
+
+
+_lib.dsc_cuda_set_device.argtypes = [_DscCtx, c_int]
+_lib.dsc_cuda_set_device.restype = None
+
+# extern bool dsc_cuda_available(dsc_ctx *);
+def _dsc_cuda_available(ctx: _DscCtx) -> bool:
+    return _lib.dsc_cuda_available(ctx)
+
+
+_lib.dsc_cuda_available.argtypes = [_DscCtx]
+_lib.dsc_cuda_available.restype = c_bool
+
+
+# extern int dsc_cuda_devices(dsc_ctx *);
+def _dsc_cuda_devices(ctx: _DscCtx) -> int:
+    return _lib.dsc_cuda_devices(ctx)
+
+
+_lib.dsc_cuda_devices.argtypes = [_DscCtx]
+_lib.dsc_cuda_devices.restype = c_int
+
+
+# extern int dsc_cuda_dev_capability(dsc_ctx *, int device);
+def _dsc_cuda_dev_capability(ctx: _DscCtx, device: int) -> int:
+    return _lib.dsc_cuda_dev_capability(ctx, c_int(device))
+
+
+_lib.dsc_cuda_dev_capability.argtypes = [_DscCtx]
+_lib.dsc_cuda_dev_capability.restype = c_int
+
+
+# extern usize dsc_cuda_dev_mem(dsc_ctx *, int device);
+def _dsc_cuda_dev_mem(ctx: _DscCtx, device: int) -> int:
+    return _lib.dsc_cuda_dev_mem(ctx, c_int(device))
+
+
+_lib.dsc_cuda_dev_mem.argtypes = [_DscCtx, c_int]
+_lib.dsc_cuda_dev_mem.restype = c_size_t
+
+
+# extern usize dsc_cuda_sync(dsc_ctx *);
+def _dsc_cuda_sync(ctx: _DscCtx):
+    _lib.dsc_cuda_sync(ctx)
+
+
+_lib.dsc_cuda_sync.argtypes = [_DscCtx]
+_lib.dsc_cuda_sync.restype = None
+
+
+# extern bool dsc_tracing_enabled(dsc_ctx *);
 def _dsc_tracing_enabled(ctx: _DscCtx) -> c_bool:
     return _lib.dsc_tracing_enabled(ctx)
 
@@ -591,6 +653,19 @@ def _dsc_cast(ctx: _DscCtx, x: _DscTensor_p, dtype: Dtype) -> _DscTensor_p:
 
 _lib.dsc_cast.argtypes = [_DscCtx, _DscTensor_p, c_uint8]
 _lib.dsc_cast.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_to(dsc_ctx *ctx,
+#                           dsc_tensor *__restrict x,
+#                           dsc_device_type new_device = DSC_DEFAULT_DEVICE);
+def _dsc_to(
+        ctx: _DscCtx, x: _DscTensor_p, device: Device
+) -> _DscTensor_p:
+    return _lib.dsc_to(ctx, x, c_int8(device.value))
+
+
+_lib.dsc_to.argtypes = [_DscCtx, _DscTensor_p, c_int8]
+_lib.dsc_to.restype = _DscTensor_p
 
 
 # extern void dsc_copy(dsc_ctx *ctx,

@@ -1,6 +1,12 @@
+CUDA		?=	/usr/local/cuda
 CXX			=	g++
+NVCC		=	nvcc
 AR			=	ar
 
+NVCCFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -ccbin=$(CXX) -arch=native \
+				--forward-unknown-to-host-compiler -Wall -Wextra -Wformat -Wnoexcept  \
+                -Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
+                -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti
 CXXFLAGS	=	-std=c++20 -I./dsc/include/ -I./dsc/api/ -Wall -Wextra -Wformat -Wnoexcept  \
  				-Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
  				-Wlogical-op -Wcast-align -fno-exceptions -fno-rtti -pthread
@@ -23,11 +29,16 @@ ifndef DSC_LOG_LEVEL
 endif
 
 CXXFLAGS	+=	-DDSC_LOG_LEVEL=$(DSC_LOG_LEVEL)
+NVCCFLAGS	+=	-DDSC_LOG_LEVEL=$(DSC_LOG_LEVEL)
 
 ifdef DSC_FAST
 	CXXFLAGS	+=	-Ofast -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
+	# NOTE: using --use_fast_math should speedup inference quite significantly but for some reason it produces NaNs that
+	# make the whole thing crash
+	NVCCFLAGS	+=	-O3
 else
 	CXXFLAGS	+=	-O0 -fno-omit-frame-pointer -g
+	NVCCFLAGS	+=	-O0 -fno-omit-frame-pointer -g -G
 endif
 
 ifdef DSC_ENABLE_TRACING
@@ -37,6 +48,22 @@ endif
 # If we are not compiling the shared object and are in debug mode then run in ASAN mode
 ifeq ($(MAKECMDGOALS),shared)
 	CXXFLAGS	+=	-fPIC
+	NVCCFLAGS	+=	-fPIC
+endif
+
+CUDA_SRCS	=	$(wildcard dsc/src/cuda/*.cu)
+CUDA_OBJS	=	$(CUDA_SRCS:.cu=.o)
+
+# Enable CUDA support
+ifdef DSC_CUDA
+	CXXFLAGS	+=	-I$(CUDA)/include -DDSC_CUDA
+	NVCCFLAGS	+=	-DDSC_CUDA
+	LDFLAGS		+=	-L$(CUDA)/lib64 -lcudart -lcublas
+
+	OBJS		+=	$(CUDA_OBJS)
+
+%.o: %.cu
+	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 endif
 
 
@@ -45,6 +72,12 @@ $(info   OS:		$(UNAME_S))
 $(info   ARCH:		$(UNAME_M))
 $(info   CXX:		$(shell $(CXX) --version | head -n 1))
 $(info   CXXFLAGS:	$(CXXFLAGS))
+
+ifdef DSC_CUDA
+$(info   NVCC:		$(shell $(NVCC) --version | head -n 4 | tail -n 1))
+$(info   NVCCFLAGS:	$(NVCCFLAGS))
+endif
+
 $(info   LDFLAGS:	$(LDFLAGS))
 $(info )
 

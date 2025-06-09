@@ -128,6 +128,12 @@ void dsc_cpu_repeat(dsc_device *,
                     dsc_tensor *DSC_RESTRICT out,
                     const int repeats, const int axis_idx) {
     switch (x->dtype) {
+        case BOOL:
+            repeat<bool>(x, out, repeats, axis_idx);
+            break;
+        case I32:
+            repeat<i32>(x, out, repeats, axis_idx);
+            break;
         case F32:
             repeat<f32>(x, out, repeats, axis_idx);
             break;
@@ -248,7 +254,6 @@ static DSC_INLINE void multinomial(const dsc_tensor *DSC_RESTRICT x,
         // Sample num_samples values from the distribution
         for (int sample = 0; sample < num_samples; ++sample) {
             const int o = dist(rng);
-            // printf("sampled %d\n", o);
             out_data[i * out_cols + sample] = o;
         }
     }
@@ -440,29 +445,6 @@ void dsc_cpu_get_slice(dsc_device *,
             copy_slice<f64>(x, out, n_slices, slices, whole);
             break;
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
-    }
-}
-
-void dsc_cpu_get_tensor(dsc_device *,
-                        const dsc_tensor *DSC_RESTRICT x,
-                        const dsc_tensor *DSC_RESTRICT indexes,
-                        dsc_tensor *DSC_RESTRICT out) {
-    DSC_DATA(byte, x);
-    DSC_DATA(i32, indexes);
-    DSC_DATA(byte, out);
-
-    const int stride = dsc_tensor_get_stride(x, -2);
-    const int count = dsc_tensor_get_dim(x, -1);
-    const int rows = dsc_tensor_get_dim(x, -2);
-    const usize dtype_size = DSC_DTYPE_SIZE[x->dtype];
-
-    dsc_for(i, indexes) {
-        const int idx = indexes_data[i];
-        DSC_ASSERT(idx < rows);
-
-        memcpy(out_data + (i * stride * dtype_size),
-               x_data + (idx * stride * dtype_size),
-               count * dtype_size);
     }
 }
 
@@ -707,6 +689,12 @@ void dsc_cpu_masked_fill(dsc_device *,
                          const dsc_tensor *mask,
                          const f64 value) {
     switch (x->dtype) {
+        case BOOL:
+            masked_fill(x, mask, (bool) value);
+            break;
+        case I32:
+            masked_fill(x, mask, (i32) value);
+            break;
         case F32:
             masked_fill(x, mask, (f32) value);
             break;

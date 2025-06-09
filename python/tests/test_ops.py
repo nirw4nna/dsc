@@ -11,11 +11,17 @@ from random import randint, random
 from typing import List
 import math
 from itertools import permutations
+import os
+
+
+
+DEVICE = os.getenv('DEVICE', default='cpu')
 
 @pytest.fixture(scope='session', autouse=True)
 def session_fixture():
     # This is invoked once before starting the test session
     dsc.init(int(2**30))
+    dsc.set_default_device(DEVICE)
     yield
 
 
@@ -138,10 +144,9 @@ class TestOps:
                 out_dsc = dsc.outer(xa_dsc, xb_dsc)
                 assert all_close(out_dsc, out)
 
-    @pytest.mark.skip(reason='not properly implemented yet')
     def test_matmul(self):
         def _mnk() -> tuple[int, int, int]:
-            return randint(2, 50), randint(2, 50), randint(2, 50)
+            return randint(50, 100), randint(50, 100), randint(50, 100)
 
         def _test_matmul(shape_a: List[int], shape_b: List[int], dt: np.dtype):
             print(f'Testing {shape_a} @ {shape_b} with {dt.__name__}')
@@ -155,6 +160,8 @@ class TestOps:
             assert all_close(res_dsc, res)
 
         for dtype in DSC_DTYPES:
+            if is_bool(dtype):
+                continue
             # 2D matrices
             for _ in range(5):
                 m, n, k = _mnk()
@@ -278,7 +285,8 @@ class TestIndexing:
             x_dsc = dsc.from_numpy(x)
 
             indexes = np.array([randint(0, rows - 1) for _ in range(randint(1, rows))]).astype(np.int32)
-            indexes_dsc = dsc.from_numpy(indexes)
+            # Indexes are always on CPU
+            indexes_dsc = dsc.from_numpy(indexes, device='cpu')
 
             res = x[indexes]
             res_dsc = x_dsc[indexes_dsc]
@@ -500,8 +508,8 @@ def test_concat():
 def test_split():
     for n_dim in range(1, 5):
         for dtype in DTYPES:
-            shape = [randint(2, 10) for _ in range(n_dim)]
             for axis_idx in range(n_dim):
+                shape = [randint(2, 10) for _ in range(n_dim)]
                 print(f'Testing split with {n_dim}-dimensional tensors of type {dtype.__name__} on axis {axis_idx}')
                 ne = shape[axis_idx]
                 multi = randint(1, 10)
@@ -514,6 +522,31 @@ def test_split():
                 assert len(res) == len(res_dsc)
                 for r_np, r_dsc in zip(res, res_dsc):
                     assert all_close(r_dsc, r_np)
+
+def test_repeat():
+    for n_dim in range(1, 5):
+        for dtype in DTYPES:
+            shape = [randint(2, 10) for _ in range(n_dim)]
+            for axis_idx in range(n_dim):
+                print(f'Testing repeat with {n_dim}-dimensional tensors of type {dtype.__name__} on axis {axis_idx}')
+                x = random_nd(shape, dtype)
+                x_dsc = dsc.from_numpy(x)
+                repeats = randint(2, 5)
+                res = np.repeat(x, repeats, axis=axis_idx)
+                res_dsc = dsc.repeat(x_dsc, repeats, axis=axis_idx)
+                assert all_close(res_dsc, res)
+
+def test_where():
+    for n_dim in range(1, 5):
+        for dtype in DTYPES:
+            print(f'Testing where with {n_dim}-dimensional condition tensor and values of type {dtype.__name__}')
+            x = np.random.choice([True, False], size=tuple([randint(1, 10) for _ in range(n_dim)]))
+            values = random_nd([2], dtype=dtype)
+            this = values[0]; that = values[1]
+            x_dsc = dsc.from_numpy(x)
+            res = np.where(x, this, that)
+            res_dsc = dsc.where(x_dsc, this, that)
+            assert all_close(res_dsc, res)
 
 
 def test_transpose():

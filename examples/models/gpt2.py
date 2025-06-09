@@ -134,9 +134,9 @@ class GPT2(nn.Module):
         B, T = idx.shape
         tok_emb = self.wte(idx)
         if self.use_cache:
-            pos_emb = self.wpe(dsc.arange(T) + self.kv_pos)
+            pos_emb = self.wpe(dsc.arange(T, device='cpu') + self.kv_pos)
         else:
-            pos_emb = self.wpe(dsc.arange(T))
+            pos_emb = self.wpe(dsc.arange(T, device='cpu'))
     
         x = tok_emb + pos_emb
         for block in self.h:
@@ -178,6 +178,7 @@ class GPT2(nn.Module):
             else:
                 _, idx_next = dsc.topk(probs, k=1, axis=-1)
 
+            idx_next = idx_next.to('cpu')
             print(tokenizer.decode(idx_next[0]), end='', flush=True)
             generated = dsc.concat([generated, idx_next], axis=1)
             if counter == 0:
@@ -199,12 +200,15 @@ class GPT2(nn.Module):
 if __name__ == '__main__':
     cli = argparse.ArgumentParser(description='GPT2 inference CLI')
     cli.add_argument('--no-cache', action='store_true', help='Disable KV cache')
+    cli.add_argument('--device', choices=['cpu', 'cuda'], default='cpu', help='Device on which to run the model')
     cli.add_argument('-s', type=str, required=True, help='Model prompt')
 
     args = cli.parse_args()
 
     use_kv_cache = not args.no_cache
     prompt = args.s
+
+    dsc.set_default_device(args.device)
 
     model = GPT2.from_pretrained(use_cache=use_kv_cache)
 
@@ -214,4 +218,4 @@ if __name__ == '__main__':
     MAX_TOKENS = 50
 
     idx = tokenizer.encode(prompt)
-    model.generate(dsc.tensor(idx, dtype=dsc.i32).reshape(1, -1), tokenizer=tokenizer, max_new_tokens=MAX_TOKENS)
+    model.generate(dsc.tensor(idx, dtype=dsc.i32, device='cpu').reshape(1, -1), tokenizer=tokenizer, max_new_tokens=MAX_TOKENS)

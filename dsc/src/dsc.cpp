@@ -6,6 +6,7 @@
 
 #include "dsc.h"
 #include "cpu/dsc_cpu.h"
+#include "cuda/dsc_cuda.h"
 #include "dsc_device.h"
 #include "dsc_tracing.h"
 #include <cstdarg> // va_xxx
@@ -120,15 +121,29 @@
             DSC_LOG_FATAL("device %d is null", (CTX)->default_device);                \
     } while (0)
 
-#define DSC_DISPATCH(device, func, ...)                                      \
-    do {                                                                     \
-        const dsc_device_type dev_id = DSC_GET_DEV_ID(ctx, device);          \
-        DSC_GET_DEVICE(ctx, device);                                         \
-        if (dev_id == CPU)                                                   \
-            dsc_cpu_##func(dev, ##__VA_ARGS__);                              \
-        else                                                                 \
-            DSC_LOG_FATAL("cannot dispatch to unknown device %d", (device)); \
-    } while (0)
+#if defined(DSC_CUDA)
+    #define DSC_DISPATCH(device, func, ...)                                      \
+        do {                                                                     \
+            const dsc_device_type dev_id = DSC_GET_DEV_ID(ctx, device);          \
+            DSC_GET_DEVICE(ctx, device);                                         \
+            if (dev_id == CPU)                                                   \
+                dsc_cpu_##func(dev, ##__VA_ARGS__);                              \
+            else if (dev_id == CUDA)                                             \
+                dsc_cuda_##func(dev, ##__VA_ARGS__);                             \
+            else                                                                 \
+                DSC_LOG_FATAL("cannot dispatch to unknown device %d", (device)); \
+        } while (0)
+#else
+    #define DSC_DISPATCH(device, func, ...)                                      \
+        do {                                                                     \
+            const dsc_device_type dev_id = DSC_GET_DEV_ID(ctx, device);          \
+            DSC_GET_DEVICE(ctx, device);                                         \
+            if (dev_id == CPU)                                                   \
+                dsc_cpu_##func(dev, ##__VA_ARGS__);                              \
+            else                                                                 \
+                DSC_LOG_FATAL("cannot dispatch to unknown device %d", (device)); \
+        } while (0)
+#endif
 
 #define dsc_tensor_invalid(PTR)     (PTR)->ne <= 0
 #define dsc_tensor_set_invalid(PTR) (PTR)->ne = -1
@@ -156,6 +171,21 @@ dsc_ctx *dsc_ctx_init(const usize mem_size) {
 
     ctx->devices[0] = dsc_cpu_device(mem_size);
     ctx->device_lookup[CPU] = 0;
+    // DSC supports a single CUDA device so for now the device with ID=1 will be the CUDA
+    // device with the highest compute capability (if any).
+    if (const int cuda_devices = dsc_cuda_devices(); cuda_devices > 0) {
+        int max_compute = dsc_cuda_dev_capability(0);
+        int max_dev = 0;
+        for (int dev = 1; dev < cuda_devices; ++dev) {
+            if (const int dev_compute = dsc_cuda_dev_capability(dev); dev_compute > max_compute) {
+                max_compute = dev_compute;
+                max_dev = dev;
+            }
+        }
+
+        ctx->devices[1] = dsc_cuda_device(mem_size, max_dev);
+        ctx->device_lookup[CUDA] = 1;
+    }
     // Pre-allocate the tensor headers on the heap, this way we don't commit all the
     // memory upfront.
     ctx->tensors = (dsc_tensor *) calloc(DSC_MAX_OBJS, sizeof(dsc_tensor));
@@ -218,6 +248,53 @@ void dsc_print_mem_usage(dsc_ctx *ctx) {
     printf("\n");
     for (int i = 0; i < 40; ++i) printf("=");
     printf("\n\n");
+}
+
+void dsc_set_default_device(dsc_ctx *ctx,
+                            const dsc_device_type device) {
+    // Passing DEFAULT here restores the system settings
+    ctx->default_device = device == DEFAULT ? DSC_DEFAULT_DEVICE : device;
+}
+
+void dsc_cuda_set_device(dsc_ctx *ctx, const int device) {
+    // To change the CUDA device I first have to go through all the tensors
+    // allocated on a CUDA device and mark them as invalid, then I have to dispose
+    // the old device and allocate a new one.
+    DSC_ASSERT(device < dsc_cuda_devices());
+
+    const int dev_idx = ctx->device_lookup[CUDA];
+    dsc_device *old_dev = ctx->devices[dev_idx];
+
+    for (int i = 0; i < DSC_MAX_OBJS; ++i) {
+        if (dsc_tensor *x = &ctx->tensors[i]; !(dsc_tensor_invalid(x)) && x->device == CUDA) {
+            // Note: changing device will invalidate ALL the tensors previously allocated on it.
+            dsc_tensor_set_invalid(x);
+        }
+    }
+
+    old_dev->dispose(old_dev);
+
+    ctx->devices[dev_idx] = dsc_cuda_device(old_dev->mem_size, device);
+}
+
+bool dsc_cuda_available(dsc_ctx *) {
+    return dsc_cuda_devices() > 0;
+}
+
+int dsc_cuda_devices(dsc_ctx *) {
+    return dsc_cuda_devices();
+}
+
+int dsc_cuda_dev_capability(dsc_ctx *, const int device) {
+    return dsc_cuda_dev_capability(device);
+}
+
+usize dsc_cuda_dev_mem(dsc_ctx *, const int device) {
+    return dsc_cuda_dev_mem(device);
+}
+
+void dsc_cuda_sync(dsc_ctx *) {
+    dsc_cuda_sync();
 }
 
 // ============================================================
@@ -292,11 +369,13 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
     }
 
     if (data != nullptr) {
-        // Copy from data to this tensor buffer. Only support moving on device (cuda -> cuda) or from the cpu otherwise
-        // we risk making a copy from cuda when cuda is not supported.
-        DSC_ASSERT(data_device == CPU || data_device == device);
+        const dsc_device_type dev_id = DSC_GET_DEV_ID(ctx, device);
+        const dsc_device_type data_dev_id = DSC_GET_DEV_ID(ctx, data_device);
+
+        const dsc_device_type cpy_device = dev_id == CUDA || data_dev_id == CUDA ? CUDA : CPU;
+        const dsc_device *cpy_dev = ctx->devices[cpy_device];
         DSC_DATA(void, new_tensor);
-        dev->memcpy(new_tensor_data, data, ne * DSC_DTYPE_SIZE[dtype], data_device == device ? ON_DEVICE : TO_DEVICE);
+        cpy_dev->memcpy(new_tensor_data, data, ne * DSC_DTYPE_SIZE[dtype], DSC_MEMCPY_DIRECTIONS_LOOKUP[data_dev_id][dev_id]);
     }
 
     new_tensor->dtype = dtype;
@@ -465,13 +544,31 @@ dsc_pair dsc_topk(dsc_ctx *ctx,
     memcpy(out_shape, x->shape, DSC_MAX_DIMS * sizeof(*x->shape));
     out_shape[axis_idx] = k;
 
+    // TODO: (5)
     // Allocate a temporary buffer, this will be used to sort the elements along the given axis
-    dsc_tensor *tmp_values = dsc_tensor_1d(ctx, x->dtype, axis_n, x->device);
-    dsc_tensor *tmp_indexes = dsc_tensor_1d(ctx, I32, axis_n, x->device);
-    dsc_tensor *out_values = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], x->dtype, x->device);
-    dsc_tensor *out_indexes = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], I32, x->device);
+    dsc_tensor *tmp_values = dsc_tensor_1d(ctx, x->dtype, axis_n, CPU);
+    dsc_tensor *tmp_indexes = dsc_tensor_1d(ctx, I32, axis_n, CPU);
+    dsc_tensor *out_values = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], x->dtype, CPU);
+    dsc_tensor *out_indexes = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], I32, CPU);
 
-    DSC_DISPATCH(x->device, topk, x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
+    // For now, topk runs always on CPU. If x is not a CPU tensor create a temporary copy
+    DSC_GET_DEVICE(ctx, CPU);
+    if (x->device == CPU) {
+        dsc_cpu_topk(dev, x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
+    } else {
+        dsc_tensor *x_ = dsc_copy_of(ctx, x, CPU);
+        dsc_cpu_topk(dev, x_, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
+
+        dsc_tensor *out_values_ = out_values;
+        dsc_tensor *out_indexes_ = out_indexes;
+        // Note: right now DSC result will be on the same device as the argument even though the operations
+        // are always run on the CPU. I don't know if this is a good idea, will see...
+        out_values = dsc_copy_of(ctx, out_values, x->device);
+        out_indexes = dsc_copy_of(ctx, out_indexes, x->device);
+        dsc_tensor_free(ctx, x_);
+        dsc_tensor_free(ctx, out_values_);
+        dsc_tensor_free(ctx, out_indexes_);
+    }
 
     dsc_tensor_free(ctx, tmp_values);
     dsc_tensor_free(ctx, tmp_indexes);
@@ -493,9 +590,19 @@ dsc_tensor *dsc_multinomial(dsc_ctx *ctx,
     memcpy(out_shape, x->shape, DSC_MAX_DIMS * sizeof(*x->shape));
     out_shape[DSC_MAX_DIMS - 1] = num_samples;
 
-    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], I32, x->device);
-
-    DSC_DISPATCH(x->device, multinomial, x, out, num_samples);
+    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], I32, CPU);
+    // For now, multinomial runs always on the CPU.
+    DSC_GET_DEVICE(ctx, CPU);
+    if (x->device == CPU) {
+        dsc_cpu_multinomial(dev, x, out, num_samples);
+    } else {
+        dsc_tensor *x_ = dsc_copy_of(ctx, x, CPU);
+        dsc_cpu_multinomial(dev, x_, out, num_samples);
+        dsc_tensor *out_ = out;
+        out = dsc_copy_of(ctx, out, x->device);
+        dsc_tensor_free(ctx, x_);
+        dsc_tensor_free(ctx, out_);
+    }
 
     return out;
 }
@@ -532,6 +639,32 @@ void dsc_copy(dsc_ctx *ctx,
     DSC_DATA(void, x);
     DSC_GET_DEVICE(ctx, x->device);
     dev->memcpy(x_data, data, nb, ON_DEVICE);
+}
+
+dsc_tensor *dsc_to(dsc_ctx *ctx,
+                   dsc_tensor *DSC_RESTRICT x,
+                   const dsc_device_type new_device) {
+    if (x->device == new_device) return x;
+
+    if (x->device == CUDA) dsc_cuda_sync();
+    dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim,
+                                     &dsc_tensor_get_dim(x, 0),
+                                     x->dtype, new_device);
+
+    if (x->device == CUDA) {
+        DSC_GET_DEVICE(ctx, CUDA);
+        dev->memcpy(out->buf->data, x->buf->data,
+                    x->ne * DSC_DTYPE_SIZE[x->dtype], FROM_DEVICE);
+    } else if (new_device == CUDA) {
+        DSC_GET_DEVICE(ctx, CUDA);
+        dev->memcpy(out->buf->data, x->buf->data,
+                    x->ne * DSC_DTYPE_SIZE[x->dtype], TO_DEVICE);
+    } else {
+        DSC_GET_DEVICE(ctx, new_device);
+        dev->memcpy(out->buf->data, x->buf->data,
+                    x->ne * DSC_DTYPE_SIZE[x->dtype], ON_DEVICE);
+    }
+    return out;
 }
 
 dsc_tensor *dsc_reshape(dsc_ctx *ctx,
@@ -874,14 +1007,13 @@ dsc_tensor *dsc_tensor_get_slice(dsc_ctx *ctx,
 
     return out;
 }
-
 dsc_tensor *dsc_tensor_get_tensor(dsc_ctx *ctx,
                                   const dsc_tensor *DSC_RESTRICT x,
                                   const dsc_tensor *DSC_RESTRICT indexes) {
     DSC_ASSERT(x != nullptr);
     DSC_ASSERT(indexes != nullptr);
     DSC_ASSERT(indexes->dtype == I32);
-    DSC_ASSERT(x->device == indexes->device);
+    DSC_ASSERT(indexes->device == CPU);
 
     DSC_TRACE_GET_TENSOR(x, indexes);
 
@@ -891,11 +1023,32 @@ dsc_tensor *dsc_tensor_get_tensor(dsc_ctx *ctx,
     DSC_ASSERT(out_ndim <= DSC_MAX_DIMS);
 
     int out_shape[DSC_MAX_DIMS]{};
+    const int count = dsc_tensor_get_dim(x, -1);
+
     for (int i = 0; i < indexes->n_dim; ++i) out_shape[i] = dsc_tensor_get_dim(indexes, i);
-    out_shape[indexes->n_dim] = dsc_tensor_get_dim(x, -1);
+    out_shape[indexes->n_dim] = count;
 
     dsc_tensor *out = dsc_new_tensor(ctx, out_ndim, out_shape, x->dtype, x->device);
-    DSC_DISPATCH(x->device, get_tensor, x, indexes, out);
+
+    DSC_GET_DEVICE(ctx, out->device);
+
+    DSC_DATA(byte, x);
+    DSC_DATA(i32, indexes);
+    DSC_DATA(byte, out);
+
+    const int stride = dsc_tensor_get_stride(x, -2);
+    const int rows = dsc_tensor_get_dim(x, -2);
+    const usize dtype_size = DSC_DTYPE_SIZE[x->dtype];
+
+    dsc_for(i, indexes) {
+        const int idx = indexes_data[i];
+        DSC_ASSERT(idx < rows);
+
+        dev->memcpy(out_data + (i * stride * dtype_size),
+                    x_data + (idx * stride * dtype_size),
+                    count * dtype_size,
+                    ON_DEVICE);
+    }
     return out;
 }
 
@@ -1185,14 +1338,13 @@ dsc_tensor *dsc_compare(dsc_ctx *ctx,
 }
 
 void dsc_masked_fill(dsc_ctx *ctx,
-                     dsc_tensor *x,
-                     const dsc_tensor *mask,
+                     dsc_tensor *DSC_RESTRICT x,
+                     const dsc_tensor *DSC_RESTRICT mask,
                      const f64 value) {
     DSC_ASSERT(x != nullptr);
     DSC_ASSERT(mask != nullptr);
     DSC_ASSERT(x->device == mask->device);
     DSC_ASSERT(mask->dtype == BOOL);
-    DSC_ASSERT(x->dtype == F32 || x->dtype == F64);
 
     DSC_TRACE_MASK_OP(x, mask, value);
 

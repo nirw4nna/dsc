@@ -4,7 +4,7 @@
 # This code is licensed under the terms of the 3-clause BSD license
 # (https://opensource.org/license/bsd-3-clause).
 
-from dsc.context import init, print_mem_usage
+from dsc.context import init, print_mem_usage, set_default_device
 from dsc.tensor import (
     Tensor,
     from_numpy,
@@ -22,6 +22,7 @@ from dsc.tensor import (
     tanh,
     exp,
     sqrt,
+    rsqrt,
     add,
     sub,
     mul,
@@ -56,4 +57,5 @@ from dsc.tensor import (
 from dsc.dtype import Dtype, bool_, i32, f32, f64
 from dsc.profiler import start_recording, stop_recording, profile, trace
 from dsc.device import Device
+import dsc.cuda as cuda
 import dsc.nn as nn
