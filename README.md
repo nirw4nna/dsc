@@ -1,6 +1,6 @@
 # DSC
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
-[![Unit Tests](https://github.com/dspcraft/dsc/actions/workflows/tests.yml/badge.svg)](https://github.com/dspcraft/dsc/actions/workflows/tests.yml)
+[![Unit Tests](https://github.com/nirw4nna/dsc/actions/workflows/tests.yml/badge.svg)](https://github.com/nirw4nna/dsc/actions/workflows/tests.yml)
 
 DSC is an NumPy-compatible array framework for Python and C++.
 The goal is to provide scientists and engineers with a familiar tool
@@ -43,7 +43,7 @@ sudo apt install build-essential
 ## Installation
 The recommended way to install DSC is from source:
 ```bash
-git clone git@github.com:dspcraft/dsc.git
+git clone git@github.com:nirw4nna/dsc.git
 cd dsc/
 python3 -m venv venv
 source venv/bin/activate
@@ -57,13 +57,12 @@ make clean; make shared DSC_FAST=1
 This will compile DSC without any debug information, you can specify different options
 to enable/disable specific features:
 
-| Option             | Description                                                                  |
-|--------------------|------------------------------------------------------------------------------|
-| DSC_LOG_LEVEL      | Configure the logging level (values: [0-3] with 0 meaning everything on)     |
-| DSC_FAST           | Turn off logging (level=2) and compile with the highest optimisation level   |
-| DSC_ENABLE_TRACING | Enable tracing for all operations                                            |
-| DSC_MAX_TRACES     | Max number of traces that can be recorded (**default=1K**)                   |
-| DSC_MAX_OBJS       | Max number of DSC tensors that can be used at the same time (**default=1K**) |
+| Option        | Description                                                                  |
+|---------------|------------------------------------------------------------------------------|
+| DSC_LOG_LEVEL | Configure the logging level (values: [0-3] with 0 meaning everything on)     |
+| DSC_FAST      | Turn off logging (level=2) and compile with the highest optimisation level   |
+| DSC_CUDA      | Enable CUDA support                                                          |
+| DSC_MAX_OBJS  | Max number of DSC tensors that can be used at the same time (**default=1K**) |
 
 To verify that everything worked out as expected try a simple operation:
 ```bash

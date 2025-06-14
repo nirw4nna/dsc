@@ -7,7 +7,7 @@ NVCCFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -ccbin=$(CXX) -arch=na
 				-forward-unknown-opts -Wall -Wextra -Wformat -Wnoexcept  \
                 -Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
                 -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti
-CXXFLAGS	=	-std=c++20 -I./dsc/include/ -I./dsc/api/ -Wall -Wextra -Wformat -Wnoexcept  \
+CXXFLAGS	=	-std=c++20 -I./dsc/include/ -Wall -Wextra -Wformat -Wnoexcept  \
  				-Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
  				-Wlogical-op -Wcast-align -fno-exceptions -fno-rtti -pthread
 LDFLAGS		=	-lm
@@ -32,7 +32,11 @@ CXXFLAGS	+=	-DDSC_LOG_LEVEL=$(DSC_LOG_LEVEL)
 NVCCFLAGS	+=	-DDSC_LOG_LEVEL=$(DSC_LOG_LEVEL)
 
 ifdef DSC_FAST
-	CXXFLAGS	+=	-Ofast -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
+	# -Ofast turns on all the unsafe math optimizations, including -ffinite-math-only this is an issue when testing
+	# because Inf and NaN have different meaning but will be treated as equals when using -ffinite-math-only.
+	# When inferencing assuming only finite numbers is correct but since it's doesn't actually hurt performance
+	# let's keep this flag so we can run our tests without worrying about denormal numbers.
+	CXXFLAGS	+=	-Ofast -fno-finite-math-only -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
 	NVCCFLAGS	+=	-O3
 else
 	CXXFLAGS	+=	-O0 -fno-omit-frame-pointer -g
