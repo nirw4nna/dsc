@@ -11,7 +11,7 @@
 #include "dsc_device.h"
 #include <cstring> // memcpy
 #include <random>
-
+#include <algorithm>
 
 // ============================================================
 // CPU-specific operations

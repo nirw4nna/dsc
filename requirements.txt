@@ -11,5 +11,5 @@ pytest
 tabulate
 ruff
 pyright
-cupy-cuda12x
+torch
 transformers # Tokenizers for examples/models
