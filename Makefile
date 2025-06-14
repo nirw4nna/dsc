@@ -4,7 +4,7 @@ NVCC		=	nvcc
 AR			=	ar
 
 NVCCFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -ccbin=$(CXX) -arch=native \
-				--forward-unknown-to-host-compiler -Wall -Wextra -Wformat -Wnoexcept  \
+				-forward-unknown-opts -Wall -Wextra -Wformat -Wnoexcept  \
                 -Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
                 -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti
 CXXFLAGS	=	-std=c++20 -I./dsc/include/ -I./dsc/api/ -Wall -Wextra -Wformat -Wnoexcept  \
@@ -33,8 +33,6 @@ NVCCFLAGS	+=	-DDSC_LOG_LEVEL=$(DSC_LOG_LEVEL)
 
 ifdef DSC_FAST
 	CXXFLAGS	+=	-Ofast -ffp-contract=fast -funroll-loops -flto=auto -fuse-linker-plugin
-	# NOTE: using --use_fast_math should speedup inference quite significantly but for some reason it produces NaNs that
-	# make the whole thing crash
 	NVCCFLAGS	+=	-O3
 else
 	CXXFLAGS	+=	-O0 -fno-omit-frame-pointer -g

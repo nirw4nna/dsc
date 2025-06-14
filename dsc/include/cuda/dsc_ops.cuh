@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "cuda/dsc_cuda.h"
+#include "cuda/dsc_cuda.cuh"
 
 
 #define atomic_cas_f32(PTR, VAL)                                     \

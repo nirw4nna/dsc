@@ -4,8 +4,8 @@
 // This code is licensed under the terms of the 3-clause BSD license
 // (https://opensource.org/license/bsd-3-clause).
 
-#include "cuda/dsc_cuda.h"
-#include "cuda/dsc_ops.h"
+#include "cuda/dsc_cuda.cuh"
+#include "cuda/dsc_ops.cuh"
 #include "dsc_device.h"
 
 

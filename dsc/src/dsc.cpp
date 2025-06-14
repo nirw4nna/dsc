@@ -6,7 +6,7 @@
 
 #include "dsc.h"
 #include "cpu/dsc_cpu.h"
-#include "cuda/dsc_cuda.h"
+#include "cuda/dsc_cuda.cuh"
 #include "dsc_device.h"
 #include "dsc_tracing.h"
 #include <cstdarg> // va_xxx

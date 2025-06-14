@@ -4,8 +4,8 @@
 // This code is licensed under the terms of the 3-clause BSD license
 // (https://opensource.org/license/bsd-3-clause).
 
+#include "cuda/dsc_cuda.cuh"
 #include "dsc_device.h"
-#include "cuda/dsc_cuda.h"
 
 // As per https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#device-memory-accesses
 // "Any address of a variable residing in global memory or returned by one of the memory allocation routines
