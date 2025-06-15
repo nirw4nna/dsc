@@ -10,7 +10,6 @@ DSC
 
 </div>
 
----
 
 ## About
 DSC is a PyTorch-compatible tensor library and inference framework for machine learning models.
