@@ -1,15 +1,16 @@
 <div align="center">
 <img src="docs/logo.png" alt="Logo" width="200">
 
-<h1>
+<h3>
 DSC
-</h1>
+</h3>
 
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Unit Tests](https://github.com/nirw4nna/dsc/actions/workflows/tests.yml/badge.svg)](https://github.com/nirw4nna/dsc/actions/workflows/tests.yml)
 
 </div>
 
+---
 
 ## About
 DSC is a PyTorch-compatible tensor library and inference framework for machine learning models.
