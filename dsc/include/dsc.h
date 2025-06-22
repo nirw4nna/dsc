@@ -31,11 +31,11 @@
 #if !defined(DSC_MAX_OBJS)
 #    define DSC_MAX_OBJS     ((int) 1'000)
 #endif
-#define DSC_MAX_DEVICES      ((int) 2)
+#define DSC_MAX_DEVICES      ((int) 3)
 #define DSC_DEFAULT_DEVICE   CPU
 #define DSC_COMPARISON_OPS   ((int) 6)
 
-static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
+static_assert(DSC_MAX_DEVICES == 3, "DSC_MAX_DEVICES != 3 - update the code");
 static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the code");
 
 #define DSC_ASSERT(x)                                                           \
@@ -95,6 +95,10 @@ static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the cod
 #    define DSC_INLINE           __forceinline__
 #    define DSC_STRICTLY_PURE    __attribute__((const))
 #    define DSC_PURE             __attribute__((pure))
+#elif defined(__HIPCC__)
+#    define DSC_INLINE           __forceinline__
+#    define DSC_STRICTLY_PURE    __attribute__((const))
+#    define DSC_PURE             __attribute__((pure))
 #elif defined(__GNUC__)
 #    define DSC_INLINE          inline __attribute__((always_inline))
 #    define DSC_STRICTLY_PURE   __attribute__((const))
@@ -145,11 +149,13 @@ enum dsc_device_type : i8 {
     DEFAULT = -1,
     CPU,
     CUDA,
+    ROCM,
 };
 
 static constexpr const char *DSC_DEVICE_NAMES[DSC_MAX_DEVICES] = {
         "CPU",
         "CUDA",
+        "ROCM"
 };
 
 enum dsc_comparison_op : u8 {
@@ -208,18 +214,23 @@ extern void dsc_print_mem_usage(dsc_ctx *ctx);
 
 extern void dsc_set_default_device(dsc_ctx *ctx, dsc_device_type device);
 
-extern void dsc_cuda_set_device(dsc_ctx *ctx, int device);
+// ============================================================
+// GPU Utilities
 
-extern bool dsc_cuda_available(dsc_ctx *);
+extern dsc_device_type dsc_get_gpu_platform(dsc_ctx *ctx);
 
-extern int dsc_cuda_devices(dsc_ctx *);
+extern void dsc_gpu_set_device(dsc_ctx *ctx, int device);
 
-extern int dsc_cuda_dev_capability(dsc_ctx *, int device);
+extern bool dsc_gpu_available(dsc_ctx *);
 
-extern usize dsc_cuda_dev_mem(dsc_ctx *, int device);
+extern int dsc_gpu_devices(dsc_ctx *);
 
-extern void dsc_cuda_sync(dsc_ctx *);
+extern int dsc_gpu_dev_capability(dsc_ctx *, int device);
 
+extern usize dsc_gpu_dev_mem(dsc_ctx *, int device);
+
+extern void dsc_gpu_sync(dsc_ctx *);
+    
 // ============================================================
 // Tracing
 
