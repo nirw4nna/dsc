@@ -34,6 +34,13 @@
 
 struct dsc_device;
 
+struct dsc_gpu_dev_info {
+    char name[256];
+    gpu_rand_state *rand_state;
+    gpu_blas_handle blas_handle;
+    int dev_idx;
+};
+
 // ============================================================
 // Utilities
 //

@@ -74,7 +74,7 @@ GPU_OBJS	:=	$(GPU_SRCS:.cpp=.o)
 # Enable CUDA support
 ifdef DSC_CUDA
 	CXXFLAGS	+=	-I$(CUDA)/include -DDSC_CUDA
-	NVCCFLAGS	+=	-DDSC_CUDA
+	NVCCFLAGS	+=	-x cu -DDSC_CUDA
 	LDFLAGS		+=	-L$(CUDA)/lib64 -lcudart -lcublas
 
 	OBJS		+=	$(GPU_OBJS)
