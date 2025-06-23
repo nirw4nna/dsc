@@ -1,4 +1,4 @@
-#  Copyright (c) 2024-2025, Christian Gilli <christian.gilli@dspcraft.com>
+#  Copyright (c) 2024-2025, Christian Gilli <christian.gilli11@gmail.com>
 #  All rights reserved.
 #
 #  This code is licensed under the terms of the 3-clause BSD license
@@ -34,7 +34,7 @@ if __name__ == '__main__':
         name='dsc',
         version='0.1',
         author='Christian Gilli',
-        author_email='christian.gilli@dspcraft.com',
+        author_email='christian.gilli11@gmail.com',
         license='BSD-3-Clause',
         description='DSPCraft tensor processing library.',
         long_description=long_description,
