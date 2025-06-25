@@ -47,7 +47,7 @@
 
 #define gpu_memcpy_default          cudaMemcpyDefault
 #define gpu_memcpy_device_2_host    cudaMemcpyDeviceToHost
-#define gpu_memcpy_host_2_device    cudaMemcpyDeviceToHost
+#define gpu_memcpy_host_2_device    cudaMemcpyHostToDevice
 #define gpu_memcpy_device_2_device  cudaMemcpyDeviceToDevice
 
 using gpu_memcpy_kind = cudaMemcpyKind;

@@ -43,7 +43,7 @@
 
 #define gpu_memcpy_default          hipMemcpyDefault
 #define gpu_memcpy_device_2_host    hipMemcpyDeviceToHost
-#define gpu_memcpy_host_2_device    hipMemcpyDeviceToHost
+#define gpu_memcpy_host_2_device    hipMemcpyHostToDevice
 #define gpu_memcpy_device_2_device  hipMemcpyDeviceToDevice
 
 using gpu_memcpy_kind = hipMemcpyKind;
