@@ -14,7 +14,7 @@
 
 
 // ============================================================
-// CUDA-specific operations
+// GPU-specific operations
 //
 
 template<typename Tx, typename To>

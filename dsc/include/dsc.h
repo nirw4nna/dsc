@@ -31,11 +31,11 @@
 #if !defined(DSC_MAX_OBJS)
 #    define DSC_MAX_OBJS     ((int) 1'000)
 #endif
-#define DSC_MAX_DEVICES      ((int) 3)
+#define DSC_MAX_DEVICES      ((int) 2)
 #define DSC_DEFAULT_DEVICE   CPU
 #define DSC_COMPARISON_OPS   ((int) 6)
 
-static_assert(DSC_MAX_DEVICES == 3, "DSC_MAX_DEVICES != 3 - update the code");
+static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the code");
 
 #define DSC_ASSERT(x)                                                           \
@@ -148,14 +148,22 @@ struct dsc_traces {
 enum dsc_device_type : i8 {
     DEFAULT = -1,
     CPU,
+    GPU,
+};
+
+enum dsc_gpu_platform : u8 {
     CUDA,
     ROCM,
 };
 
 static constexpr const char *DSC_DEVICE_NAMES[DSC_MAX_DEVICES] = {
         "CPU",
+        "GPU",
+};
+
+static constexpr const char *DSC_GPU_PLATFORM_NAMES[2] = {
         "CUDA",
-        "ROCM"
+        "ROCm",
 };
 
 enum dsc_comparison_op : u8 {
@@ -217,7 +225,7 @@ extern void dsc_set_default_device(dsc_ctx *ctx, dsc_device_type device);
 // ============================================================
 // GPU Utilities
 
-extern dsc_device_type dsc_get_gpu_platform(dsc_ctx *ctx);
+extern dsc_gpu_platform dsc_get_gpu_platform(dsc_ctx *ctx);
 
 extern void dsc_gpu_set_device(dsc_ctx *ctx, int device);
 

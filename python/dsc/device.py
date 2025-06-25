@@ -13,7 +13,7 @@ DeviceType = Union['Device', str]
 class Device(Enum):
     DEFAULT = -1
     CPU = 0
-    CUDA = 1
+    GPU = 1
 
     def __repr__(self) -> str:
         return DEVICE_LOOKUP[self]
@@ -37,7 +37,7 @@ DEVICE_VALUE_LOOKUP = {val.value: val for val in Device.__members__.values()}
 DEVICE_LOOKUP = {
     Device.DEFAULT: 'default',
     Device.CPU: 'cpu',
-    Device.CUDA: 'cuda',
+    Device.GPU: 'gpu',
 }
 
 DEVICE_REVERSE_LOOKUP = {val: key for key, val in DEVICE_LOOKUP.items()}

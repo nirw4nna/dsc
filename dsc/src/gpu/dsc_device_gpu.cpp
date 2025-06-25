@@ -41,8 +41,9 @@ static void gpu_dispose(dsc_device *dev) {
 
     DSC_GPU_CHECK(gpu_free(info->rand_state));
 
-    DSC_LOG_INFO("%s:%d device %s disposed",
+    DSC_LOG_INFO("%s:%s:%d device %s disposed",
                  DSC_DEVICE_NAMES[dev->type],
+                 DSC_GPU_PLATFORM_NAMES[DSC_GPU_PLATFORM],
                  info->dev_idx,
                  info->name);
 }
@@ -53,6 +54,7 @@ dsc_device *dsc_gpu_device(usize mem_size, const int dev_idx) {
         .rand_state = {},
         .blas_handle = {},
         .dev_idx = dev_idx,
+        .platform = DSC_GPU_PLATFORM,
     };
     DSC_GPU_BLAS_CHECK(gpu_blas_create(&extra.blas_handle));
 
@@ -68,7 +70,7 @@ dsc_device *dsc_gpu_device(usize mem_size, const int dev_idx) {
         .extra_info = &extra,
         .mem_size = DSC_ALIGN(mem_size, DSC_DEVICE_GPU_ALIGN),
         .used_mem = 0,
-        .type = CUDA, // TODO: FIX! this should be either CUDA/ROCM or simply GPU
+        .type = GPU,
         .memcpy = gpu_memcpy_wrapper,
         .memset = gpu_memset_wrapper,
         .dispose = gpu_dispose,
@@ -92,8 +94,9 @@ dsc_device *dsc_gpu_device(usize mem_size, const int dev_idx) {
 
     dev.head = &dev.free_nodes[0];
 
-    DSC_LOG_INFO("%s:%d device %s initialized with a buffer of %ldMB (total: %ldMB)",
+    DSC_LOG_INFO("%s:%s:%d device %s initialized with a buffer of %ldMB (total: %ldMB)",
                  DSC_DEVICE_NAMES[dev.type],
+                 DSC_GPU_PLATFORM_NAMES[DSC_GPU_PLATFORM],
                  dev_idx,
                  extra.name,
                  (usize) DSC_B_TO_MB(dev.mem_size),

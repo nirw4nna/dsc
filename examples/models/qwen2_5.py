@@ -302,7 +302,7 @@ if __name__ == '__main__':
     cli.add_argument('prompt', type=str, help='Model prompt')
     cli.add_argument('-n', type=int, default=100, help='Tokens to generate (default=100)')
     cli.add_argument('-top-k', type=int, default=10, help='Top K sampling (default=10)')
-    cli.add_argument('--device', choices=['cpu', 'cuda'], default='cpu', help='Device on which to run the model')
+    cli.add_argument('--device', choices=['cpu', 'gpu'], default='cpu', help='Device on which to run the model')
 
     args = cli.parse_args()
 

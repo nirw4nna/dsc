@@ -39,6 +39,7 @@ struct dsc_gpu_dev_info {
     gpu_rand_state *rand_state;
     gpu_blas_handle blas_handle;
     int dev_idx;
+    dsc_gpu_platform platform;
 };
 
 // ============================================================

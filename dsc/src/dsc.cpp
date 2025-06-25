@@ -128,7 +128,7 @@
             DSC_GET_DEVICE(ctx, device);                                         \
             if (dev_id == CPU)                                                   \
                 dsc_cpu_##func(dev, ##__VA_ARGS__);                              \
-            else if (dev_id == CUDA || dev_id == ROCM)                           \
+            else if (dev_id == GPU)                                              \
                 dsc_gpu_##func(dev, ##__VA_ARGS__);                              \
             else                                                                 \
                 DSC_LOG_FATAL("cannot dispatch to unknown device %d", (device)); \
@@ -184,11 +184,7 @@ dsc_ctx *dsc_ctx_init(const usize mem_size) {
             }
         }
         ctx->devices[1] = dsc_gpu_device(mem_size, max_dev);
-        if constexpr (DSC_GPU_PLATFORM == ROCM) {
-            ctx->device_lookup[ROCM] = 1;
-        } else {
-            ctx->device_lookup[CUDA] = 1;
-        }
+        ctx->device_lookup[GPU] = 1;
     }
 
     // Pre-allocate the tensor headers on the heap, this way we don't commit all the
@@ -264,7 +260,7 @@ void dsc_set_default_device(dsc_ctx *ctx,
 // ============================================================
 // GPU Utilities
 
-dsc_device_type dsc_get_gpu_platform(dsc_ctx *) {
+dsc_gpu_platform dsc_get_gpu_platform(dsc_ctx *) {
     return DSC_GPU_PLATFORM;
 }
 
@@ -274,11 +270,11 @@ void dsc_gpu_set_device(dsc_ctx *ctx, const int device) {
     // the old device and allocate a new one.
     DSC_ASSERT(device < dsc_gpu_devices());
 
-    const int dev_idx = ctx->device_lookup[CUDA];
+    const int dev_idx = ctx->device_lookup[GPU];
     dsc_device *old_dev = ctx->devices[dev_idx];
 
     for (int i = 0; i < DSC_MAX_OBJS; ++i) {
-        if (dsc_tensor *x = &ctx->tensors[i]; !(dsc_tensor_invalid(x)) && x->device == CUDA) {
+        if (dsc_tensor *x = &ctx->tensors[i]; !(dsc_tensor_invalid(x)) && x->device == GPU) {
             // Note: changing device will invalidate ALL the tensors previously allocated on it.
             dsc_tensor_set_invalid(x);
         }
@@ -384,7 +380,7 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
         const dsc_device_type dev_id = DSC_GET_DEV_ID(ctx, device);
         const dsc_device_type data_dev_id = DSC_GET_DEV_ID(ctx, data_device);
 
-        const dsc_device_type cpy_device = dev_id == CUDA || data_dev_id == CUDA ? CUDA : CPU;
+        const dsc_device_type cpy_device = dev_id == GPU || data_dev_id == GPU ? GPU : CPU;
         const dsc_device *cpy_dev = ctx->devices[cpy_device];
         DSC_DATA(void, new_tensor);
         cpy_dev->memcpy(new_tensor_data, data, ne * DSC_DTYPE_SIZE[dtype], DSC_MEMCPY_DIRECTIONS_LOOKUP[data_dev_id][dev_id]);
@@ -658,17 +654,17 @@ dsc_tensor *dsc_to(dsc_ctx *ctx,
                    const dsc_device_type new_device) {
     if (x->device == new_device) return x;
 
-    if (x->device == CUDA) dsc_gpu_sync();
+    if (x->device == GPU) dsc_gpu_sync();
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim,
                                      &dsc_tensor_get_dim(x, 0),
                                      x->dtype, new_device);
 
-    if (x->device == CUDA) {
-        DSC_GET_DEVICE(ctx, CUDA);
+    if (x->device == GPU) {
+        DSC_GET_DEVICE(ctx, GPU);
         dev->memcpy(out->buf->data, x->buf->data,
                     x->ne * DSC_DTYPE_SIZE[x->dtype], FROM_DEVICE);
-    } else if (new_device == CUDA) {
-        DSC_GET_DEVICE(ctx, CUDA);
+    } else if (new_device == GPU) {
+        DSC_GET_DEVICE(ctx, GPU);
         dev->memcpy(out->buf->data, x->buf->data,
                     x->ne * DSC_DTYPE_SIZE[x->dtype], TO_DEVICE);
     } else {
