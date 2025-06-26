@@ -200,7 +200,7 @@ class GPT2(nn.Module):
 if __name__ == '__main__':
     cli = argparse.ArgumentParser(description='GPT2 inference CLI')
     cli.add_argument('--no-cache', action='store_true', help='Disable KV cache')
-    cli.add_argument('--device', choices=['cpu', 'cuda'], default='cpu', help='Device on which to run the model')
+    cli.add_argument('--device', choices=['cpu', 'gpu'], default='cpu', help='Device on which to run the model')
     cli.add_argument('-s', type=str, required=True, help='Model prompt')
 
     args = cli.parse_args()

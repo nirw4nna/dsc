@@ -217,10 +217,10 @@ static DSC_INLINE void dsc_data_free(dsc_device *dev, dsc_data_buffer *ptr) {
 
 extern dsc_device *dsc_cpu_device(usize mem_size);
 
-#if defined(DSC_CUDA)
-    extern dsc_device *dsc_cuda_device(usize mem_size, int cuda_dev);
+#if defined(DSC_CUDA) || defined(DSC_HIP)
+    extern dsc_device *dsc_gpu_device(usize mem_size, int dev_idx);
 #else
-    static DSC_INLINE dsc_device *dsc_cuda_device(usize, int) {
+    static DSC_INLINE dsc_device *dsc_gpu_device(usize, int) {
         return nullptr;
     }
 #endif

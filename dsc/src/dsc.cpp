@@ -5,8 +5,8 @@
 // (https://opensource.org/license/bsd-3-clause).
 
 #include "dsc.h"
+#include "gpu/dsc_gpu.h"
 #include "cpu/dsc_cpu.h"
-#include "cuda/dsc_cuda.cuh"
 #include "dsc_device.h"
 #include "dsc_tracing.h"
 #include <cstdarg> // va_xxx
@@ -121,15 +121,15 @@
             DSC_LOG_FATAL("device %d is null", (CTX)->default_device);                \
     } while (0)
 
-#if defined(DSC_CUDA)
+#if defined(DSC_CUDA) || defined(DSC_HIP)
     #define DSC_DISPATCH(device, func, ...)                                      \
         do {                                                                     \
             const dsc_device_type dev_id = DSC_GET_DEV_ID(ctx, device);          \
             DSC_GET_DEVICE(ctx, device);                                         \
             if (dev_id == CPU)                                                   \
                 dsc_cpu_##func(dev, ##__VA_ARGS__);                              \
-            else if (dev_id == CUDA)                                             \
-                dsc_cuda_##func(dev, ##__VA_ARGS__);                             \
+            else if (dev_id == GPU)                                              \
+                dsc_gpu_##func(dev, ##__VA_ARGS__);                              \
             else                                                                 \
                 DSC_LOG_FATAL("cannot dispatch to unknown device %d", (device)); \
         } while (0)
@@ -171,21 +171,22 @@ dsc_ctx *dsc_ctx_init(const usize mem_size) {
 
     ctx->devices[0] = dsc_cpu_device(mem_size);
     ctx->device_lookup[CPU] = 0;
-    // DSC supports a single CUDA device so for now the device with ID=1 will be the CUDA
-    // device with the highest compute capability (if any).
-    if (const int cuda_devices = dsc_cuda_devices(); cuda_devices > 0) {
-        int max_compute = dsc_cuda_dev_capability(0);
+
+    // DSC supports a single GPU device so for now so, the device with ID=1 will be either ROCM or CUDA
+    // and, if there are more devices available, the device with the highest compute capability will be used.
+    if (const int gpu_devices = dsc_gpu_devices(); gpu_devices > 0) {
+        int max_compute = dsc_gpu_dev_capability(0);
         int max_dev = 0;
-        for (int dev = 1; dev < cuda_devices; ++dev) {
-            if (const int dev_compute = dsc_cuda_dev_capability(dev); dev_compute > max_compute) {
+        for (int dev = 1; dev < gpu_devices; ++dev) {
+            if (const int dev_compute = dsc_gpu_dev_capability(dev); dev_compute > max_compute) {
                 max_compute = dev_compute;
                 max_dev = dev;
             }
         }
-
-        ctx->devices[1] = dsc_cuda_device(mem_size, max_dev);
-        ctx->device_lookup[CUDA] = 1;
+        ctx->devices[1] = dsc_gpu_device(mem_size, max_dev);
+        ctx->device_lookup[GPU] = 1;
     }
+
     // Pre-allocate the tensor headers on the heap, this way we don't commit all the
     // memory upfront.
     ctx->tensors = (dsc_tensor *) calloc(DSC_MAX_OBJS, sizeof(dsc_tensor));
@@ -256,17 +257,24 @@ void dsc_set_default_device(dsc_ctx *ctx,
     ctx->default_device = device == DEFAULT ? DSC_DEFAULT_DEVICE : device;
 }
 
-void dsc_cuda_set_device(dsc_ctx *ctx, const int device) {
-    // To change the CUDA device I first have to go through all the tensors
-    // allocated on a CUDA device and mark them as invalid, then I have to dispose
-    // the old device and allocate a new one.
-    DSC_ASSERT(device < dsc_cuda_devices());
+// ============================================================
+// GPU Utilities
 
-    const int dev_idx = ctx->device_lookup[CUDA];
+dsc_gpu_platform dsc_get_gpu_platform(dsc_ctx *) {
+    return DSC_GPU_PLATFORM;
+}
+
+void dsc_gpu_set_device(dsc_ctx *ctx, const int device) {
+    // To change the GPU device I first have to go through all the tensors
+    // allocated on a GPU device and mark them as invalid, then I have to dispose
+    // the old device and allocate a new one.
+    DSC_ASSERT(device < dsc_gpu_devices());
+
+    const int dev_idx = ctx->device_lookup[GPU];
     dsc_device *old_dev = ctx->devices[dev_idx];
 
     for (int i = 0; i < DSC_MAX_OBJS; ++i) {
-        if (dsc_tensor *x = &ctx->tensors[i]; !(dsc_tensor_invalid(x)) && x->device == CUDA) {
+        if (dsc_tensor *x = &ctx->tensors[i]; !(dsc_tensor_invalid(x)) && x->device == GPU) {
             // Note: changing device will invalidate ALL the tensors previously allocated on it.
             dsc_tensor_set_invalid(x);
         }
@@ -274,27 +282,27 @@ void dsc_cuda_set_device(dsc_ctx *ctx, const int device) {
 
     old_dev->dispose(old_dev);
 
-    ctx->devices[dev_idx] = dsc_cuda_device(old_dev->mem_size, device);
+    ctx->devices[dev_idx] = dsc_gpu_device(old_dev->mem_size, device);
 }
 
-bool dsc_cuda_available(dsc_ctx *) {
-    return dsc_cuda_devices() > 0;
+bool dsc_gpu_available(dsc_ctx *) {
+    return DSC_GPU_PLATFORM != NONE;
 }
 
-int dsc_cuda_devices(dsc_ctx *) {
-    return dsc_cuda_devices();
+int dsc_gpu_devices(dsc_ctx *) {
+    return dsc_gpu_devices();
 }
 
-int dsc_cuda_dev_capability(dsc_ctx *, const int device) {
-    return dsc_cuda_dev_capability(device);
+int dsc_gpu_dev_capability(dsc_ctx *, const int device) {
+    return dsc_gpu_dev_capability(device);
 }
 
-usize dsc_cuda_dev_mem(dsc_ctx *, const int device) {
-    return dsc_cuda_dev_mem(device);
+usize dsc_gpu_dev_mem(dsc_ctx *, const int device) {
+    return dsc_gpu_dev_mem(device);
 }
 
-void dsc_cuda_sync(dsc_ctx *) {
-    dsc_cuda_sync();
+void dsc_gpu_sync(dsc_ctx *) {
+    dsc_gpu_sync();
 }
 
 // ============================================================
@@ -323,7 +331,7 @@ void dsc_dump_traces(dsc_ctx *ctx) {
 // ============================================================
 // Tensor Creation
 
-static __attribute_malloc__ DSC_INLINE dsc_tensor *find_empty_tensor(dsc_ctx *ctx) {
+static DSC_INLINE dsc_tensor *find_empty_tensor(dsc_ctx *ctx) {
     for (int i = 0; i < DSC_MAX_OBJS; ++i) {
         if (dsc_tensor *x = &ctx->tensors[i]; dsc_tensor_invalid(x)) {
             return x;
@@ -372,7 +380,7 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
         const dsc_device_type dev_id = DSC_GET_DEV_ID(ctx, device);
         const dsc_device_type data_dev_id = DSC_GET_DEV_ID(ctx, data_device);
 
-        const dsc_device_type cpy_device = dev_id == CUDA || data_dev_id == CUDA ? CUDA : CPU;
+        const dsc_device_type cpy_device = dev_id == GPU || data_dev_id == GPU ? GPU : CPU;
         const dsc_device *cpy_dev = ctx->devices[cpy_device];
         DSC_DATA(void, new_tensor);
         cpy_dev->memcpy(new_tensor_data, data, ne * DSC_DTYPE_SIZE[dtype], DSC_MEMCPY_DIRECTIONS_LOOKUP[data_dev_id][dev_id]);
@@ -646,17 +654,17 @@ dsc_tensor *dsc_to(dsc_ctx *ctx,
                    const dsc_device_type new_device) {
     if (x->device == new_device) return x;
 
-    if (x->device == CUDA) dsc_cuda_sync();
+    if (x->device == GPU) dsc_gpu_sync();
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim,
                                      &dsc_tensor_get_dim(x, 0),
                                      x->dtype, new_device);
 
-    if (x->device == CUDA) {
-        DSC_GET_DEVICE(ctx, CUDA);
+    if (x->device == GPU) {
+        DSC_GET_DEVICE(ctx, GPU);
         dev->memcpy(out->buf->data, x->buf->data,
                     x->ne * DSC_DTYPE_SIZE[x->dtype], FROM_DEVICE);
-    } else if (new_device == CUDA) {
-        DSC_GET_DEVICE(ctx, CUDA);
+    } else if (new_device == GPU) {
+        DSC_GET_DEVICE(ctx, GPU);
         dev->memcpy(out->buf->data, x->buf->data,
                     x->ne * DSC_DTYPE_SIZE[x->dtype], TO_DEVICE);
     } else {

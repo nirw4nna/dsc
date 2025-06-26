@@ -33,6 +33,8 @@ _DSC_TRACE_NAME_MAX = 32
 _DSC_TRACE_CAT_MAX = 16
 _DSC_VALUE_NONE = 2**31 - 1
 _DSC_TRACE_FILE = 'traces.json'
+_DSC_PLATFORM_CUDA = 0
+_DSC_PLATFORM_ROCM = 1
 
 _DscCtx = c_void_p
 
@@ -149,57 +151,67 @@ _lib.dsc_set_default_device.argtypes = [_DscCtx, c_int8]
 _lib.dsc_set_default_device.restype = None
 
 
-# extern void dsc_cuda_set_device(dsc_ctx *ctx, int device);
-def _dsc_cuda_set_device(ctx: _DscCtx, device: int):
-    _lib.dsc_cuda_set_device(ctx, c_int(device))
+# extern dsc_gpu_platform dsc_get_gpu_platform(dsc_ctx *ctx);
+def _dsc_get_gpu_platform(ctx: _DscCtx) -> int:
+    return _lib.dsc_get_gpu_platform(ctx)
 
 
-_lib.dsc_cuda_set_device.argtypes = [_DscCtx, c_int]
-_lib.dsc_cuda_set_device.restype = None
-
-# extern bool dsc_cuda_available(dsc_ctx *);
-def _dsc_cuda_available(ctx: _DscCtx) -> bool:
-    return _lib.dsc_cuda_available(ctx)
+_lib.dsc_get_gpu_platform.argtypes = [_DscCtx]
+_lib.dsc_get_gpu_platform.restype = c_int8
 
 
-_lib.dsc_cuda_available.argtypes = [_DscCtx]
-_lib.dsc_cuda_available.restype = c_bool
+# extern void dsc_gpu_set_device(dsc_ctx *ctx, int device);
+def _dsc_gpu_set_device(ctx: _DscCtx, device: int):
+    _lib.dsc_gpu_set_device(ctx, c_int(device))
 
 
-# extern int dsc_cuda_devices(dsc_ctx *);
-def _dsc_cuda_devices(ctx: _DscCtx) -> int:
-    return _lib.dsc_cuda_devices(ctx)
+_lib.dsc_gpu_set_device.argtypes = [_DscCtx, c_int]
+_lib.dsc_gpu_set_device.restype = None
 
 
-_lib.dsc_cuda_devices.argtypes = [_DscCtx]
-_lib.dsc_cuda_devices.restype = c_int
+# extern bool dsc_gpu_available(dsc_ctx *);
+def _dsc_gpu_available(ctx: _DscCtx) -> bool:
+    return _lib.dsc_gpu_available(ctx)
 
 
-# extern int dsc_cuda_dev_capability(dsc_ctx *, int device);
-def _dsc_cuda_dev_capability(ctx: _DscCtx, device: int) -> int:
-    return _lib.dsc_cuda_dev_capability(ctx, c_int(device))
+_lib.dsc_gpu_available.argtypes = [_DscCtx]
+_lib.dsc_gpu_available.restype = c_bool
 
 
-_lib.dsc_cuda_dev_capability.argtypes = [_DscCtx]
-_lib.dsc_cuda_dev_capability.restype = c_int
+# extern int dsc_gpu_devices(dsc_ctx *);
+def _dsc_gpu_devices(ctx: _DscCtx) -> int:
+    return _lib.dsc_gpu_devices(ctx)
 
 
-# extern usize dsc_cuda_dev_mem(dsc_ctx *, int device);
-def _dsc_cuda_dev_mem(ctx: _DscCtx, device: int) -> int:
-    return _lib.dsc_cuda_dev_mem(ctx, c_int(device))
+_lib.dsc_gpu_devices.argtypes = [_DscCtx]
+_lib.dsc_gpu_devices.restype = c_int
 
 
-_lib.dsc_cuda_dev_mem.argtypes = [_DscCtx, c_int]
-_lib.dsc_cuda_dev_mem.restype = c_size_t
+# extern int dsc_gpu_dev_capability(dsc_ctx *, int device);
+def _dsc_gpu_dev_capability(ctx: _DscCtx, device: int) -> int:
+    return _lib.dsc_gpu_dev_capability(ctx, c_int(device))
 
 
-# extern usize dsc_cuda_sync(dsc_ctx *);
-def _dsc_cuda_sync(ctx: _DscCtx):
-    _lib.dsc_cuda_sync(ctx)
+_lib.dsc_gpu_dev_capability.argtypes = [_DscCtx]
+_lib.dsc_gpu_dev_capability.restype = c_int
 
 
-_lib.dsc_cuda_sync.argtypes = [_DscCtx]
-_lib.dsc_cuda_sync.restype = None
+# extern usize dsc_gpu_dev_mem(dsc_ctx *, int device);
+def _dsc_gpu_dev_mem(ctx: _DscCtx, device: int) -> int:
+    return _lib.dsc_gpu_dev_mem(ctx, c_int(device))
+
+
+_lib.dsc_gpu_dev_mem.argtypes = [_DscCtx, c_int]
+_lib.dsc_gpu_dev_mem.restype = c_size_t
+
+
+# extern usize dsc_gpu_sync(dsc_ctx *);
+def _dsc_gpu_sync(ctx: _DscCtx):
+    _lib.dsc_gpu_sync(ctx)
+
+
+_lib.dsc_gpu_sync.argtypes = [_DscCtx]
+_lib.dsc_gpu_sync.restype = None
 
 
 # extern bool dsc_tracing_enabled(dsc_ctx *);

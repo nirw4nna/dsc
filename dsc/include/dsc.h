@@ -95,6 +95,10 @@ static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the cod
 #    define DSC_INLINE           __forceinline__
 #    define DSC_STRICTLY_PURE    __attribute__((const))
 #    define DSC_PURE             __attribute__((pure))
+#elif defined(__HIPCC__)
+#    define DSC_INLINE           __forceinline__
+#    define DSC_STRICTLY_PURE    __attribute__((const))
+#    define DSC_PURE             __attribute__((pure))
 #elif defined(__GNUC__)
 #    define DSC_INLINE          inline __attribute__((always_inline))
 #    define DSC_STRICTLY_PURE   __attribute__((const))
@@ -144,12 +148,23 @@ struct dsc_traces {
 enum dsc_device_type : i8 {
     DEFAULT = -1,
     CPU,
+    GPU,
+};
+
+enum dsc_gpu_platform : i8 {
+    NONE = -1,
     CUDA,
+    ROCM,
 };
 
 static constexpr const char *DSC_DEVICE_NAMES[DSC_MAX_DEVICES] = {
         "CPU",
+        "GPU",
+};
+
+static constexpr const char *DSC_GPU_PLATFORM_NAMES[2] = {
         "CUDA",
+        "ROCm",
 };
 
 enum dsc_comparison_op : u8 {
@@ -208,18 +223,23 @@ extern void dsc_print_mem_usage(dsc_ctx *ctx);
 
 extern void dsc_set_default_device(dsc_ctx *ctx, dsc_device_type device);
 
-extern void dsc_cuda_set_device(dsc_ctx *ctx, int device);
+// ============================================================
+// GPU Utilities
 
-extern bool dsc_cuda_available(dsc_ctx *);
+extern dsc_gpu_platform dsc_get_gpu_platform(dsc_ctx *ctx);
 
-extern int dsc_cuda_devices(dsc_ctx *);
+extern void dsc_gpu_set_device(dsc_ctx *ctx, int device);
 
-extern int dsc_cuda_dev_capability(dsc_ctx *, int device);
+extern bool dsc_gpu_available(dsc_ctx *);
 
-extern usize dsc_cuda_dev_mem(dsc_ctx *, int device);
+extern int dsc_gpu_devices(dsc_ctx *);
 
-extern void dsc_cuda_sync(dsc_ctx *);
+extern int dsc_gpu_dev_capability(dsc_ctx *, int device);
 
+extern usize dsc_gpu_dev_mem(dsc_ctx *, int device);
+
+extern void dsc_gpu_sync(dsc_ctx *);
+    
 // ============================================================
 // Tracing
 
