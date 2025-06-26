@@ -1,11 +1,9 @@
-CUDA		?=	/usr/local/cuda
-ROCM		?=	/opt/rocm
 CXX			=	g++
 NVCC		=	nvcc
 HIPCC		=	hipcc
 AR			=	ar
 
-HIPCCFLAGS	=	-std=c++20 -I$(ROCM)/include -I./dsc/include/ -Wall -Wextra -Wformat \
+HIPCCFLAGS	=	-std=c++20 -I$(ROCM)/include -I./dsc/include/ --offload-arch=native -Wall -Wextra -Wformat \
                 -Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
                 -Wno-missing-braces -Wcast-align -fno-exceptions -fno-rtti
 NVCCFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -ccbin=$(CXX) -arch=native \
@@ -19,6 +17,28 @@ LDFLAGS		=	-lm
 
 UNAME_M		:=	$(shell uname -m)
 UNAME_S		:=	$(shell uname -s)
+
+ifdef DSC_GPU
+	# Try to detect the GPU vendor based on the available compiler
+	DSC_CUDA := $(shell which $(NVCC) 2>/dev/null)
+	DSC_HIP := $(shell which $(HIPCC) 2>/dev/null)
+	ifdef DSC_CUDA
+		ifneq ($(wildcard /opt/cuda),)
+			CUDA ?= /opt/cuda
+		else
+			CUDA ?= /usr/local/cuda
+		endif
+	else
+		# Check for HIP only if CUDA is not defined
+		ifdef DSC_HIP
+			ifneq ($(wildcard /opt/rocm),)
+				ROCM ?=	/opt/rocm
+			else
+				ROCM ?=	/usr/local/rocm
+			endif
+		endif
+	endif
+endif
 
 # Make sure only one GPU platform is defined
 ifdef DSC_CUDA

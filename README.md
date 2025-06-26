@@ -75,32 +75,64 @@ to enable/disable specific features:
 |---------------|------------------------------------------------------------------------------|
 | DSC_LOG_LEVEL | Configure the logging level (values: [0-3] with 0 meaning everything on)     |
 | DSC_FAST      | Turn off logging (level=2) and compile with the highest optimisation level   |
-| DSC_CUDA      | Enable CUDA backend                                                          |
+| DSC_GPU       | Enable GPU support                                                           |
 | DSC_MAX_OBJS  | Max number of DSC tensors that can be used at the same time (**default=1K**) |
 
 To verify that everything worked out as expected try a simple operation:
 ```shell
 python3 -c "import dsc; x = dsc.arange(10); print(x)"
 ```
+When running on the CPU it may be beneficial to use multiple threads for certain operations (i.e. when doing matrix-vector
+products). DSC has native support for concurrency, to enable it set the `DSC_NUM_THREADS` environment variable.
+If you set it to -1 it will use half of your available cores.
+
+### Notes on GPU support
+DSC supports both AMD and NVIDIA GPUs. If compiled with `DSC_GPU=1` it will automatically detect the appropriate backend.
+You can see which backend has been selected by checking the output of the Makefile or, once the compilation is done,
+use the Python API:
+```python
+import dsc
+
+if dsc.gpu.is_available(): # If a GPU backend has been detected you can check if it's ROCm or CUDA
+    dsc.gpu.is_rocm()
+    dsc.gpu.is_cuda()
+```
 
 ### CUDA backend
 This provides GPU acceleration on NVIDIA GPUs. To get started make sure to have the [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit)
 installed.
 
-To build the C++ library with CUDA enabled:
+To build the C++ library with CUDA enabled simply specify `DSC_GPU=1`. CUDA will be detected automatically if you installed it.
+
+**Note:** if you see errors when compiling with CUDA support make sure that the CUDA installation path specified in the Makefile
+is correct. If this is not the case you have to manually update the Makefile or set the `CUDA` environment variable before calling `make`.
+
+To verify that the CUDA backend is working try:
 ```shell
-make clean; make shared DSC_FAST=1 DSC_CUDA=1
+python3 -c "import dsc; print(dsc.gpu.is_available() and dsc.gpu.is_cuda())"
 ```
 
-**Note:** if you see errors when compiling with CUDA support make sure that the CUDA installation path is `/usr/local/cuda`
-(default on Ubuntu).
-If that is not the case you have to manually update the Makefile or set the `CUDA` environment variable before calling make.
+### HIP backend
+This provides GPU acceleration on AMD GPUs. To get started make sure to have the [ROCm](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/quick-start.html#rocm-install-quick)
+installed.
 
-To verify that the CUDA backend is working try a simple GPU operation:
+To build the C++ library with ROCm enabled simply specify `DSC_GPU=1`. ROCm will be detected automatically if you installed it.
+
+**Note:** if you see errors when compiling with ROCm support make sure that the ROCm installation path specified in the Makefile
+is correct. If this is not the case you have to manually update the Makefile or set the `ROCM` environment variable before calling `make`.
+
+To verify that the ROCm backend is working try:
 ```shell
-python3 -c "import dsc; x = dsc.arange(10, device='cuda'); print(x)"
+python3 -c "import dsc; print(dsc.gpu.is_available() and dsc.gpu.is_rocm())"
 ```
 
+## Setting a default device
+The default device in DSC is the CPU. This means that, if you don't specify anything, all the operations will be
+performed on the CPU even when a GPU device is available. To set a different device as default you can use
+```python
+dsc.set_default_device('gpu')
+```
+This will make the GPU the default device and DSC will perform all the operations there by default.
 
 ## Running tests
 DSC uses `pytest` to run unit tests against NumPy which is the reference for correctness.
