@@ -62,6 +62,7 @@ endif
 
 CXXFLAGS	+=	-DDSC_LOG_LEVEL=$(DSC_LOG_LEVEL)
 NVCCFLAGS	+=	-DDSC_LOG_LEVEL=$(DSC_LOG_LEVEL)
+HIPCCFLAGS	+=	-DDSC_LOG_LEVEL=$(DSC_LOG_LEVEL)
 
 ifdef DSC_FAST
 	# -Ofast turns on all the unsafe math optimizations, including -ffinite-math-only this is an issue when testing

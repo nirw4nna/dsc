@@ -7,7 +7,11 @@
 #pragma once
 
 #include <hip/hip_runtime.h>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdouble-promotion"
 #include <rocrand/rocrand_kernel.h>
+#pragma GCC diagnostic pop
+
 #include <rocblas/rocblas.h>
 
 
