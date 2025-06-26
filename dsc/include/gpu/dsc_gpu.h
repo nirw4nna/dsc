@@ -225,19 +225,19 @@ extern void dsc_gpu_max(dsc_device *,
 
 #else
 
+#define DSC_GPU_PLATFORM NONE
+
 static DSC_INLINE int dsc_gpu_devices() {
     return 0;
 }
 
-static DSC_INLINE int dsc_gpu_dev_capability(const int dev) {
+static DSC_INLINE int dsc_gpu_dev_capability(const int) {
     return 0;
 }
 
-static DSC_INLINE void dsc_gpu_dev_name(const int dev, char *dst) {
-    return 0;
-}
+static DSC_INLINE void dsc_gpu_dev_name(const int, char *) {}
 
-static DSC_INLINE usize dsc_gpu_dev_mem(const int dev) {
+static DSC_INLINE usize dsc_gpu_dev_mem(const int) {
     return 0;
 }
 

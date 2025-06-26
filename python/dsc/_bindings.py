@@ -157,7 +157,7 @@ def _dsc_get_gpu_platform(ctx: _DscCtx) -> int:
 
 
 _lib.dsc_get_gpu_platform.argtypes = [_DscCtx]
-_lib.dsc_get_gpu_platform.restype = c_uint8
+_lib.dsc_get_gpu_platform.restype = c_int8
 
 
 # extern void dsc_gpu_set_device(dsc_ctx *ctx, int device);

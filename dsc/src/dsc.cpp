@@ -286,7 +286,7 @@ void dsc_gpu_set_device(dsc_ctx *ctx, const int device) {
 }
 
 bool dsc_gpu_available(dsc_ctx *) {
-    return dsc_gpu_devices() > 0;
+    return DSC_GPU_PLATFORM != NONE;
 }
 
 int dsc_gpu_devices(dsc_ctx *) {

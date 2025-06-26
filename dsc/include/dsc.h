@@ -151,7 +151,8 @@ enum dsc_device_type : i8 {
     GPU,
 };
 
-enum dsc_gpu_platform : u8 {
+enum dsc_gpu_platform : i8 {
+    NONE = -1,
     CUDA,
     ROCM,
 };
