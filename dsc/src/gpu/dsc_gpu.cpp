@@ -1489,7 +1489,6 @@ static DSC_INLINE void reduce_op(const dsc_tensor *DSC_RESTRICT x,
                                           n, op, atomic_op, params);
 }
 
-// TODO: not clear how to do reductions with bf16 (atomics?)
 void dsc_gpu_sum(dsc_device *,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out,
