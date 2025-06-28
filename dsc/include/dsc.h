@@ -239,6 +239,8 @@ extern int dsc_gpu_dev_capability(dsc_ctx *, int device);
 extern usize dsc_gpu_dev_mem(dsc_ctx *, int device);
 
 extern void dsc_gpu_sync(dsc_ctx *);
+
+extern bool dsc_gpu_has_bf16(dsc_ctx *);
     
 // ============================================================
 // Tracing

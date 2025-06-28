@@ -6,11 +6,14 @@
 
 #pragma once
 
-#include <cstdint>
 #include <cstddef>
-#include <type_traits>
+#include <cstdint>
 #include <limits>
+#include <type_traits>
 
+#if defined(__HIPCC__) && defined(DSC_BF16)
+#   include <hip/hip_bf16.h>
+#endif
 
 #define DSC_DTYPES          ((int) 5)
 #define DSC_DEFAULT_TYPE    F32
@@ -29,7 +32,11 @@ using usize = size_t;
 using byte = char;
 using f32 = float;
 using f64 = double;
-using bf16 = u16;
+#if defined(__HIPCC__) && defined(DSC_BF16)
+    using bf16 = __hip_bfloat16;
+#else
+    using bf16 = u16;
+#endif
 
 enum dsc_dtype : u8 {
     BOOL,
@@ -55,25 +62,6 @@ constexpr static const char *DSC_DTYPE_NAMES[DSC_DTYPES] = {
         "f64",
 };
 
-// BF16 on CPU is not a real type, for now we just support its creation but all the operations
-// will implicitly convert to F32
-
-// Conversion rules when we have two operands
-constexpr static dsc_dtype DSC_DTYPE_CONVERSION_TABLE[DSC_DTYPES][DSC_DTYPES] = {
-        {BOOL, I32, F32, F32, F64},
-        {I32, I32, F32, F32, F64},
-        {F32, F32, F32, F32, F64}, // BF16 is always upcasted to F32
-        {F32, F32, F32, F32, F64},
-        {F64, F64, F64, F64, F64},
-};
-
-constexpr static dsc_dtype DSC_TYPE_AT_LEAST_FLOAT_TABLE[DSC_DTYPES] = {
-        F32, // BOOL
-        F32, // I32
-        F32, // BF16
-        F32, // F32
-        F64, // F64
-};
 
 // Conversion utility
 template<typename T>
@@ -115,22 +103,15 @@ consteval bool dsc_is_real() {
 }
 
 template<typename T>
-consteval T dsc_pi() {
-    if constexpr (dsc_is_type<T, f32>()) {
-        return 3.14159265358979323846f;
-    } else if constexpr (dsc_is_type<T, f64>()){
-        return 3.14159265358979323846;
-    } else {
-        static_assert("T is not supported");
-    }
-}
-
-template<typename T>
-consteval T dsc_zero() {
+constexpr T dsc_zero() {
     if constexpr (dsc_is_type<T, bool>()) {
         return false;
     } else if constexpr (dsc_is_type<T, i32>()) {
         return 0;
+#if defined(__HIPCC__) && defined(DSC_BF16)
+    } else if constexpr (dsc_is_type<T, bf16>()){
+        return (bf16) 0;
+#endif
     } else if constexpr (dsc_is_type<T, f32>()) {
         return 0.f;
     } else if constexpr (dsc_is_type<T, f64>()) {

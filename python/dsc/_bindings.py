@@ -214,6 +214,15 @@ _lib.dsc_gpu_sync.argtypes = [_DscCtx]
 _lib.dsc_gpu_sync.restype = None
 
 
+# extern bool dsc_gpu_has_bf16(dsc_ctx *);
+def _dsc_gpu_has_bf16(ctx: _DscCtx) -> bool:
+    return _lib.dsc_gpu_has_bf16(ctx)
+
+
+_lib.dsc_gpu_has_bf16.argtypes = [_DscCtx]
+_lib.dsc_gpu_has_bf16.restype = c_bool
+
+
 # extern bool dsc_tracing_enabled(dsc_ctx *);
 def _dsc_tracing_enabled(ctx: _DscCtx) -> c_bool:
     return _lib.dsc_tracing_enabled(ctx)

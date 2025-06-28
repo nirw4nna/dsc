@@ -74,6 +74,14 @@ static DSC_INLINE void dsc_gpu_sync() {
     DSC_GPU_CHECK(gpu_device_sync());
 }
 
+static DSC_INLINE bool dsc_gpu_has_bf16() {
+#if defined(DSC_BF16)
+    return true;
+#else
+    return false;
+#endif
+}
+
 // ============================================================
 // GPU-specific operations
 //
@@ -242,5 +250,9 @@ static DSC_INLINE usize dsc_gpu_dev_mem(const int) {
 }
 
 static DSC_INLINE void dsc_gpu_sync() {}
+
+static DSC_INLINE bool dsc_gpu_has_bf16() {
+    return false;
+}
 
 #endif // DSC_CUDA || DSC_HIP

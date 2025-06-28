@@ -12,6 +12,7 @@ from .._bindings import (
     _dsc_gpu_dev_capability,
     _dsc_gpu_dev_mem,
     _dsc_gpu_sync,
+    _dsc_gpu_has_bf16,
     _DSC_PLATFORM_CUDA,
     _DSC_PLATFORM_ROCM,
 )
@@ -26,6 +27,9 @@ def is_cuda() -> bool:
 
 def is_rocm() -> bool:
     return _dsc_get_gpu_platform(_get_ctx()) == _DSC_PLATFORM_ROCM
+
+def has_bf16() -> bool:
+    return _dsc_gpu_has_bf16(_get_ctx())
 
 def device_count() -> int:
     return _dsc_gpu_devices(_get_ctx())

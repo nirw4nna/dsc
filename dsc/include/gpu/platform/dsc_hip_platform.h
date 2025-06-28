@@ -69,9 +69,13 @@ using gpu_rand_state = rocrand_state_xorwow;
 
 #define gpu_blas_create     rocblas_create_handle
 #define gpu_blas_destroy    rocblas_destroy_handle
+#define gpu_blas_bfgemm     rocblas_gemm_ex
 #define gpu_blas_sgemm      rocblas_sgemm
 #define gpu_blas_dgemm      rocblas_dgemm
+#define gpu_blas_op         rocblas_operation
 #define GPU_BLAS_OP_T       rocblas_operation_transpose
 #define GPU_BLAS_OP_N       rocblas_operation_none
+#define GPU_GEMM_DTYPE_BF16 rocblas_datatype_bf16_r
+#define GPU_GEMM_ALGO       rocblas_gemm_algo_standard
 
 using gpu_blas_handle = rocblas_handle;

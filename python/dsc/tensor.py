@@ -360,14 +360,18 @@ class Tensor:
         return bytes(byte_array)
 
     def numpy(self) -> np.ndarray:
-        self_cpu = self.to('cpu')
+        # Numpy doesn't support BF16 so, before moving to CPU, I just cast the tensor to F32.
+        if self.dtype == Dtype.BF16:
+            self_cpu = self.cast(Dtype.F32).to('cpu')
+        else:
+            self_cpu = self.to('cpu')
 
-        typed_data = ctypes.cast(self_cpu.data, DTYPE_TO_CTYPE[self.dtype])
+        typed_data = ctypes.cast(self_cpu.data, DTYPE_TO_CTYPE[self_cpu.dtype])
 
         # Create a copy of the underlying data buffer
-        np_array = np.ctypeslib.as_array(typed_data, shape=self.shape).copy()
+        np_array = np.ctypeslib.as_array(typed_data, shape=self_cpu.shape).copy()
 
-        return np_array.reshape(self.shape)
+        return np_array.reshape(self_cpu.shape)
 
     def load(self, x: TensorType):
         if isinstance(x, np.ndarray):
@@ -410,11 +414,20 @@ class Tensor:
     def split(self, ne: int, axis: int = -1) -> Tuple['Tensor', ...]:
         return split(self, ne, axis)
 
+    def sum(self, axis: int = -1, keepdims: bool = True) -> 'Tensor':
+        return sum(self, None, axis=axis, keepdims=keepdims)
+
     def mean(self, axis: int = -1, keepdims: bool = True) -> 'Tensor':
         return mean(self, None, axis=axis, keepdims=keepdims)
 
     def var(self, axis: int = -1, keepdims: bool = True) -> 'Tensor':
         return var(self, None, axis=axis, keepdims=keepdims)
+
+    def max(self, axis: int = -1, keepdims: bool = True) -> 'Tensor':
+        return max(self, None, axis=axis, keepdims=keepdims)
+
+    def min(self, axis: int = -1, keepdims: bool = True) -> 'Tensor':
+        return min(self, None, axis=axis, keepdims=keepdims)
 
 
 def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device, data: ctypes.c_void_p = None) -> Tensor:
