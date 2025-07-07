@@ -32,23 +32,25 @@ if dsc.gpu.has_bf16():
 
 DSC_TO_TORCH_DTYPES = {v: k for k, v in TORCH_TO_DSC_DTYPES.items()}
 
+
 def is_float(dtype: torch.dtype) -> bool:
     return dtype == torch.bfloat16 or dtype == torch.float32 or dtype == torch.float64
+
 
 def is_bool(dtype: torch.dtype) -> bool:
     return dtype == torch.bool
 
+
 def is_integer(dtype: torch.dtype) -> bool:
     return dtype == torch.int32
 
-def pytest_configure():
-    if not dsc.gpu.is_available():
-        pytest.skip('GPU not available - skipping all GPU tests', allow_module_level=True)
 
 @pytest.fixture(scope='session', autouse=True)
 def session_fixture():
-    # This is invoked once before starting the test session
+    if not dsc.gpu.is_available():
+        pytest.skip('GPU not available - skipping all GPU tests', allow_module_level=True)
     dsc.init(int(2**30))
+    # This is invoked once before starting the test session
     dsc.set_default_device('gpu')
     yield
 
