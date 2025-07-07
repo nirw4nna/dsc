@@ -60,13 +60,13 @@ jobs:
           sed -i 's/^torch/#torch/' requirements.txt
           pip install -e .
           pip install -r requirements.txt
-          pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/rocm6.4
+          pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/rocm6.4
       - name: Compile DSC C++ with GPU support
         run: make shared DSC_GPU=1 DSC_FAST=1
       - name: Run common ops tests on GPU
         run: |
           cd python/tests/
-          DSC_DEVICE=gpu pytest -s test_ops_common.py --no-header --no-summary -q
+          DEVICE=gpu pytest -s test_ops_common.py --no-header --no-summary -q
       - name: Run GPU ops tests
         run: |
           cd python/tests/
@@ -74,4 +74,4 @@ jobs:
       - name: Run indexing tests on GPU
         run: |
           cd python/tests/
-          DSC_DEVICE=gpu pytest -s test_indexing.py --no-header --no-summary -q
+          DEVICE=gpu pytest -s test_indexing.py --no-header --no-summary -q

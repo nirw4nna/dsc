@@ -15,6 +15,7 @@ import math
 def session_fixture():
     # This is invoked once before starting the test session
     dsc.init(int(2**30))
+    print(f'Running tests on {DEVICE}')
     dsc.set_default_device(DEVICE)
     yield
 
