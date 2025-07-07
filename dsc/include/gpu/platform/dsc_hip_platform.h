@@ -69,15 +69,27 @@ using gpu_rand_state = rocrand_state_xorwow;
 
 #define gpu_blas_create         rocblas_create_handle
 #define gpu_blas_destroy        rocblas_destroy_handle
-#define gpu_blas_bfgemm         rocblas_gemm_ex
 #define gpu_blas_sgemm          rocblas_sgemm
 #define gpu_blas_dgemm          rocblas_dgemm
 #define gpu_blas_op             rocblas_operation
+#define gpu_blas_dtype          rocblas_datatype
 #define GPU_BLAS_OP_T           rocblas_operation_transpose
 #define GPU_BLAS_OP_N           rocblas_operation_none
 #define GPU_GEMM_DTYPE_BF16     rocblas_datatype_bf16_r
 #define GPU_GEMM_DTYPE_F32      rocblas_datatype_f32_r
-#define GPU_GEMM_ALGO           rocblas_gemm_algo_standard
-#define GPU_GEMM_EXTRA_FLAGS    (, 0, 0)
 
 using gpu_blas_handle = rocblas_handle;
+
+static DSC_INLINE rocblas_status gpu_blas_bfgemm(const gpu_blas_handle handle, const gpu_blas_op a_op, const gpu_blas_op b_op,
+                                                 const int m, const int n, const int k, const void *DSC_RESTRICT alpha,
+                                                 const void *DSC_RESTRICT xa, const gpu_blas_dtype a_dtype, const int stride_a,
+                                                 const void *DSC_RESTRICT xb, const gpu_blas_dtype b_dtype, const int stride_b,
+                                                 const void *DSC_RESTRICT beta, void *out, const gpu_blas_dtype out_dtype,
+                                                 const int stride_out, const gpu_blas_dtype compute_dtype) {
+    return rocblas_gemm_ex(handle, a_op, b_op, m, n, k,
+                        alpha, xa, a_dtype, stride_a,
+                        xb, b_dtype, stride_b, beta,
+                        out, out_dtype, stride_out,
+                        out, out_dtype, stride_out,
+                        compute_dtype, rocblas_gemm_algo_standard, 0, 0);
+}
