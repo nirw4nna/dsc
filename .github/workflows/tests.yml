@@ -33,14 +33,16 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential
-    - name: Create venv manually
+    - name: Install DSC with requirements
+      if: matrix.host == 'ubuntu-latest'
+      run: |
+        pip install -e .
+        pip install -r requirements.txt
+    - name: Install DSC with requirements (NVIDIA)
       if: matrix.host == 'self-hosted-nvidia-gpu'
       run: |
         python3 -m venv venv
         source venv/bin/activate
-    - name: Install DSC with requirements
-      if: matrix.host != 'self-hosted-amd-gpu'
-      run: |
         pip install -e .
         pip install -r requirements.txt
     - name: Install DSC with requirements (AMD)
