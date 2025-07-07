@@ -7,8 +7,17 @@ on:
 
 
 jobs:
-  test_cpu:
-    runs-on: ubuntu-latest
+  test:
+    strategy:
+      matrix:
+        include:
+          - host: ubuntu-latest
+            device: cpu
+          - host: self-hosted-amd-gpu
+            device: gpu
+          - host: self-hosted-nvidia-gpu
+            device: gpu
+    runs-on: ${{ matrix.host }}
 
     steps:
     - name: Checkout Code
@@ -22,56 +31,35 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y build-essential
     - name: Install DSC with requirements
+      if: matrix.host != 'self-hosted-amd-gpu'
       run: |
         pip install -e .
         pip install -r requirements.txt
+    - name: Install DSC with requirements (AMD)
+      if: matrix.host == 'self-hosted-amd-gpu'
+      run: |
+        # Don't install torch stable, we need the nightly build with ROCm 6.4
+        sed -i 's/^torch/#torch/' requirements.txt
+        pip install -e .
+        pip install -r requirements.txt
+        pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/rocm6.4
     - name: Compile DSC C++
       run: make shared DSC_FAST=1
-    - name: Run common ops tests on CPU
+    - name: Run common ops tests on ${{ matrix.device }}
       run: |
         cd python/tests/
-        DSC_DEVICE=cpu pytest -s test_ops_common.py --no-header --no-summary -q
+        DSC_DEVICE=${{ matrix.device }} pytest -s test_ops_common.py --no-header --no-summary -q
     - name: Run ops tests on CPU
+      if: matrix.device == 'cpu'
       run: |
         cd python/tests/
         pytest -s test_ops_cpu.py --no-header --no-summary -q
-    - name: Run indexing tests on CPU
+    - name: Run GPU ops tests
+      if: matrix.device == 'gpu'
       run: |
         cd python/tests/
-        DSC_DEVICE=cpu pytest -s test_indexing.py --no-header --no-summary -q
-
-  test_amd_gpu:
-      runs-on: self-hosted-amd-gpu
-
-      steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential
-      - name: Install DSC with requirements
-        run: |
-          # Don't install torch stable, we need the nightly build with ROCm 6.4
-          sed -i 's/^torch/#torch/' requirements.txt
-          pip install -e .
-          pip install -r requirements.txt
-          pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/rocm6.4
-      - name: Compile DSC C++ with GPU support
-        run: make shared DSC_GPU=1 DSC_FAST=1
-      - name: Run common ops tests on GPU
-        run: |
-          cd python/tests/
-          DEVICE=gpu pytest -s test_ops_common.py --no-header --no-summary -q
-      - name: Run GPU ops tests
-        run: |
-          cd python/tests/
-          pytest -s test_ops_gpu.py --no-header --no-summary -q
-      - name: Run indexing tests on GPU
-        run: |
-          cd python/tests/
-          DEVICE=gpu pytest -s test_indexing.py --no-header --no-summary -q
+        pytest -s test_ops_gpu.py --no-header --no-summary -q
+    - name: Run indexing tests on ${{ matrix.device }}
+      run: |
+        cd python/tests/
+        DSC_DEVICE=${{ matrix.device }} pytest -s test_indexing.py --no-header --no-summary -q
