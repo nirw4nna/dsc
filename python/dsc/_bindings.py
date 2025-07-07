@@ -420,14 +420,15 @@ _lib.dsc_wrap_i32.restype = _DscTensor_p
 
 # extern dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx,
 #                                 f32 val,
-#                                 dsc_device_type device = DEFAULT);
+#                                 dsc_device_type device = DEFAULT,
+#                                 bool as_bf16 = false);
 def _dsc_wrap_f32(
-    ctx: _DscCtx, val: float, device: Device
+    ctx: _DscCtx, val: float, device: Device, as_bf16: bool
 ) -> _DscTensor_p:
-    return _lib.dsc_wrap_f32(ctx, c_float(val), c_int8(device.value))
+    return _lib.dsc_wrap_f32(ctx, c_float(val), c_int8(device.value), c_bool(as_bf16))
 
 
-_lib.dsc_wrap_f32.argtypes = [_DscCtx, c_float, c_int8]
+_lib.dsc_wrap_f32.argtypes = [_DscCtx, c_float, c_int8, c_bool]
 _lib.dsc_wrap_f32.restype = _DscTensor_p
 
 

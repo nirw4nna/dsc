@@ -476,7 +476,7 @@ static DSC_GPU_KERNEL void k_tril(const T *DSC_RESTRICT x,
         const int row = idx[DSC_MAX_DIMS - 2];
         const int col = idx[DSC_MAX_DIMS - 1];
 
-        out[i] = (col > (row + diagonal)) ? dsc_zero<T>() : x[i];
+        out[i] = col > (row + diagonal) ? (T) 0 : x[i];
     }
 }
 
@@ -1004,13 +1004,15 @@ static DSC_INLINE void gemm_op(const gpu_blas_handle handle,
                                                   &xa_data[xa_offset], stride_a, &beta,
                                                   &out_data[out_offset], stride_out));
             } else if constexpr (dsc_is_type<T, bf16>()) {
+                // These must have the same type as the compute type (f32 in this case)
+                static constexpr f32 alpha_f32 = 1, beta_f32 = 0;
                 DSC_GPU_BLAS_CHECK(gpu_blas_bfgemm(handle,
                                                    a_op, GPU_BLAS_OP_N, n, m, k,
-                                                   &alpha, &xb_data[xb_offset], GPU_GEMM_DTYPE_BF16, stride_b,
-                                                   &xa_data[xa_offset], GPU_GEMM_DTYPE_BF16, stride_a, &beta,
+                                                   &alpha_f32, &xb_data[xb_offset], GPU_GEMM_DTYPE_BF16, stride_b,
+                                                   &xa_data[xa_offset], GPU_GEMM_DTYPE_BF16, stride_a, &beta_f32,
                                                    &out_data[out_offset], GPU_GEMM_DTYPE_BF16, stride_out,
                                                    &out_data[out_offset], GPU_GEMM_DTYPE_BF16, stride_out,
-                                                   GPU_GEMM_DTYPE_BF16, GPU_GEMM_ALGO, 0, 0));
+                                                   GPU_GEMM_DTYPE_F32, GPU_GEMM_ALGO, 0, 0));
             } else {
                 static_assert("T must be real");
             }
@@ -1495,11 +1497,11 @@ void dsc_gpu_sum(dsc_device *,
                  const int axis_idx) {
     switch (out->dtype) {
         case F32:
-            reduce_op<f32, gpu_add_op, gpu_atomic_add_op>(x, out, axis_idx, dsc_zero<f32>(),
+            reduce_op<f32, gpu_add_op, gpu_atomic_add_op>(x, out, axis_idx, 0.f,
                                                           gpu_add_op(), gpu_atomic_add_op());
             break;
         case F64:
-            reduce_op<f64, gpu_add_op, gpu_atomic_add_op>(x, out, axis_idx, dsc_zero<f64>(),
+            reduce_op<f64, gpu_add_op, gpu_atomic_add_op>(x, out, axis_idx, 0.,
                                                           gpu_add_op(), gpu_atomic_add_op());
             break;
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);

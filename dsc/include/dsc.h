@@ -319,7 +319,8 @@ extern dsc_tensor *dsc_wrap_i32(dsc_ctx *ctx,
 
 extern dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx,
                                 f32 val,
-                                dsc_device_type device = DEFAULT);
+                                dsc_device_type device = DEFAULT,
+                                bool as_bf16 = false);
 
 extern dsc_tensor *dsc_wrap_f64(dsc_ctx *ctx,
                                 f64 val,

@@ -336,7 +336,7 @@ static DSC_INLINE void pack_a(const int m, const int k,
 
         for (int p = 0; p < k; ++p) {
             for (int ii = 0; ii < ib; ++ii) *packed_a++ = a[(i + ii) * stride_a + p];
-            for (int ii = ib; ii < Mr; ++ii) *packed_a++ = dsc_zero<T>();
+            for (int ii = ib; ii < Mr; ++ii) *packed_a++ = (T) 0;
         }
     }
 }
@@ -356,7 +356,7 @@ static DSC_INLINE void pack_b(const int k, const int n,
             } else {
                 for (int jj = 0; jj < jb; ++jj) *packed_b++ = b[p * stride_b + (j + jj)];
             }
-            for (int jj = jb; jj < Nr; ++jj) *packed_b++ = dsc_zero<T>();
+            for (int jj = jb; jj < Nr; ++jj) *packed_b++ = (T) 0;
         }
     }
 }

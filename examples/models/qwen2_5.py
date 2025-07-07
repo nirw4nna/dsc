@@ -41,22 +41,22 @@ class Config:
 
 
 class MLP(nn.Module):
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, dtype: dsc.Dtype = dsc.f32):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False, dtype=dtype)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False, dtype=dtype)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False, dtype=dtype)
 
     @dsc.trace('MLP')
     def forward(self, x: dsc.Tensor) -> dsc.Tensor:
         return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
 
 
-def _pre_compute_freqs(dim: int, theta: float, max_seq_len: int) -> Tuple[dsc.Tensor, dsc.Tensor]:
-    freqs = 1.0 / (theta ** ((dsc.arange(start=0, stop=dim, step=2)[: (dim // 2)]).cast(dsc.f32) / dim))
-    t = dsc.arange(stop=max_seq_len, dtype=dsc.f32)
+def _pre_compute_freqs(dim: int, theta: float, max_seq_len: int, dtype: dsc.Dtype = dsc.f32) -> Tuple[dsc.Tensor, dsc.Tensor]:
+    freqs = 1.0 / (theta ** ((dsc.arange(start=0, stop=dim, step=2)[: (dim // 2)]).cast(dtype) / dim))
+    t = dsc.arange(stop=max_seq_len, dtype=dtype)
     freqs = dsc.outer(t, freqs)
     cos_cache_half = dsc.cos(freqs)
     sin_cache_half = dsc.sin(freqs)
@@ -98,17 +98,17 @@ def _repeat_kv(x: dsc.Tensor, n_rep: int) -> dsc.Tensor:
 
 
 class Attention(nn.Module):
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, dtype: dsc.Dtype = dsc.f32):
         super().__init__()
         self.head_size = config.hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
         self.num_kv_heads = config.num_key_value_heads
         self.n_rep = self.num_heads // self.num_kv_heads
         self.sliding_window = config.sliding_window
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_size)
-        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_size)
-        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_size)
-        self.o_proj = nn.Linear(self.num_heads * self.head_size, config.hidden_size, bias=False)
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_size, dtype=dtype)
+        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_size, dtype=dtype)
+        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_size, dtype=dtype)
+        self.o_proj = nn.Linear(self.num_heads * self.head_size, config.hidden_size, bias=False, dtype=dtype)
 
     @dsc.trace('Attention')
     def forward(
@@ -158,8 +158,7 @@ class Attention(nn.Module):
             should_attend,
             0.0,
             float('-inf')
-        ).reshape(1, 1, q_len, k_len)
-
+        ).reshape(1, 1, q_len, k_len).cast(scores.dtype)
         masked_scores = scores + additive_mask
 
         attn_weights = F.softmax(masked_scores, axis=-1)
@@ -169,12 +168,12 @@ class Attention(nn.Module):
 
 
 class DecoderLayer(nn.Module):
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, dtype: dsc.Dtype = dsc.f32):
         super().__init__()
-        self.self_attn = Attention(config)
-        self.mlp = MLP(config)
-        self.input_layernorm = nn.RMSNorm(config.hidden_size, epsilon=config.rms_norm_eps)
-        self.post_attention_layernorm = nn.RMSNorm(config.hidden_size, epsilon=config.rms_norm_eps)
+        self.self_attn = Attention(config, dtype=dtype)
+        self.mlp = MLP(config, dtype=dtype)
+        self.input_layernorm = nn.RMSNorm(config.hidden_size, epsilon=config.rms_norm_eps, dtype=dtype)
+        self.post_attention_layernorm = nn.RMSNorm(config.hidden_size, epsilon=config.rms_norm_eps, dtype=dtype)
 
     @dsc.trace('DecoderLayer')
     def forward(
@@ -193,24 +192,24 @@ class DecoderLayer(nn.Module):
 
 
 class Qwen25Model(nn.Module):
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, dtype: dsc.Dtype = dsc.f32):
         super().__init__()
         self.config = config
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([DecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = nn.RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        cos_cache, sin_cache = _pre_compute_freqs(config.hidden_size // config.num_attention_heads, config.rope_theta, config.max_position_embeddings)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, dtype=dtype)
+        self.layers = nn.ModuleList([DecoderLayer(config, dtype=dtype) for _ in range(config.num_hidden_layers)])
+        self.norm = nn.RMSNorm(config.hidden_size, config.rms_norm_eps, dtype=dtype)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False, dtype=dtype)
+        cos_cache, sin_cache = _pre_compute_freqs(config.hidden_size // config.num_attention_heads, config.rope_theta, config.max_position_embeddings, dtype=dtype)
         self.cos_cache = cos_cache
         self.sin_cache = sin_cache
 
 
     @staticmethod
-    def from_pretrained(config: Config = Config()) -> 'Qwen25Model':
+    def from_pretrained(config: Config = Config(), dtype: dsc.Dtype = dsc.f32) -> 'Qwen25Model':
         state_dict = nn.safe_load('https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct/resolve/main/model.safetensors',
                                   trim_prefix='model.',
-                                  use_dtype=dsc.f32)
-        model = Qwen25Model(config)
+                                  use_dtype=dtype)
+        model = Qwen25Model(config, dtype)
         model.from_state(state_dict,
                          tied={'lm_head.weight': 'embed_tokens.weight'})
         del state_dict
@@ -303,6 +302,7 @@ if __name__ == '__main__':
     cli.add_argument('-n', type=int, default=100, help='Tokens to generate (default=100)')
     cli.add_argument('-top-k', type=int, default=10, help='Top K sampling (default=10)')
     cli.add_argument('--device', choices=['cpu', 'gpu'], default='cpu', help='Device on which to run the model')
+    cli.add_argument('--dtype', choices=['f32', 'bf16'], default='f32', help='Dtype to use for inference')
 
     args = cli.parse_args()
 
@@ -310,7 +310,13 @@ if __name__ == '__main__':
     prompt = args.prompt
     max_tokens = args.n
     top_k = args.top_k
-    model = Qwen25Model.from_pretrained()
+    dtype = dsc.f32
+    if args.dtype == 'bf16':
+        dtype = dsc.bf16
+
+    print(f'Running model on {args.device} using {dtype}')
+
+    model = Qwen25Model.from_pretrained(dtype=dtype)
     tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen2.5-Coder-0.5B-Instruct')
     messages = [
         {"role": "system", "content": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."},

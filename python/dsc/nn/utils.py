@@ -8,7 +8,7 @@
 # (https://opensource.org/license/bsd-3-clause).
 
 from typing import Dict, Optional
-from ..tensor import Tensor, from_buffer
+from ..tensor import Tensor, frombuffer
 from ..dtype import Dtype
 import struct, pathlib, os, hashlib, urllib.request, json, ctypes
 from tqdm import tqdm
@@ -55,7 +55,7 @@ def safe_load(url: str, invalidate_cache: bool = False,
 
         data_ptr = ctypes.cast(ctypes.c_char_p(b[8+n+offset_start:8+n+offset_stop]), ctypes.c_void_p)
 
-        raw_tensor = from_buffer(shape, dtype, data_ptr)
+        raw_tensor = frombuffer(shape, dtype, data_ptr)
         if use_dtype is not None and use_dtype != dtype:
             raw_tensor = raw_tensor.cast(use_dtype)
 

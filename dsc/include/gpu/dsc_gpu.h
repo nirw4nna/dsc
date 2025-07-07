@@ -7,6 +7,7 @@
 #pragma once
 
 #include "dsc.h"
+#include "dsc_device.h"
 
 #if defined(DSC_CUDA) && defined(DSC_HIP)
 #   error "DSC can't be compiled with both CUDA and HIP support"

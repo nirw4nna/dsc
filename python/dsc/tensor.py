@@ -73,19 +73,19 @@ import numpy as np
 from .context import _get_ctx
 import ctypes
 import sys
-from typing import Union, Tuple, List, Optional, Any, Iterable
-
+from typing import Union, Tuple, List, Optional, Any, Iterable, Dict
 
 TensorType = Union['Tensor', np.ndarray]
 
 
 def _unwrap(x: 'Tensor') -> Union[ScalarType, 'Tensor']:
+    # NOTE: torch doesn't unwrap!
     # If x is not wrapping a single value return it
     if x.n_dim != 1 or len(x) != 1:
         return x
-    # If x is a scalar on the GPU move it to to CPU first
+    # If x is a scalar on the GPU move it to CPU first
     x = x.to('cpu')
-    return ctypes.cast(x.data, DTYPE_TO_CTYPE[x.dtype]).contents.value
+    return ctypes.cast(x.data_ptr(), DTYPE_TO_CTYPE[x.dtype]).contents.value
 
 
 def _c_slice(x: Union[slice, int]) -> _DscSlice:
@@ -134,7 +134,7 @@ def _wrap(
         return Tensor(_dsc_wrap_f64(_get_ctx(), float(x), device))
     else:
         # Default to F32
-        return Tensor(_dsc_wrap_f32(_get_ctx(), float(x), device))
+        return Tensor(_dsc_wrap_f32(_get_ctx(), float(x), device, out_dtype == Dtype.BF16))
 
 
 def _pointers_are_equals(xa: _DscTensor_p, xb: _DscTensor_p) -> bool:
@@ -177,10 +177,7 @@ class Tensor:
     def ne(self) -> int:
         return self._ne
 
-    @property
-    def data(self) -> int:
-        if self.device is not Device.CPU:
-            raise RuntimeError('can\'t access _data field for a non-CPU tensor')
+    def data_ptr(self) -> int:
         return self._buf.contents.data
 
     @property
@@ -356,7 +353,7 @@ class Tensor:
         return -1 * self
 
     def __bytes__(self) -> bytes:
-        byte_array = (ctypes.c_byte * self.ne * DTYPE_SIZE[self.dtype]).from_address(self.data)
+        byte_array = (ctypes.c_byte * self.ne * DTYPE_SIZE[self.dtype]).from_address(self.data_ptr())
         return bytes(byte_array)
 
     def numpy(self) -> np.ndarray:
@@ -366,12 +363,30 @@ class Tensor:
         else:
             self_cpu = self.to('cpu')
 
-        typed_data = ctypes.cast(self_cpu.data, DTYPE_TO_CTYPE[self_cpu.dtype])
+        typed_data = ctypes.cast(self_cpu.data_ptr(), DTYPE_TO_CTYPE[self_cpu.dtype])
 
         # Create a copy of the underlying data buffer
         np_array = np.ctypeslib.as_array(typed_data, shape=self_cpu.shape).copy()
 
         return np_array.reshape(self_cpu.shape)
+
+    @property
+    def __cuda_array_interface__(self) -> Dict[str, Any]:
+        # Reference: https://numba.pydata.org/numba-doc/dev/cuda/cuda_array_interface.html
+        # V2 because it's the version that PyTorch implements
+        if self.device != Device.GPU:
+            raise RuntimeError(f'Can\'t get __cuda_array_interface__ on non-GPU tensor: {self.device}')
+
+        # Map DSC dtypes to type str
+        dtype_to_str = {
+            Dtype.F64: '<f8',
+            Dtype.F32: '<f4',
+            Dtype.BF16: '<u2',
+            Dtype.I32: '<i4',
+            Dtype.BOOL: '|b1'
+        }
+        # Data is not read-only
+        return dict(typestr=dtype_to_str[self.dtype], shape=self.shape, data=(self.data_ptr(), False), version=2)
 
     def load(self, x: TensorType):
         if isinstance(x, np.ndarray):
@@ -430,7 +445,7 @@ class Tensor:
         return min(self, None, axis=axis, keepdims=keepdims)
 
 
-def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device, data: ctypes.c_void_p = None) -> Tensor:
+def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device, data: ctypes.c_void_p = None, dataDevice: Device = Device.CPU) -> Tensor:
     n_dims = len(dims)
     if n_dims > _DSC_MAX_DIMS or n_dims < 1:
         raise RuntimeError(
@@ -438,9 +453,9 @@ def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device, data: ct
         )
 
     if n_dims == 1:
-        return Tensor(_dsc_tensor_1d(_get_ctx(), dtype, dims[0], device, data, Device.CPU))
+        return Tensor(_dsc_tensor_1d(_get_ctx(), dtype, dims[0], device, data, dataDevice))
     elif n_dims == 2:
-        return Tensor(_dsc_tensor_2d(_get_ctx(), dtype, dims[0], dims[1], device, data, Device.CPU))
+        return Tensor(_dsc_tensor_2d(_get_ctx(), dtype, dims[0], dims[1], device, data, dataDevice))
     elif n_dims == 3:
         return Tensor(
             _dsc_tensor_3d(
@@ -451,7 +466,7 @@ def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device, data: ct
                 dims[2],
                 device,
                 data,
-                Device.CPU
+                dataDevice
             )
         )
     else:
@@ -465,7 +480,7 @@ def _create_tensor(dtype: Dtype, dims: Tuple[int, ...], device: Device, data: ct
                 dims[3],
                 device,
                 data,
-                Device.CPU
+                dataDevice
             )
         )
 
@@ -478,14 +493,13 @@ def from_numpy(x: np.ndarray, device: DeviceType = Device.DEFAULT) -> Tensor:
     out = _create_tensor(NP_TO_DTYPE[x.dtype], x.shape, _get_device(device), x_ptr)
     return out
 
-
 def tensor(x: Iterable, dtype: Dtype, device: DeviceType = Device.DEFAULT) -> Tensor:
     x_ = np.array(x, dtype=DTYPE_TO_NP[dtype])
     return from_numpy(x_, device)
 
 
-def from_buffer(shape: Tuple[int, ...], dtype: Dtype, data: ctypes.c_void_p, device: DeviceType = Device.DEFAULT) -> Tensor:
-    return _create_tensor(dtype, shape, _get_device(device), data)
+def frombuffer(shape: Tuple[int, ...], dtype: Dtype, data: ctypes.c_void_p, device: DeviceType = Device.DEFAULT, data_device: DeviceType = Device.CPU) -> Tensor:
+    return _create_tensor(dtype, shape, _get_device(device), data, _get_device(data_device))
 
 
 def reshape(x: Tensor, *shape: Union[int, Tuple[int, ...], List[int]]) -> Tensor:
@@ -606,6 +620,9 @@ def _reduction_op(
 def _wrap_operands(
     xa: Union[ScalarType, TensorType], xb: Union[ScalarType, TensorType]
 ) -> Tuple[Tensor, Tensor]:
+    def _is_scalar(x: ScalarType) -> bool:
+        return isinstance(x, bool) or isinstance(x, int) or isinstance(x, float)
+
     def _dtype(x: Union[ScalarType, TensorType]) -> Dtype:
         if isinstance(x, Tensor):
             return x.dtype
@@ -638,6 +655,14 @@ def _wrap_operands(
     xa_dtype = _dtype(xa)
     xb_dtype = _dtype(xb)
     wrap_dtype = DTYPE_CONVERSION_TABLES[xa_dtype.value][xb_dtype.value]
+    # If one of xa or xb is scalar and the other is bf16 then the scalar should be a bf16 as well
+    if _is_scalar(xa) and not _is_scalar(xb):
+        if xb_dtype == Dtype.BF16:
+            wrap_dtype = Dtype.BF16
+    if _is_scalar(xb) and not _is_scalar(xa):
+        if xa_dtype == Dtype.BF16:
+            wrap_dtype = Dtype.BF16
+
     return _wrap(xa, wrap_dtype, target_device), _wrap(xb, wrap_dtype, target_device)
 
 
@@ -790,17 +815,18 @@ def sum(
 
 
 def mean(
-    x: Tensor, out: Optional[Tensor] = None, axis: int = -1, keepdims: bool = True
+    x: Tensor, out: Optional[Tensor] = None, axis: int = -1, keepdims: bool = True, correction: int = 0
 ) -> Tensor:
     out = sum(x, out, axis, keepdims)
-    out *= (1. / x.size(axis))
+    out *= (1. / (x.size(axis) - correction))
     return out
 
 
 def var(
-    x: Tensor, out: Optional[Tensor] = None, axis: int = -1, keepdims: bool = True
+    x: Tensor, out: Optional[Tensor] = None, axis: int = -1, keepdims: bool = True, correction: int = 0
 ) -> Tensor:
-    return mean((x - x.mean(axis, True)) ** 2, out, axis, keepdims)
+    # Correction is the Bessel's correction: https://en.wikipedia.org/wiki/Bessel%27s_correction (used by PyTorch by default but not by NumPy)
+    return mean((x - x.mean(axis, True)) ** 2, out, axis, keepdims, correction)
 
 
 def max(
@@ -836,14 +862,34 @@ def randn(
     return Tensor(_dsc_randn(_get_ctx(), shape, dtype, _get_device(device)))
 
 
+# Note: topk and multinomial are CPU-only ops. This is very ugly and slow but for now it does the trick
 def topk(x: Tensor, k: int, axis: int = -1, largest: bool = True) -> Tuple[Tensor, Tensor]:
+    original_dtype = x.dtype
+    original_device = x.device
+    if x.device == Device.GPU:
+        if x.dtype == Dtype.BF16:
+            x = x.cast(Dtype.F32)
+        x = x.to('cpu')
     res = _dsc_topk(_get_ctx(), x.c_ptr, k, axis, largest)
-    return Tensor(res.first), Tensor(res.second)
-
+    res_v = Tensor(res.first)
+    res_i = Tensor(res.second)
+    if res_v.device != original_device:
+        res_v = res_v.to(original_device)
+        res_i = res_i.to(original_device)
+    if res_v.dtype != original_dtype:
+        res_v = res_v.cast(original_dtype)
+    return res_v, res_i
 
 def multinomial(x: Tensor, num_samples: int) -> Tensor:
-    return Tensor(_dsc_multinomial(_get_ctx(), x.c_ptr, num_samples))
-
+    original_device = x.device
+    if x.device == Device.GPU:
+        if x.dtype == Dtype.BF16:
+            x = x.cast(Dtype.F32)
+        x = x.to('cpu')
+    out = Tensor(_dsc_multinomial(_get_ctx(), x.c_ptr, num_samples))
+    if out.device != original_device:
+        out = out.to(original_device)
+    return out
 
 # In the xx_like methods if dtype is not specified it will be the same as x
 def ones(

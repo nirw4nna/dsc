@@ -137,10 +137,19 @@ This will make the GPU the default device and DSC will perform all the operation
 ## Running tests
 DSC uses `pytest` to run unit tests against NumPy which is the reference for correctness.
 
+The tests are structured as follows:
+- `test_ops_common` and `test_indexing` are used to test operations both on CPU and GPU using NumPy as reference
+- `test_ops_cpu` are CPU-specific
+- `test_ops_gpu` are GPU-specific and they use PyTorch as reference
+
+The device on which tests are run can be configured by setting the environment variable `DSC_DEVICE` before calling pytest.
+
+**Note:** to use PyTorch with a ROCm-compatible GPU please refer to https://pytorch.org/get-started/locally/.
+
 To run all the tests simple do:
 ```bash
 cd python/tests/
-pytest -s test_ops.py --no-header --no-summary -q
+pytest -s <test_file>.py --no-header --no-summary -q
 ```
 **Note:** there are quite a few tests so to run them it's better to compile DSC with `DSC_FAST=1`.
 

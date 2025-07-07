@@ -8,7 +8,7 @@ from dsc.context import init, print_mem_usage, set_default_device
 from dsc.tensor import (
     Tensor,
     from_numpy,
-    from_buffer,
+    frombuffer,
     reshape,
     concat,
     split,

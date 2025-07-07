@@ -25,14 +25,14 @@ class GPT2Hparams:
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, hparams: GPT2Hparams, use_cache: bool = True):
+    def __init__(self, hparams: GPT2Hparams, use_cache: bool = True, dtype: dsc.Dtype = dsc.f32):
         super().__init__()
         self.block_size = hparams.block_size
         self.emb_size = hparams.emb_size
         self.n_heads = hparams.n_heads
         # Stacked attention, contains the projections of both Q, K and V
-        self.c_attn = nn.Linear(self.emb_size, 3 * self.emb_size)
-        self.c_proj = nn.Linear(self.emb_size, self.emb_size)
+        self.c_attn = nn.Linear(self.emb_size, 3 * self.emb_size, dtype=dtype)
+        self.c_proj = nn.Linear(self.emb_size, self.emb_size, dtype=dtype)
         # Causal mask
         self.tril = dsc.tril(dsc.ones((self.block_size, self.block_size)))
         
@@ -80,14 +80,14 @@ class MultiHeadAttention(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, hparams: GPT2Hparams, use_cache: bool = True):
+    def __init__(self, hparams: GPT2Hparams, use_cache: bool = True, dtype: dsc.Dtype = dsc.f32):
         super().__init__()
-        self.ln_1 = nn.LayerNorm(hparams.emb_size)
-        self.attn = MultiHeadAttention(hparams, use_cache)
-        self.ln_2 = nn.LayerNorm(hparams.emb_size)
+        self.ln_1 = nn.LayerNorm(hparams.emb_size, dtype=dtype)
+        self.attn = MultiHeadAttention(hparams, use_cache, dtype=dtype)
+        self.ln_2 = nn.LayerNorm(hparams.emb_size, dtype=dtype)
         self.mlp = nn.ModuleDict(dict(
-            c_fc = nn.Linear(hparams.emb_size, hparams.emb_size * 4),
-            c_proj = nn.Linear(hparams.emb_size * 4, hparams.emb_size),
+            c_fc = nn.Linear(hparams.emb_size, hparams.emb_size * 4, dtype=dtype),
+            c_proj = nn.Linear(hparams.emb_size * 4, hparams.emb_size, dtype=dtype),
         ))
 
     @dsc.trace('TransformerBlock')
@@ -98,14 +98,14 @@ class TransformerBlock(nn.Module):
 
 
 class GPT2(nn.Module):
-    def __init__(self, hparams: GPT2Hparams, use_cache: bool = True):
+    def __init__(self, hparams: GPT2Hparams, use_cache: bool = True, dtype: dsc.Dtype = dsc.f32):
         super().__init__()
         self.hparams = hparams
-        self.wpe = nn.Embedding(hparams.block_size, hparams.emb_size)
-        self.wte = nn.Embedding(hparams.vocab_size, hparams.emb_size)
-        self.h = nn.ModuleList([TransformerBlock(hparams, use_cache) for _ in range(hparams.n_layers)])
-        self.ln_f = nn.LayerNorm(hparams.emb_size)
-        self.lm_head = nn.Linear(hparams.emb_size, hparams.vocab_size, bias=False)
+        self.wpe = nn.Embedding(hparams.block_size, hparams.emb_size, dtype=dtype)
+        self.wte = nn.Embedding(hparams.vocab_size, hparams.emb_size, dtype=dtype)
+        self.h = nn.ModuleList([TransformerBlock(hparams, use_cache, dtype=dtype) for _ in range(hparams.n_layers)])
+        self.ln_f = nn.LayerNorm(hparams.emb_size, dtype=dtype)
+        self.lm_head = nn.Linear(hparams.emb_size, hparams.vocab_size, bias=False, dtype=dtype)
         self.use_cache = use_cache
         self.kv_pos = 0
 
@@ -113,15 +113,16 @@ class GPT2(nn.Module):
         print(f'Model has {round(n_params / 1e6)}M parameters')
     
     @staticmethod
-    def from_pretrained(hparams: GPT2Hparams = GPT2Hparams(), use_cache: bool = True) -> 'GPT2':
+    def from_pretrained(hparams: GPT2Hparams = GPT2Hparams(), use_cache: bool = True, dtype: dsc.Dtype = dsc.f32) -> 'GPT2':
         # GPT2 uses Conv1D instead of a Linear layer which means we have to transpose the weights
-        state_dict = nn.safe_load('https://huggingface.co/openai-community/gpt2/resolve/main/model.safetensors')
+        state_dict = nn.safe_load('https://huggingface.co/openai-community/gpt2/resolve/main/model.safetensors',
+                                  use_dtype=dtype)
         for i in range(hparams.n_layers):
-            # The causal mask doesn't need to be loaded so I'll just remove it
+            # The causal mask doesn't need to be loaded, so I'll just remove it
             del state_dict[f'h.{i}.attn.bias']
 
         to_transpose = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']
-        my_model = GPT2(hparams, use_cache)
+        my_model = GPT2(hparams, use_cache, dtype=dtype)
         my_model.from_state(state_dict,
                             on_hook=[(to_transpose, lambda x: x.transpose())],
                             tied={'lm_head.weight': 'wte.weight'}) # lm_head and wte weights are tied
@@ -199,23 +200,29 @@ class GPT2(nn.Module):
 
 if __name__ == '__main__':
     cli = argparse.ArgumentParser(description='GPT2 inference CLI')
+    cli.add_argument('prompt', type=str, help='Model prompt')
+    cli.add_argument('-n', type=int, default=100, help='Tokens to generate (default=100)')
     cli.add_argument('--no-cache', action='store_true', help='Disable KV cache')
     cli.add_argument('--device', choices=['cpu', 'gpu'], default='cpu', help='Device on which to run the model')
-    cli.add_argument('-s', type=str, required=True, help='Model prompt')
+    cli.add_argument('--dtype', choices=['f32', 'bf16'], default='f32', help='Dtype to use for inference')
 
     args = cli.parse_args()
 
-    use_kv_cache = not args.no_cache
-    prompt = args.s
-
     dsc.set_default_device(args.device)
+    use_kv_cache = not args.no_cache
+    prompt = args.prompt
+    max_tokens = args.n
 
-    model = GPT2.from_pretrained(use_cache=use_kv_cache)
+    dtype = dsc.f32
+    if args.dtype == 'bf16':
+        dtype = dsc.bf16
+
+    print(f'Running model on {args.device} using {dtype}')
+
+    model = GPT2.from_pretrained(use_cache=use_kv_cache, dtype=dtype)
 
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     print(prompt, end='', flush=True)
 
-    MAX_TOKENS = 50
-
     idx = tokenizer.encode(prompt)
-    model.generate(dsc.tensor(idx, dtype=dsc.i32, device='cpu').reshape(1, -1), tokenizer=tokenizer, max_new_tokens=MAX_TOKENS)
+    model.generate(dsc.tensor(idx, dtype=dsc.i32, device='cpu').reshape(1, -1), tokenizer=tokenizer, max_new_tokens=max_tokens)

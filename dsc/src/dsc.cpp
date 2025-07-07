@@ -5,10 +5,12 @@
 // (https://opensource.org/license/bsd-3-clause).
 
 #include "dsc.h"
-#include "gpu/dsc_gpu.h"
 #include "cpu/dsc_cpu.h"
+#include "cpu/dsc_ops.h"
 #include "dsc_device.h"
 #include "dsc_tracing.h"
+#include "gpu/dsc_gpu.h"
+
 #include <cstdarg> // va_xxx
 #include <cstring> // memset, memcpy
 
@@ -510,14 +512,15 @@ dsc_tensor *dsc_tensor_4d(dsc_ctx *ctx, const dsc_dtype dtype,
     return dsc_new_tensor(ctx, 4, shape, dtype, device, nullptr, false, data, data_device);
 }
 
-template<typename T>
-static DSC_INLINE dsc_tensor *wrap(dsc_ctx *ctx, const T val,
+template<typename Tin, typename Tout = Tin>
+static DSC_INLINE dsc_tensor *wrap(dsc_ctx *ctx, const Tin val,
                                    const dsc_device_type device) {
-    dsc_tensor *out = dsc_tensor_1d(ctx, dsc_type_mapping<T>::value, 1, device);
+    dsc_tensor *out = dsc_tensor_1d(ctx, dsc_type_mapping<Tout>::value, 1, device);
 
     DSC_GET_DEVICE(ctx, device);
-    DSC_DATA(T, out);
-    dev->memcpy(out_data, &val, sizeof(val), TO_DEVICE);
+    DSC_DATA(Tout, out);
+    const Tout v_out = cpu_cast_op().operator()<Tin, Tout>(val);
+    dev->memcpy(out_data, &v_out, sizeof(Tout), TO_DEVICE);
     return out;
 }
 
@@ -532,7 +535,9 @@ dsc_tensor *dsc_wrap_i32(dsc_ctx *ctx, const i32 val,
 }
 
 dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx, const f32 val,
-                         const dsc_device_type device) {
+                         const dsc_device_type device,
+                         const bool as_bf16) {
+    if (as_bf16) return wrap<f32, bf16>(ctx, val, device);
     return wrap(ctx, val, device);
 }
 
@@ -596,6 +601,7 @@ dsc_pair dsc_topk(dsc_ctx *ctx,
                   const bool largest) {
     // Return the top K largest (smallest) elements of x along the given axis
     DSC_ASSERT(x != nullptr);
+    DSC_ASSERT(x->device == CPU);
 
     DSC_TRACE_TOPK_OP(x, k, axis, largest);
 
@@ -617,22 +623,7 @@ dsc_pair dsc_topk(dsc_ctx *ctx,
 
     // For now, topk runs always on CPU. If x is not a CPU tensor create a temporary copy
     DSC_GET_DEVICE(ctx, CPU);
-    if (x->device == CPU) {
-        dsc_cpu_topk(dev, x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
-    } else {
-        dsc_tensor *x_ = dsc_copy_of(ctx, x, CPU);
-        dsc_cpu_topk(dev, x_, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
-
-        dsc_tensor *out_values_ = out_values;
-        dsc_tensor *out_indexes_ = out_indexes;
-        // Note: right now DSC result will be on the same device as the argument even though the operations
-        // are always run on the CPU. I don't know if this is a good idea, will see...
-        out_values = dsc_copy_of(ctx, out_values, x->device);
-        out_indexes = dsc_copy_of(ctx, out_indexes, x->device);
-        dsc_tensor_free(ctx, x_);
-        dsc_tensor_free(ctx, out_values_);
-        dsc_tensor_free(ctx, out_indexes_);
-    }
+    dsc_cpu_topk(dev, x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
 
     dsc_tensor_free(ctx, tmp_values);
     dsc_tensor_free(ctx, tmp_indexes);
@@ -645,6 +636,7 @@ dsc_tensor *dsc_multinomial(dsc_ctx *ctx,
                             const int num_samples) {
     DSC_ASSERT(x != nullptr);
     DSC_ASSERT(x->n_dim <= 2);
+    DSC_ASSERT(x->device == CPU);
     DSC_ASSERT(x->dtype == F32 || x->dtype == F64);
     DSC_ASSERT((unsigned) num_samples <= (unsigned) dsc_tensor_get_dim(x, -1));
 
@@ -657,17 +649,7 @@ dsc_tensor *dsc_multinomial(dsc_ctx *ctx,
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], I32, CPU);
     // For now, multinomial runs always on the CPU.
     DSC_GET_DEVICE(ctx, CPU);
-    if (x->device == CPU) {
-        dsc_cpu_multinomial(dev, x, out, num_samples);
-    } else {
-        dsc_tensor *x_ = dsc_copy_of(ctx, x, CPU);
-        dsc_cpu_multinomial(dev, x_, out, num_samples);
-        dsc_tensor *out_ = out;
-        out = dsc_copy_of(ctx, out, x->device);
-        dsc_tensor_free(ctx, x_);
-        dsc_tensor_free(ctx, out_);
-    }
-
+    dsc_cpu_multinomial(dev, x, out, num_samples);
     return out;
 }
 

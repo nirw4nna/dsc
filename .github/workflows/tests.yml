@@ -27,7 +27,15 @@ jobs:
         pip install -r requirements.txt
     - name: Compile DSC C++
       run: make shared DSC_FAST=1
-    - name: Run tests
+    - name: Run common ops tests on CPU
       run: |
         cd python/tests/
-        pytest -s test_ops.py --no-header --no-summary -q
+        DSC_DEVICE=cpu pytest -s test_ops_common.py --no-header --no-summary -q
+    - name: Run ops tests on CPU
+      run: |
+        cd python/tests/
+        DSC_DEVICE=cpu pytest -s test_ops_cpu.py --no-header --no-summary -q
+    - name: Run indexing tests on CPU
+      run: |
+        cd python/tests/
+        DSC_DEVICE=cpu pytest -s test_indexing.py --no-header --no-summary -q

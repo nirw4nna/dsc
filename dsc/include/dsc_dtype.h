@@ -102,25 +102,6 @@ consteval bool dsc_is_real() {
     return dsc_is_type<T, bf16>() || dsc_is_type<T, f32>() || dsc_is_type<T, f64>();
 }
 
-template<typename T>
-constexpr T dsc_zero() {
-    if constexpr (dsc_is_type<T, bool>()) {
-        return false;
-    } else if constexpr (dsc_is_type<T, i32>()) {
-        return 0;
-#if defined(__HIPCC__) && defined(DSC_BF16)
-    } else if constexpr (dsc_is_type<T, bf16>()){
-        return (bf16) 0;
-#endif
-    } else if constexpr (dsc_is_type<T, f32>()) {
-        return 0.f;
-    } else if constexpr (dsc_is_type<T, f64>()) {
-        return 0.;
-    } else {
-        static_assert("T is not supported");
-    }
-}
-
 template<typename T, bool positive = true>
 consteval T dsc_inf() {
     constexpr T sign = positive ? 1 : -1;
