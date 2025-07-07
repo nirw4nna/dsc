@@ -1010,9 +1010,7 @@ static DSC_INLINE void gemm_op(const gpu_blas_handle handle,
                                                    a_op, GPU_BLAS_OP_N, n, m, k,
                                                    &alpha_f32, &xb_data[xb_offset], GPU_GEMM_DTYPE_BF16, stride_b,
                                                    &xa_data[xa_offset], GPU_GEMM_DTYPE_BF16, stride_a, &beta_f32,
-                                                   &out_data[out_offset], GPU_GEMM_DTYPE_BF16, stride_out,
-                                                   &out_data[out_offset], GPU_GEMM_DTYPE_BF16, stride_out,
-                                                   GPU_GEMM_DTYPE_F32, GPU_GEMM_ALGO, 0, 0));
+                                                   &out_data[out_offset], GPU_GEMM_DTYPE_BF16, stride_out, GPU_GEMM_DTYPE_F32));
             } else {
                 static_assert("T must be real");
             }

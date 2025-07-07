@@ -95,6 +95,14 @@ GPU_OBJS	:=	$(GPU_SRCS:.cpp=.o)
 
 # Enable CUDA support
 ifdef DSC_CUDA
+	# BF16 is supported in compute capability >= 8.0 (Ampere)
+	HAS_BF16_GPU := $(shell compute_major=$$(nvidia-smi --query-gpu=compute_cap --format=noheader | cut -d. -f1); \
+						if [ "$${compute_major}" -ge 8 ]; then echo 1; fi)
+	ifeq ($(HAS_BF16_GPU), 1)
+		NVCCFLAGS	+=	-DDSC_BF16
+		CXXFLAGS	+=	-DDSC_BF16
+	endif
+
 	CXXFLAGS	+=	-I$(CUDA)/include -DDSC_CUDA
 	NVCCFLAGS	+=	-x cu -DDSC_CUDA
 	LDFLAGS		+=	-L$(CUDA)/lib64 -lcudart -lcublas

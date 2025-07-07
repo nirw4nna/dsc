@@ -15,6 +15,11 @@
 #   include <hip/hip_bf16.h>
 #endif
 
+#if defined(__NVCC__) && defined(DSC_BF16)
+#   include <cuda_bf16.h>
+#endif
+
+
 #define DSC_DTYPES          ((int) 5)
 #define DSC_DEFAULT_TYPE    F32
 
@@ -34,6 +39,8 @@ using f32 = float;
 using f64 = double;
 #if defined(__HIPCC__) && defined(DSC_BF16)
     using bf16 = __hip_bfloat16;
+#elif defined(__NVCC__) && defined(DSC_BF16)
+    using bf16 = __nv_bfloat16;
 #else
     using bf16 = u16;
 #endif
