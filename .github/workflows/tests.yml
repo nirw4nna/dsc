@@ -58,7 +58,7 @@ jobs:
     - name: Run common ops tests on ${{ matrix.device }}
       run: |
         cd python/tests/
-        DSC_DEVICE=${{ matrix.device }} pytest -s test_ops_common.py --no-header --no-summary -q
+        DEVICE=${{ matrix.device }} pytest -s test_ops_common.py --no-header --no-summary -q
     - name: Run ops tests on CPU
       if: matrix.device == 'cpu'
       run: |
@@ -72,4 +72,4 @@ jobs:
     - name: Run indexing tests on ${{ matrix.device }}
       run: |
         cd python/tests/
-        DSC_DEVICE=${{ matrix.device }} pytest -s test_indexing.py --no-header --no-summary -q
+        DEVICE=${{ matrix.device }} pytest -s test_indexing.py --no-header --no-summary -q
