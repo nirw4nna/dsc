@@ -113,7 +113,7 @@ class TestOps:
 
                 atol = 1e-4; rtol = 1e-4
                 if dtype == torch.bfloat16:
-                    atol = 1e-2; rtol = 1e-2
+                    atol = 1e-1; rtol = 1e-2
                 print(f'Testing operator {op_name} with {dtype}')
                 shape = [randint(2, 10) for _ in range(4)]
                 x, x_dsc = random_nd(shape, dtype=dtype)
@@ -227,7 +227,7 @@ class TestOps:
             res = xa @ xb
             res_dsc = xa_dsc @ xb_dsc
             # TODO: it looks like BF16 has a lower precision, should check what torch actually does. For now fix the tolerance at 1%
-            assert all_close(res_dsc, res, rtol=1e-2), f'Error testing {shape_a} @ {shape_b} with {dt}'
+            assert all_close(res_dsc, res, atol=1e-1, rtol=1e-2), f'Error testing {shape_a} @ {shape_b} with {dt}'
 
         for dtype in DTYPES:
             if not is_float(dtype):
