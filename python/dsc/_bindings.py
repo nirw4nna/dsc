@@ -214,6 +214,15 @@ _lib.dsc_gpu_sync.argtypes = [_DscCtx]
 _lib.dsc_gpu_sync.restype = None
 
 
+# extern bool dsc_gpu_has_bf16(dsc_ctx *);
+def _dsc_gpu_has_bf16(ctx: _DscCtx) -> bool:
+    return _lib.dsc_gpu_has_bf16(ctx)
+
+
+_lib.dsc_gpu_has_bf16.argtypes = [_DscCtx]
+_lib.dsc_gpu_has_bf16.restype = c_bool
+
+
 # extern bool dsc_tracing_enabled(dsc_ctx *);
 def _dsc_tracing_enabled(ctx: _DscCtx) -> c_bool:
     return _lib.dsc_tracing_enabled(ctx)
@@ -411,14 +420,15 @@ _lib.dsc_wrap_i32.restype = _DscTensor_p
 
 # extern dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx,
 #                                 f32 val,
-#                                 dsc_device_type device = DEFAULT);
+#                                 dsc_device_type device = DEFAULT,
+#                                 bool as_bf16 = false);
 def _dsc_wrap_f32(
-    ctx: _DscCtx, val: float, device: Device
+    ctx: _DscCtx, val: float, device: Device, as_bf16: bool
 ) -> _DscTensor_p:
-    return _lib.dsc_wrap_f32(ctx, c_float(val), c_int8(device.value))
+    return _lib.dsc_wrap_f32(ctx, c_float(val), c_int8(device.value), c_bool(as_bf16))
 
 
-_lib.dsc_wrap_f32.argtypes = [_DscCtx, c_float, c_int8]
+_lib.dsc_wrap_f32.argtypes = [_DscCtx, c_float, c_int8, c_bool]
 _lib.dsc_wrap_f32.restype = _DscTensor_p
 
 

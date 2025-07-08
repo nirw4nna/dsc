@@ -36,8 +36,11 @@
 struct gpu_cast_op {
     template<typename Tin, typename Tout>
     DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE Tout operator()(const Tin in) const {
+#if defined(DSC_BF16)
+        return (Tout) in;
+#else
         if constexpr (dsc_is_type<Tin, bf16>()) {
-            // Same as CPU...maybe should use some CUDA intrinsics?
+            // If BF16 is not supported use the same logic as the CPU
             union {
                 f32 f;
                 u32 i;
@@ -47,6 +50,7 @@ struct gpu_cast_op {
         } else {
             return (Tout) in;
         }
+#endif
     }
 };
 
@@ -108,6 +112,10 @@ struct gpu_pow_op {
         return acc;
     }
 
+    DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE bf16 operator()(const bf16 base, const bf16 exp) const {
+        return gpu_pow_op()((f32) base, (f32) exp);
+    }
+
     DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE f32 operator()(const f32 base, const f32 exp) const {
         return powf(base, exp);
     }
@@ -118,6 +126,10 @@ struct gpu_pow_op {
 };
 
 struct gpu_cos_op {
+    DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE bf16 operator()(const bf16 x) const {
+        return gpu_cos_op()((f32) x);
+    }
+
     DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE f32 operator()(const f32 x) const {
         return cosf(x);
     }
@@ -128,6 +140,10 @@ struct gpu_cos_op {
 };
 
 struct gpu_sin_op {
+    DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE bf16 operator()(const bf16 x) const {
+        return gpu_sin_op()((f32) x);
+    }
+
     DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE f32 operator()(const f32 x) const {
         return sinf(x);
     }
@@ -138,6 +154,10 @@ struct gpu_sin_op {
 };
 
 struct gpu_tanh_op {
+    DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE bf16 operator()(const bf16 x) const {
+        return gpu_tanh_op()((f32) x);
+    }
+
     DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE f32 operator()(const f32 x) const {
         return tanhf(x);
     }
@@ -148,6 +168,10 @@ struct gpu_tanh_op {
 };
 
 struct gpu_sqrt_op {
+    DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE bf16 operator()(const bf16 x) const {
+        return gpu_sqrt_op()((f32) x);
+    }
+
     DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE f32 operator()(const f32 x) const {
         return sqrtf(x);
     }
@@ -158,6 +182,10 @@ struct gpu_sqrt_op {
 };
 
 struct gpu_exp_op {
+    DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE bf16 operator()(const bf16 x) const {
+        return gpu_exp_op()((f32) x);
+    }
+
     DSC_GPU_FUNC DSC_INLINE DSC_STRICTLY_PURE f32 operator()(const f32 x) const {
         return expf(x);
     }

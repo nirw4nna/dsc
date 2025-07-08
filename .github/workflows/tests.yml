@@ -7,27 +7,78 @@ on:
 
 
 jobs:
-  build_and_test:
-    runs-on: ubuntu-latest
+  test:
+    strategy:
+      matrix:
+        include:
+          - host: ubuntu-latest
+            device: cpu
+          - host: self-hosted-amd-gpu
+            device: gpu
+          - host: self-hosted-nvidia-gpu
+            device: gpu
+    runs-on: ${{ matrix.host }}
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential
-    - name: Install DSC with requirements
-      run: |
-        pip install -e .
-        pip install -r requirements.txt
-    - name: Compile DSC C++
-      run: make shared DSC_FAST=1
-    - name: Run tests
-      run: |
-        cd python/tests/
-        pytest -s test_ops.py --no-header --no-summary -q
+      - name: Set env
+        run: |
+          echo "DEVICE=${{ matrix.device }}" >> $GITHUB_ENV
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Set up Python 3.10
+        # Workaround until this gets moved to a proper server
+        if: matrix.host != 'self-hosted-nvidia-gpu'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        if: matrix.host != 'self-hosted-nvidia-gpu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+      - name: Install DSC with requirements
+        if: matrix.host == 'ubuntu-latest'
+        run: |
+          pip install -e .
+          pip install -r requirements.txt
+      - name: Install DSC with requirements (NVIDIA)
+        if: matrix.host == 'self-hosted-nvidia-gpu'
+        run: |
+          python3 -m venv venv
+          # Make sure venv stays active across tasks
+          echo "${{ github.workspace }}/venv/bin" >> $GITHUB_PATH
+          source venv/bin/activate
+          pip install -e .
+          pip install -r requirements.txt
+      - name: Install DSC with requirements (AMD)
+        if: matrix.host == 'self-hosted-amd-gpu'
+        run: |
+          # Don't install torch stable, we need the nightly build with ROCm 6.4
+          sed -i 's/^torch/#torch/' requirements.txt
+          pip install -e .
+          pip install -r requirements.txt
+          pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/rocm6.4
+      - name: Compile DSC C++ (CPU-only)
+        if: matrix.device == 'cpu'
+        run: make shared DSC_FAST=1
+      - name: Compile DSC C++ (GPU)
+        if: matrix.device == 'gpu'
+        run: make shared DSC_FAST=1 DSC_GPU=1
+      - name: Run common ops tests on ${{ matrix.device }}
+        run: |
+          cd python/tests/
+          pytest -s test_ops_common.py --no-header --no-summary -q
+      - name: Run ops tests on CPU
+        if: matrix.device == 'cpu'
+        run: |
+          cd python/tests/
+          pytest -s test_ops_cpu.py --no-header --no-summary -q
+      - name: Run GPU ops tests
+        if: matrix.device == 'gpu'
+        run: |
+          cd python/tests/
+          pytest -s test_ops_gpu.py --no-header --no-summary -q
+      - name: Run indexing tests on ${{ matrix.device }}
+        run: |
+          cd python/tests/
+          pytest -s test_indexing.py --no-header --no-summary -q

@@ -113,6 +113,12 @@ void dsc_gpu_arange(dsc_device *,
                                DSC_GPU_DEFAULT_THREADS>>>(x_data, n, (i32) start, (i32) step);
             break;
         }
+        case BF16: {
+            DSC_DATA(bf16, x);
+            k_assign_op<bf16><<<DSC_GPU_BLOCKS(n),
+                                DSC_GPU_DEFAULT_THREADS>>>(x_data, n, start, step);
+            break;
+        }
         case F32: {
             DSC_DATA(f32, x);
             k_assign_op<f32><<<DSC_GPU_BLOCKS(n),
@@ -199,6 +205,14 @@ void dsc_gpu_repeat(dsc_device *,
                                                                      axis_idx, params);
             break;
         }
+        case BF16: {
+            DSC_DATA(bf16, x);
+            DSC_DATA(bf16, out);
+            k_repeat<<<DSC_GPU_BLOCKS(n), DSC_GPU_DEFAULT_THREADS>>>(x_data, out_data,
+                                                                     n, repeats,
+                                                                     axis_idx, params);
+            break;
+        }
         case F32: {
             DSC_DATA(f32, x);
             DSC_DATA(f32, out);
@@ -229,7 +243,7 @@ static DSC_GPU_KERNEL void k_randn(gpu_rand_state *state,
     gpu_rand_state s = state[tid];
 
     for (int i = tid; i < n; i += stride) {
-        if constexpr (dsc_is_type<T, f32>()) {
+        if constexpr (dsc_is_type<T, f32>() || dsc_is_type<T, bf16>()) {
             x[i] = gpu_sample_normalf(&s);
         } else if constexpr (dsc_is_type<T, f64>()) {
             x[i] = gpu_sample_normal(&s);
@@ -245,6 +259,11 @@ void dsc_gpu_randn(dsc_device *dev, dsc_tensor *DSC_RESTRICT x) {
     const dsc_gpu_dev_info *info = (dsc_gpu_dev_info *) dev->extra_info;
 
     switch (x->dtype) {
+        case BF16: {
+            DSC_DATA(bf16, x);
+            k_randn<bf16><<<1, DSC_GPU_DEFAULT_THREADS>>>(info->rand_state, x_data, x->ne);
+            break;
+        }
         case F32: {
             DSC_DATA(f32, x);
             k_randn<f32><<<1, DSC_GPU_DEFAULT_THREADS>>>(info->rand_state, x_data, x->ne);
@@ -341,6 +360,12 @@ void dsc_gpu_concat(dsc_device *dev,
                        DSC_GPU_DEFAULT_THREADS>>>(out_data, tensors, n, axis_idx, out_params, x_params);
             break;
         }
+        case BF16: {
+            DSC_DATA(bf16, out);
+            k_concat<<<DSC_GPU_BLOCKS(n),
+                       DSC_GPU_DEFAULT_THREADS>>>(out_data, tensors, n, axis_idx, out_params, x_params);
+            break;
+        }
         case F32: {
             DSC_DATA(f32, out);
             k_concat<<<DSC_GPU_BLOCKS(n),
@@ -404,6 +429,13 @@ void dsc_gpu_transpose(dsc_device *,
                                DSC_GPU_DEFAULT_THREADS>>>(x_data, out_data, n, params);
             break;
         }
+        case BF16: {
+            DSC_DATA(bf16, x);
+            DSC_DATA(bf16, out);
+            k_transpose<bf16><<<DSC_GPU_BLOCKS(n),
+                               DSC_GPU_DEFAULT_THREADS>>>(x_data, out_data, n, params);
+            break;
+        }
         case F32: {
             DSC_DATA(f32, x);
             DSC_DATA(f32, out);
@@ -444,7 +476,7 @@ static DSC_GPU_KERNEL void k_tril(const T *DSC_RESTRICT x,
         const int row = idx[DSC_MAX_DIMS - 2];
         const int col = idx[DSC_MAX_DIMS - 1];
 
-        out[i] = (col > (row + diagonal)) ? dsc_zero<T>() : x[i];
+        out[i] = col > (row + diagonal) ? (T) 0 : x[i];
     }
 }
 
@@ -471,6 +503,14 @@ void dsc_gpu_tril(dsc_device *,
         case I32: {
             DSC_DATA(i32, x);
             DSC_DATA(i32, out);
+
+            k_tril<<<DSC_GPU_BLOCKS(n),
+                     DSC_GPU_DEFAULT_THREADS>>>(x_data, out_data, n, diagonal, params);
+            break;
+        }
+        case BF16: {
+            DSC_DATA(bf16, x);
+            DSC_DATA(bf16, out);
 
             k_tril<<<DSC_GPU_BLOCKS(n),
                      DSC_GPU_DEFAULT_THREADS>>>(x_data, out_data, n, diagonal, params);
@@ -604,6 +644,13 @@ void dsc_gpu_get_slice(dsc_device *,
                                DSC_GPU_DEFAULT_THREADS>>>(x_data, out_data, n, params);
             break;
         }
+        case BF16: {
+            DSC_DATA(bf16, x);
+            DSC_DATA(bf16, out);
+            k_get_slice<bf16><<<DSC_GPU_BLOCKS(n),
+                               DSC_GPU_DEFAULT_THREADS>>>(x_data, out_data, n, params);
+            break;
+        }
         case F32: {
             DSC_DATA(f32, x);
             DSC_DATA(f32, out);
@@ -690,6 +737,13 @@ void dsc_gpu_set_slice(dsc_device *,
                 DSC_DATA(i32, xa);
                 DSC_DATA(i32, xb);
                 k_set_slice<i32><<<DSC_GPU_BLOCKS(n),
+                                   DSC_GPU_DEFAULT_THREADS>>>(xa_data, xb_data, xb_scalar, n, params, whole);
+                break;
+            }
+            case BF16: {
+                DSC_DATA(bf16, xa);
+                DSC_DATA(bf16, xb);
+                k_set_slice<bf16><<<DSC_GPU_BLOCKS(n),
                                    DSC_GPU_DEFAULT_THREADS>>>(xa_data, xb_data, xb_scalar, n, params, whole);
                 break;
             }
@@ -833,6 +887,9 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
                     case I32:
                         binary_op<bool, i32>(xa, xb, out, op);
                         break;
+                    case BF16:
+                        binary_op<bool, bf16>(xa, xb, out, op);
+                        break;
                     case F32:
                         binary_op<bool, f32>(xa, xb, out, op);
                         break;
@@ -851,6 +908,9 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
             break;
         case I32:
             binary_op<i32>(xa, xb, out, op);
+            break;
+        case BF16:
+            binary_op<bf16>(xa, xb, out, op);
             break;
         case F32:
             binary_op<f32>(xa, xb, out, op);
@@ -897,13 +957,12 @@ void dsc_gpu_pow(dsc_device *,
     binary_op(xa, xb, out, gpu_pow_op());
 }
 
-void dsc_gpu_matmul(dsc_device *dev,
-                    const dsc_tensor *DSC_RESTRICT xa,
-                    const dsc_tensor *DSC_RESTRICT xb,
-                    const bool trans_b,
-                    dsc_tensor *DSC_RESTRICT out) {
-    const dsc_gpu_dev_info *info = (dsc_gpu_dev_info *) dev->extra_info;
-
+template<typename T>
+static DSC_INLINE void gemm_op(const gpu_blas_handle handle,
+                               const dsc_tensor *DSC_RESTRICT xa,
+                               const dsc_tensor *DSC_RESTRICT xb,
+                               const bool trans_b,
+                               dsc_tensor *DSC_RESTRICT out) {
     const int stride_a = dsc_tensor_get_stride(xa, -2);
     const int stride_b = dsc_tensor_get_stride(xb, -2);
     const int stride_out = dsc_tensor_get_stride(out, -2);
@@ -919,50 +978,64 @@ void dsc_gpu_matmul(dsc_device *dev,
     const int xb_stride_d0 = xb->shape[0] != d0_out ? 0 : xb->stride[0];
     const int xb_stride_d1 = xb->shape[1] != d1_out ? 0 : xb->stride[1];
 
-    switch (xa->dtype) {
-        case F32: {
-            DSC_DATA(f32, xa);
-            DSC_DATA(f32, xb);
-            DSC_DATA(f32, out);
+    DSC_DATA(T, xa);
+    DSC_DATA(T, xb);
+    DSC_DATA(T, out);
 
-            static constexpr f32 alpha = 1.f, beta = 0.f;
+    const T alpha = 1, beta = 0;
+    const gpu_blas_op a_op = trans_b ? GPU_BLAS_OP_T : GPU_BLAS_OP_N;
 
-            for (int d0 = 0; d0 < d0_out; ++d0) {
-                for (int d1 = 0; d1 < d1_out; ++d1) {
-                    const int out_offset = d0 * out->stride[0] + d1 * out->stride[1];
-                    const int xa_offset = d0 * xa_stride_d0 + d1 * xa_stride_d1;
-                    const int xb_offset = d0 * xb_stride_d0 + d1 * xb_stride_d1;
+    for (int d0 = 0; d0 < d0_out; ++d0) {
+        for (int d1 = 0; d1 < d1_out; ++d1) {
+            const int out_offset = d0 * out->stride[0] + d1 * out->stride[1];
+            const int xa_offset = d0 * xa_stride_d0 + d1 * xa_stride_d1;
+            const int xb_offset = d0 * xb_stride_d0 + d1 * xb_stride_d1;
 
-                    // Swap A and B since cuBLAS works with column-major matrices, but we need the result in row-major
-                    DSC_GPU_BLAS_CHECK(gpu_blas_sgemm(info->blas_handle,
-                                                      trans_b ? GPU_BLAS_OP_T : GPU_BLAS_OP_N, GPU_BLAS_OP_N, n, m, k,
-                                                      &alpha, &xb_data[xb_offset], stride_b,
-                                                      &xa_data[xa_offset], stride_a, &beta,
-                                                      &out_data[out_offset], stride_out));
-                }
+            if constexpr (dsc_is_type<T, f64>()) {
+                DSC_GPU_BLAS_CHECK(gpu_blas_dgemm(handle,
+                                                  a_op, GPU_BLAS_OP_N, n, m, k,
+                                                  &alpha, &xb_data[xb_offset], stride_b,
+                                                  &xa_data[xa_offset], stride_a, &beta,
+                                                  &out_data[out_offset], stride_out));
+            } else if constexpr (dsc_is_type<T, f32>()) {
+                DSC_GPU_BLAS_CHECK(gpu_blas_sgemm(handle,
+                                                  a_op, GPU_BLAS_OP_N, n, m, k,
+                                                  &alpha, &xb_data[xb_offset], stride_b,
+                                                  &xa_data[xa_offset], stride_a, &beta,
+                                                  &out_data[out_offset], stride_out));
+            } else if constexpr (dsc_is_type<T, bf16>()) {
+                // These must have the same type as the compute type (f32 in this case)
+                static constexpr f32 alpha_f32 = 1, beta_f32 = 0;
+                DSC_GPU_BLAS_CHECK(gpu_blas_bfgemm(handle,
+                                                   a_op, GPU_BLAS_OP_N, n, m, k,
+                                                   &alpha_f32, &xb_data[xb_offset], GPU_GEMM_DTYPE_BF16, stride_b,
+                                                   &xa_data[xa_offset], GPU_GEMM_DTYPE_BF16, stride_a, &beta_f32,
+                                                   &out_data[out_offset], GPU_GEMM_DTYPE_BF16, stride_out, GPU_GEMM_DTYPE_F32));
+            } else {
+                static_assert("T must be real");
             }
+        }
+    }
+}
+
+void dsc_gpu_matmul(dsc_device *dev,
+                    const dsc_tensor *DSC_RESTRICT xa,
+                    const dsc_tensor *DSC_RESTRICT xb,
+                    const bool trans_b,
+                    dsc_tensor *DSC_RESTRICT out) {
+    const dsc_gpu_dev_info *info = (dsc_gpu_dev_info *) dev->extra_info;
+
+    switch (xa->dtype) {
+        case BF16: {
+            gemm_op<bf16>(info->blas_handle, xa, xb, trans_b, out);
+            break;
+        }
+        case F32: {
+            gemm_op<f32>(info->blas_handle, xa, xb, trans_b, out);
             break;
         }
         case F64: {
-            DSC_DATA(f64, xa);
-            DSC_DATA(f64, xb);
-            DSC_DATA(f64, out);
-
-            static constexpr f64 alpha = 1., beta = 0.;
-
-            for (int d0 = 0; d0 < d0_out; ++d0) {
-                for (int d1 = 0; d1 < d1_out; ++d1) {
-                    const int out_offset = d0 * out->stride[0] + d1 * out->stride[1];
-                    const int xa_offset = d0 * xa_stride_d0 + d1 * xa_stride_d1;
-                    const int xb_offset = d0 * xb_stride_d0 + d1 * xb_stride_d1;
-
-                    DSC_GPU_BLAS_CHECK(gpu_blas_dgemm(info->blas_handle,
-                                                      trans_b ? GPU_BLAS_OP_T : GPU_BLAS_OP_N, GPU_BLAS_OP_N, n, m, k,
-                                                      &alpha, &xb_data[xb_offset], stride_b,
-                                                      &xa_data[xa_offset], stride_a, &beta,
-                                                      &out_data[out_offset], stride_out));
-                }
-            }
+            gemm_op<f64>(info->blas_handle, xa, xb, trans_b, out);
             break;
         }
         DSC_INVALID_CASE("unsupported dtype=%d", xa->dtype);
@@ -1051,6 +1124,15 @@ void dsc_gpu_masked_fill(dsc_device *,
                                                        (i32) value, params);
             break;
         }
+        case BF16: {
+            DSC_DATA(bf16, x);
+            DSC_DATA(bool, mask);
+
+            k_masked_fill<<<DSC_GPU_BLOCKS(n),
+                            DSC_GPU_DEFAULT_THREADS>>>(x_data, mask_data, n,
+                                                       (bf16) value, params);
+            break;
+        }
         case F32: {
             DSC_DATA(f32, x);
             DSC_DATA(bool, mask);
@@ -1123,6 +1205,15 @@ void dsc_gpu_outer(dsc_device *,
             DSC_DATA(i32, xa);
             DSC_DATA(i32, xb);
             DSC_DATA(i32, out);
+
+            k_outer<<<DSC_GPU_BLOCKS(n),
+                      DSC_GPU_DEFAULT_THREADS>>>(xa_data, xb_data, out_data, n, params);
+            break;
+        }
+        case BF16: {
+            DSC_DATA(bf16, xa);
+            DSC_DATA(bf16, xb);
+            DSC_DATA(bf16, out);
 
             k_outer<<<DSC_GPU_BLOCKS(n),
                       DSC_GPU_DEFAULT_THREADS>>>(xa_data, xb_data, out_data, n, params);
@@ -1219,6 +1310,16 @@ void dsc_gpu_where(dsc_device *,
                                                  other_data, out_data, n, params);
             break;
         }
+        case BF16: {
+            DSC_DATA(bf16, input);
+            DSC_DATA(bf16, other);
+            DSC_DATA(bf16, out);
+
+            k_where<<<DSC_GPU_BLOCKS(n),
+                      DSC_GPU_DEFAULT_THREADS>>>(condition_data, input_data,
+                                                 other_data, out_data, n, params);
+            break;
+        }
         case F32: {
             DSC_DATA(f32, input);
             DSC_DATA(f32, other);
@@ -1263,6 +1364,13 @@ static DSC_INLINE void unary_op(const dsc_tensor *DSC_RESTRICT x,
                                 dsc_tensor *DSC_RESTRICT out, Op op) {
     const int n = x->ne;
     switch (x->dtype) {
+        case BF16: {
+            DSC_DATA(bf16, x);
+            DSC_DATA(bf16, out);
+            k_unary_op<bf16><<<DSC_GPU_BLOCKS(n),
+                              DSC_GPU_DEFAULT_THREADS>>>(x_data, out_data, n, op);
+            break;
+        }
         case F32: {
             DSC_DATA(f32, x);
             DSC_DATA(f32, out);
@@ -1387,11 +1495,11 @@ void dsc_gpu_sum(dsc_device *,
                  const int axis_idx) {
     switch (out->dtype) {
         case F32:
-            reduce_op<f32, gpu_add_op, gpu_atomic_add_op>(x, out, axis_idx, dsc_zero<f32>(),
+            reduce_op<f32, gpu_add_op, gpu_atomic_add_op>(x, out, axis_idx, 0.f,
                                                           gpu_add_op(), gpu_atomic_add_op());
             break;
         case F64:
-            reduce_op<f64, gpu_add_op, gpu_atomic_add_op>(x, out, axis_idx, dsc_zero<f64>(),
+            reduce_op<f64, gpu_add_op, gpu_atomic_add_op>(x, out, axis_idx, 0.,
                                                           gpu_add_op(), gpu_atomic_add_op());
             break;
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);

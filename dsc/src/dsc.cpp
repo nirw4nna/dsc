@@ -5,10 +5,12 @@
 // (https://opensource.org/license/bsd-3-clause).
 
 #include "dsc.h"
-#include "gpu/dsc_gpu.h"
 #include "cpu/dsc_cpu.h"
+#include "cpu/dsc_ops.h"
 #include "dsc_device.h"
 #include "dsc_tracing.h"
+#include "gpu/dsc_gpu.h"
+
 #include <cstdarg> // va_xxx
 #include <cstring> // memset, memcpy
 
@@ -18,9 +20,9 @@
     xa = dsc_cast(ctx, xa, out_dtype);       \
     xb = dsc_cast(ctx, xb, out_dtype)
 
-#define cast_unary_params()         \
-    const dsc_tensor *x__ = x;      \
-    x = dsc_cast(ctx, x, out_dtype) \
+#define cast_unary_params()    \
+    const dsc_tensor *x__ = x; \
+    x = dsc_cast(ctx, x, out_dtype)
 
 
 // This needs to be a macro otherwise the pointer assignments to out, xa and xb
@@ -36,9 +38,9 @@
     int shape[DSC_MAX_DIMS];                                                                   \
     for (int i = 0; i < DSC_MAX_DIMS; ++i) shape[i] = DSC_MAX(xa->shape[i], xb->shape[i]);     \
                                                                                                \
-    dsc_dtype out_dtype = DSC_DTYPE_CONVERSION_TABLE[xa->dtype][xb->dtype];                    \
+    dsc_dtype out_dtype = DSC_DTYPE_CONVERSION_TABLE[xa->device][xa->dtype][xb->dtype];        \
     if ((bool_as_float && out_dtype == BOOL) || (int_as_float && out_dtype == I32)) {          \
-        out_dtype = DSC_TYPE_AT_LEAST_FLOAT_TABLE[out_dtype];                                  \
+        out_dtype = DSC_TYPE_AT_LEAST_FLOAT_TABLE[xa->device][out_dtype];                      \
     }                                                                                          \
     if (out == nullptr) {                                                                      \
         out = dsc_new_tensor(ctx, n_dim, &shape[DSC_MAX_DIMS - n_dim], out_dtype, xa->device); \
@@ -59,7 +61,7 @@
 #define validate_unary_params()                                                               \
     DSC_ASSERT(x != nullptr);                                                                 \
                                                                                               \
-    const dsc_dtype out_dtype = DSC_TYPE_AT_LEAST_FLOAT_TABLE[x->dtype];                      \
+    const dsc_dtype out_dtype = DSC_TYPE_AT_LEAST_FLOAT_TABLE[x->device][x->dtype];           \
                                                                                               \
     if (out == nullptr) {                                                                     \
         out = dsc_new_tensor(ctx, x->n_dim, &dsc_tensor_get_dim(x, 0), out_dtype, x->device); \
@@ -79,8 +81,9 @@
 #define validate_reduce_params()                                                                        \
     DSC_ASSERT(x != nullptr);                                                                           \
                                                                                                         \
-    const dsc_dtype out_dtype = DSC_TYPE_AT_LEAST_FLOAT_TABLE[x->dtype];                                \
-                                                                                                        \
+    const dsc_dtype expected_out_dtype = DSC_TYPE_AT_LEAST_FLOAT_TABLE[x->device][x->dtype];            \
+    const dsc_dtype full_precision_out_dtype = expected_out_dtype == BF16 ? F32 : expected_out_dtype;   \
+    const dsc_dtype out_dtype = full_precision_out_dtype;                                               \
     const int axis_idx = dsc_tensor_dim_idx(x, axis);                                                   \
     DSC_ASSERT(axis_idx < DSC_MAX_DIMS);                                                                \
                                                                                                         \
@@ -111,6 +114,15 @@
     }                                                                                                   \
     cast_unary_params()
 
+#define cleanup_reduce_params()                                                                                \
+    do {                                                                                                       \
+        cleanup_unary_params();                                                                                \
+        if (out_dtype != expected_out_dtype) {                                                                 \
+            dsc_tensor *out__ = out;                                                                           \
+            out = dsc_cast(ctx, out, expected_out_dtype);                                                      \
+            dsc_tensor_free(ctx, out__);                                                                       \
+        }                                                                                                      \
+    } while (0)
 
 // If DEV is DEFAULT use the system default setting otherwise use the specified device
 #define DSC_GET_DEV_ID(CTX, DEV) (DEV) == DEFAULT ? (CTX)->default_device : (DEV)
@@ -148,6 +160,48 @@
 #define dsc_tensor_invalid(PTR)     (PTR)->ne <= 0
 #define dsc_tensor_set_invalid(PTR) (PTR)->ne = -1
 
+// Conversion rules when we have two operands
+constexpr static dsc_dtype DSC_DTYPE_CONVERSION_TABLE[DSC_MAX_DEVICES][DSC_DTYPES][DSC_DTYPES] = {
+        {
+                // CPU dtype casting rules
+                {BOOL, I32, F32, F32, F64},
+                {I32, I32, F32, F32, F64},
+                {F32, F32, F32, F32, F64},// BF16 is always upcasted to F32
+                {F32, F32, F32, F32, F64},
+                {F64, F64, F64, F64, F64},
+        },
+        {
+                // GPU dtype casting rules
+                {BOOL, I32, F32, F32, F64},
+                {I32, I32, F32, F32, F64},
+#if defined(DSC_BF16)
+                {BF16, BF16, BF16, F32, F64},
+#else
+                {F32, F32, F32, F32, F64},// BF16 is always upcasted to F32
+#endif
+                {F32, F32, F32, F32, F64},
+                {F64, F64, F64, F64, F64},
+        }};
+
+constexpr static dsc_dtype DSC_TYPE_AT_LEAST_FLOAT_TABLE[DSC_MAX_DEVICES][DSC_DTYPES] = {
+        { // CPU dtype to float conversion table
+                F32,// BOOL
+                F32,// I32
+                F32,// BF16
+                F32,// F32
+                F64,// F64
+        },
+        { // GPU dtype to float conversion table
+                F32,// BOOL
+                F32,// I32
+#if defined(DSC_BF16)
+                BF16,// BF16
+#else
+                F32,// BF16
+#endif
+                F32,// F32
+                F64,// F64
+        }};
 
 struct dsc_ctx {
     dsc_device *devices[DSC_MAX_DEVICES];
@@ -305,6 +359,10 @@ void dsc_gpu_sync(dsc_ctx *) {
     dsc_gpu_sync();
 }
 
+bool dsc_gpu_has_bf16(dsc_ctx *) {
+    return dsc_gpu_has_bf16();
+}
+
 // ============================================================
 // Tracing
 
@@ -454,14 +512,15 @@ dsc_tensor *dsc_tensor_4d(dsc_ctx *ctx, const dsc_dtype dtype,
     return dsc_new_tensor(ctx, 4, shape, dtype, device, nullptr, false, data, data_device);
 }
 
-template<typename T>
-static DSC_INLINE dsc_tensor *wrap(dsc_ctx *ctx, const T val,
+template<typename Tin, typename Tout = Tin>
+static DSC_INLINE dsc_tensor *wrap(dsc_ctx *ctx, const Tin val,
                                    const dsc_device_type device) {
-    dsc_tensor *out = dsc_tensor_1d(ctx, dsc_type_mapping<T>::value, 1, device);
+    dsc_tensor *out = dsc_tensor_1d(ctx, dsc_type_mapping<Tout>::value, 1, device);
 
     DSC_GET_DEVICE(ctx, device);
-    DSC_DATA(T, out);
-    dev->memcpy(out_data, &val, sizeof(val), TO_DEVICE);
+    DSC_DATA(Tout, out);
+    const Tout v_out = cpu_cast_op().operator()<Tin, Tout>(val);
+    dev->memcpy(out_data, &v_out, sizeof(Tout), TO_DEVICE);
     return out;
 }
 
@@ -476,7 +535,9 @@ dsc_tensor *dsc_wrap_i32(dsc_ctx *ctx, const i32 val,
 }
 
 dsc_tensor *dsc_wrap_f32(dsc_ctx *ctx, const f32 val,
-                         const dsc_device_type device) {
+                         const dsc_device_type device,
+                         const bool as_bf16) {
+    if (as_bf16) return wrap<f32, bf16>(ctx, val, device);
     return wrap(ctx, val, device);
 }
 
@@ -540,6 +601,7 @@ dsc_pair dsc_topk(dsc_ctx *ctx,
                   const bool largest) {
     // Return the top K largest (smallest) elements of x along the given axis
     DSC_ASSERT(x != nullptr);
+    DSC_ASSERT(x->device == CPU);
 
     DSC_TRACE_TOPK_OP(x, k, axis, largest);
 
@@ -561,22 +623,7 @@ dsc_pair dsc_topk(dsc_ctx *ctx,
 
     // For now, topk runs always on CPU. If x is not a CPU tensor create a temporary copy
     DSC_GET_DEVICE(ctx, CPU);
-    if (x->device == CPU) {
-        dsc_cpu_topk(dev, x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
-    } else {
-        dsc_tensor *x_ = dsc_copy_of(ctx, x, CPU);
-        dsc_cpu_topk(dev, x_, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
-
-        dsc_tensor *out_values_ = out_values;
-        dsc_tensor *out_indexes_ = out_indexes;
-        // Note: right now DSC result will be on the same device as the argument even though the operations
-        // are always run on the CPU. I don't know if this is a good idea, will see...
-        out_values = dsc_copy_of(ctx, out_values, x->device);
-        out_indexes = dsc_copy_of(ctx, out_indexes, x->device);
-        dsc_tensor_free(ctx, x_);
-        dsc_tensor_free(ctx, out_values_);
-        dsc_tensor_free(ctx, out_indexes_);
-    }
+    dsc_cpu_topk(dev, x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
 
     dsc_tensor_free(ctx, tmp_values);
     dsc_tensor_free(ctx, tmp_indexes);
@@ -589,6 +636,7 @@ dsc_tensor *dsc_multinomial(dsc_ctx *ctx,
                             const int num_samples) {
     DSC_ASSERT(x != nullptr);
     DSC_ASSERT(x->n_dim <= 2);
+    DSC_ASSERT(x->device == CPU);
     DSC_ASSERT(x->dtype == F32 || x->dtype == F64);
     DSC_ASSERT((unsigned) num_samples <= (unsigned) dsc_tensor_get_dim(x, -1));
 
@@ -601,17 +649,7 @@ dsc_tensor *dsc_multinomial(dsc_ctx *ctx,
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], I32, CPU);
     // For now, multinomial runs always on the CPU.
     DSC_GET_DEVICE(ctx, CPU);
-    if (x->device == CPU) {
-        dsc_cpu_multinomial(dev, x, out, num_samples);
-    } else {
-        dsc_tensor *x_ = dsc_copy_of(ctx, x, CPU);
-        dsc_cpu_multinomial(dev, x_, out, num_samples);
-        dsc_tensor *out_ = out;
-        out = dsc_copy_of(ctx, out, x->device);
-        dsc_tensor_free(ctx, x_);
-        dsc_tensor_free(ctx, out_);
-    }
-
+    dsc_cpu_multinomial(dev, x, out, num_samples);
     return out;
 }
 
@@ -1288,7 +1326,7 @@ dsc_tensor *dsc_matmul(dsc_ctx *ctx,
     out_shape[DSC_MAX_DIMS - 1] = xb_cols;
     const int out_ndim = DSC_MAX(xa->n_dim, xb->n_dim);
 
-    const dsc_dtype out_dtype = DSC_TYPE_AT_LEAST_FLOAT_TABLE[DSC_DTYPE_CONVERSION_TABLE[xa->dtype][xb->dtype]];
+    const dsc_dtype out_dtype = DSC_TYPE_AT_LEAST_FLOAT_TABLE[xa->device][DSC_DTYPE_CONVERSION_TABLE[xa->device][xa->dtype][xb->dtype]];
 
     if (out != nullptr) {
         DSC_ASSERT(memcmp(out_shape, out->shape, DSC_MAX_DIMS * sizeof(*out->shape)) == 0);
@@ -1379,7 +1417,7 @@ dsc_tensor *dsc_outer(dsc_ctx *ctx,
 
     DSC_TRACE_OUTER_OP(xa, xb, out);
 
-    const dsc_dtype out_dtype = DSC_DTYPE_CONVERSION_TABLE[xa->dtype][xb->dtype];
+    const dsc_dtype out_dtype = DSC_DTYPE_CONVERSION_TABLE[xa->device][xa->dtype][xb->dtype];
 
     const int out_shape[] = {dsc_tensor_get_dim(xa, 0), dsc_tensor_get_dim(xb, 0)};
 
@@ -1525,7 +1563,7 @@ dsc_tensor *dsc_sum(dsc_ctx *ctx,
 
     DSC_DISPATCH(x->device, sum, x, out, axis_idx);
 
-    cleanup_unary_params();
+    cleanup_reduce_params();
 
     return out;
 }
@@ -1541,7 +1579,7 @@ dsc_tensor *dsc_max(dsc_ctx *ctx,
 
     DSC_DISPATCH(x->device, max, x, out, axis_idx);
 
-    cleanup_unary_params();
+    cleanup_reduce_params();
 
     return out;
 }
@@ -1557,7 +1595,7 @@ dsc_tensor *dsc_min(dsc_ctx *ctx,
 
     DSC_DISPATCH(x->device, min, x, out, axis_idx);
 
-    cleanup_unary_params();
+    cleanup_reduce_params();
 
     return out;
 }

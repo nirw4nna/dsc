@@ -137,10 +137,10 @@ class ModuleDict(Module):
         raise NotImplementedError('forward() is not supported in ModuleDict')
 
 class Linear(Module):
-    def __init__(self, in_features: int, out_features: int, bias: bool = True):
+    def __init__(self, in_features: int, out_features: int, bias: bool = True, dtype: Dtype = Dtype.F32):
         super().__init__()
-        self.weight = Parameter((out_features, in_features))
-        self.bias = Parameter((out_features, )) if bias else None
+        self.weight = Parameter((out_features, in_features), dtype=dtype)
+        self.bias = Parameter((out_features, ), dtype=dtype) if bias else None
 
     @trace('Linear')
     def forward(self, x: Tensor) -> Tensor:
@@ -150,11 +150,11 @@ class Linear(Module):
         return out
 
 class LayerNorm(Module):
-    def __init__(self, n_features: int, epsilon: float = 1e-5):
+    def __init__(self, n_features: int, epsilon: float = 1e-5, dtype: Dtype = Dtype.F32):
         super().__init__()
         self.epsilon = epsilon
-        self.weight = Parameter((n_features, ))
-        self.bias = Parameter((n_features, ))
+        self.weight = Parameter((n_features, ), dtype=dtype)
+        self.bias = Parameter((n_features, ), dtype=dtype)
 
     @trace('LayerNorm')
     def forward(self, x: Tensor) -> Tensor:
@@ -167,10 +167,10 @@ class LayerNorm(Module):
         return out
 
 class RMSNorm(Module):
-    def __init__(self, in_shape: int, epsilon: float = 1e-6):
+    def __init__(self, in_shape: int, epsilon: float = 1e-6, dtype: Dtype = Dtype.F32):
         super().__init__()
         self.epsilon = epsilon
-        self.weight = Parameter((in_shape, ))
+        self.weight = Parameter((in_shape, ), dtype=dtype)
 
     @trace('RMSNorm')
     def forward(self, x: Tensor) -> Tensor:
@@ -179,9 +179,9 @@ class RMSNorm(Module):
         return out * self.weight
 
 class Embedding(Module):
-    def __init__(self, num_embeddings: int, embedding_size: int):
+    def __init__(self, num_embeddings: int, embedding_size: int, dtype: Dtype = Dtype.F32):
         super().__init__()
-        self.weight = Parameter((num_embeddings, embedding_size))
+        self.weight = Parameter((num_embeddings, embedding_size), dtype=dtype)
 
     def forward(self, x: Tensor) -> Tensor:
         return self.weight[x]

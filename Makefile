@@ -1,7 +1,6 @@
 CXX			=	g++
 NVCC		=	nvcc
 HIPCC		=	hipcc
-AR			=	ar
 
 HIPCCFLAGS	=	-std=c++20 -I$(ROCM)/include -I./dsc/include/ --offload-arch=native -Wall -Wextra -Wformat \
                 -Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
@@ -80,6 +79,8 @@ endif
 
 ifdef DSC_ENABLE_TRACING
 	CXXFLAGS	+=	-DDSC_ENABLE_TRACING
+	NVCCFLAGS	+=	-DDSC_ENABLE_TRACING
+	HIPCCFLAGS	+=	-DDSC_ENABLE_TRACING
 endif
 
 # If we are not compiling the shared object and are in debug mode then run in ASAN mode
@@ -94,6 +95,14 @@ GPU_OBJS	:=	$(GPU_SRCS:.cpp=.o)
 
 # Enable CUDA support
 ifdef DSC_CUDA
+	# BF16 is supported in compute capability >= 8.0 (Ampere)
+	HAS_BF16_GPU := $(shell compute_major=$$(nvidia-smi --query-gpu=compute_cap --format=noheader | cut -d. -f1); \
+						if [ "$${compute_major}" -ge 8 ]; then echo 1; fi)
+	ifeq ($(HAS_BF16_GPU), 1)
+		NVCCFLAGS	+=	-DDSC_BF16
+		CXXFLAGS	+=	-DDSC_BF16
+	endif
+
 	CXXFLAGS	+=	-I$(CUDA)/include -DDSC_CUDA
 	NVCCFLAGS	+=	-x cu -DDSC_CUDA
 	LDFLAGS		+=	-L$(CUDA)/lib64 -lcudart -lcublas
@@ -106,6 +115,13 @@ endif
 
 # Enable HIP support
 ifdef DSC_HIP
+	GPU_TARGETS := $(shell ${ROCM_PATH}/bin/rocm_agent_enumerator)
+    HAS_BF16_GPU := $(shell echo '${GPU_TARGETS}' | grep -q -E "gfx90a|gfx94[0-2]|gfx103[0-6]" && echo 1)
+    ifeq ($(HAS_BF16_GPU), 1)
+		HIPCCFLAGS	+=	-DDSC_BF16
+		CXXFLAGS	+=	-DDSC_BF16
+    endif
+
 	# TODO: is -D__HIP_PLATFORM_AMD__ required?
 	CXXFLAGS	+=	-I$(ROCM)/include -DDSC_HIP -D__HIP_PLATFORM_AMD__
 	HIPCCFLAGS	+=	-DDSC_HIP
@@ -142,15 +158,11 @@ SRCS		+=	$(wildcard dsc/src/cpu/*.cpp)
 OBJS		+=	$(SRCS:.cpp=.o)
 
 SHARED_LIB	=	python/dsc/libdsc.so
-STATIC_LIB	=	libdsc.a
 
-.PHONY: clean shared static
+.PHONY: clean shared
 
 clean:
-	rm -rf *.o *.so *.old $(OBJS) $(GPU_OBJS) $(SHARED_LIB) $(STATIC_LIB)
-
-static: $(OBJS)
-	$(AR) -rcs $(STATIC_LIB) $(OBJS)
+	rm -rf *.o *.so *.old $(OBJS) $(GPU_OBJS) $(SHARED_LIB)
 
 shared: $(OBJS)
 	$(CXX) $(CXXFLAGS) -shared $(OBJS) -o $(SHARED_LIB) $(LDFLAGS)

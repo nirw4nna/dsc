@@ -71,7 +71,25 @@ using gpu_rand_state = curandState;
 #define gpu_blas_destroy    cublasDestroy
 #define gpu_blas_sgemm      cublasSgemm
 #define gpu_blas_dgemm      cublasDgemm
+#define gpu_blas_op         cublasOperation_t
+#define gpu_blas_dtype      cudaDataType
 #define GPU_BLAS_OP_T       CUBLAS_OP_T
 #define GPU_BLAS_OP_N       CUBLAS_OP_N
+#define GPU_GEMM_DTYPE_BF16 CUDA_R_16BF
+#define GPU_GEMM_DTYPE_F32  CUDA_R_32F
 
 using gpu_blas_handle = cublasHandle_t;
+
+
+static DSC_INLINE cublasStatus_t gpu_blas_bfgemm(const gpu_blas_handle handle, const gpu_blas_op a_op, const gpu_blas_op b_op,
+                                                 const int m, const int n, const int k, const void *DSC_RESTRICT alpha,
+                                                 const void *DSC_RESTRICT xa, const gpu_blas_dtype a_dtype, const int stride_a,
+                                                 const void *DSC_RESTRICT xb, const gpu_blas_dtype b_dtype, const int stride_b,
+                                                 const void *DSC_RESTRICT beta, void *out, const gpu_blas_dtype out_dtype,
+                                                 const int stride_out, const gpu_blas_dtype compute_dtype) {
+    return cublasGemmEx(handle, a_op, b_op, m, n, k,
+                        alpha, xa, a_dtype, stride_a,
+                        xb, b_dtype, stride_b, beta,
+                        out, out_dtype, stride_out,
+                        compute_dtype, CUBLAS_GEMM_DEFAULT);
+}

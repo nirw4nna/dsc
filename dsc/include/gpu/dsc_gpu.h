@@ -7,6 +7,7 @@
 #pragma once
 
 #include "dsc.h"
+#include "dsc_device.h"
 
 #if defined(DSC_CUDA) && defined(DSC_HIP)
 #   error "DSC can't be compiled with both CUDA and HIP support"
@@ -72,6 +73,14 @@ static DSC_INLINE usize dsc_gpu_dev_mem(const int dev) {
 
 static DSC_INLINE void dsc_gpu_sync() {
     DSC_GPU_CHECK(gpu_device_sync());
+}
+
+static DSC_INLINE bool dsc_gpu_has_bf16() {
+#if defined(DSC_BF16)
+    return true;
+#else
+    return false;
+#endif
 }
 
 // ============================================================
@@ -242,5 +251,9 @@ static DSC_INLINE usize dsc_gpu_dev_mem(const int) {
 }
 
 static DSC_INLINE void dsc_gpu_sync() {}
+
+static DSC_INLINE bool dsc_gpu_has_bf16() {
+    return false;
+}
 
 #endif // DSC_CUDA || DSC_HIP

@@ -8,7 +8,7 @@ from dsc.context import init, print_mem_usage, set_default_device
 from dsc.tensor import (
     Tensor,
     from_numpy,
-    from_buffer,
+    frombuffer,
     reshape,
     concat,
     split,
@@ -54,7 +54,7 @@ from dsc.tensor import (
     multinomial,
     where,
 )
-from dsc.dtype import Dtype, bool_, i32, f32, f64
+from dsc.dtype import Dtype, bool_, i32, bf16, f32, f64
 from dsc.profiler import start_recording, stop_recording, profile, trace
 from dsc.device import Device
 import dsc.gpu as gpu

@@ -12,16 +12,21 @@
 struct cpu_cast_op {
     template<typename Tin, typename Tout>
     DSC_INLINE DSC_STRICTLY_PURE Tout operator()(const Tin in) const {
+        union {
+            f32 f;
+            u32 i;
+        } u;
+
+        // TODO: 64 bit conversion f64 -> bf16
         if constexpr (dsc_is_type<Tin, bf16>()) {
             // Naive way of converting between BF16 and F32, if this has to be applied to a sequence of
             // elements it can be vectorized quite easily.
-            union {
-                f32 f;
-                u32 i;
-            } u;
             u.i = (u32) in << 16;
-
             return (Tout) u.f;
+        } else if constexpr (dsc_is_type<Tout, bf16>() && dsc_is_type<Tin, f32>()) {
+            u.f = in;
+            u.i >>= 16;
+            return (Tout) u.i;
         } else {
             return (Tout) in;
         }

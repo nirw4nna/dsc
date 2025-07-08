@@ -378,7 +378,7 @@ static DSC_INLINE void tril(const dsc_tensor *DSC_RESTRICT x,
         const int row = x_it.pos(-2);
         const int col = x_it.pos(-1);
 
-        out_data[idx] = (col > (row + diagonal)) ? dsc_zero<T>() : x_data[idx];
+        out_data[idx] = col > (row + diagonal) ? (T) 0 : x_data[idx];
     }
 }
 
@@ -978,10 +978,10 @@ void dsc_cpu_sum(dsc_device *,
                  const int axis_idx) {
     switch (out->dtype) {
         case F32:
-            reduce(x, out, axis_idx, dsc_zero<f32>(), cpu_add_op());
+            reduce(x, out, axis_idx, 0.f, cpu_add_op());
             break;
         case F64:
-            reduce(x, out, axis_idx, dsc_zero<f64>(), cpu_add_op());
+            reduce(x, out, axis_idx, 0., cpu_add_op());
             break;
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
     }
