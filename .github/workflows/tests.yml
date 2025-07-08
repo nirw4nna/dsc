@@ -65,18 +65,18 @@ jobs:
       - name: Run common ops tests on ${{ matrix.device }}
         run: |
           cd python/tests/
-          pytest -s test_ops_common.py --no-header --no-summary -q
+          python3 -m pytest -s test_ops_common.py --no-header --no-summary -q
       - name: Run ops tests on CPU
         if: matrix.device == 'cpu'
         run: |
           cd python/tests/
-          pytest -s test_ops_cpu.py --no-header --no-summary -q
+          python3 -m pytest -s test_ops_cpu.py --no-header --no-summary -q
       - name: Run GPU ops tests
         if: matrix.device == 'gpu'
         run: |
           cd python/tests/
-          pytest -s test_ops_gpu.py --no-header --no-summary -q
+          python3 -m pytest -s test_ops_gpu.py --no-header --no-summary -q
       - name: Run indexing tests on ${{ matrix.device }}
         run: |
           cd python/tests/
-          pytest -s test_indexing.py --no-header --no-summary -q
+          python3 -m pytest -s test_indexing.py --no-header --no-summary -q
