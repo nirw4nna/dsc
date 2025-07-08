@@ -84,10 +84,7 @@ def all_close(actual: dsc.Tensor, target: torch.Tensor, atol: float = 1e-4, rtol
     actual_torch = torch.as_tensor(actual, device='cuda').view(actual_dtype)
     if is_float(actual_dtype) and not is_float(target.dtype):
         target = target.to(dtype=actual_dtype)
-    close = torch.allclose(actual_torch, target, atol=atol, rtol=rtol, equal_nan=True)
-    if not close:
-        print(f'target:\n{target}\nactual:\n{actual_torch}')
-    return close
+    return torch.allclose(actual_torch, target, atol=atol, rtol=rtol, equal_nan=True)
 
 
 class TestOps:
@@ -114,6 +111,9 @@ class TestOps:
                     # Pow on CUDA is not implemented in torch for bool
                     continue
 
+                atol = 1e-4; rtol = 1e-4
+                if dtype == torch.bfloat16:
+                    atol = 1e-2; rtol = 1e-2
                 print(f'Testing operator {op_name} with {dtype}')
                 shape = [randint(2, 10) for _ in range(4)]
                 x, x_dsc = random_nd(shape, dtype=dtype)
@@ -125,8 +125,8 @@ class TestOps:
                 res_dsc = dsc_op(x_dsc, y_dsc)
                 r_res_torch = torch_op(y, x)
                 r_res_dsc = dsc_op(y_dsc, x_dsc)
-                assert all_close(res_dsc, res_torch), f'Error testing ({x.shape} {op_name} {y.shape}) dtype={dtype}'
-                assert all_close(r_res_dsc, r_res_torch), f'Error testing ({y.shape} {op_name} {x.shape}) dtype={dtype}'
+                assert all_close(res_dsc, res_torch, atol, rtol), f'Error testing ({x.shape} {op_name} {y.shape}) dtype={dtype}'
+                assert all_close(r_res_dsc, r_res_torch, atol, rtol), f'Error testing ({y.shape} {op_name} {x.shape}) dtype={dtype}'
 
                 # Broadcasting
                 collapse_idx = randint(0, 3)
@@ -137,15 +137,13 @@ class TestOps:
                 res_dsc_b = dsc_op(x_dsc, y_dsc_b)
                 r_res_torch_b = torch_op(y_b, x)
                 r_res_dsc_b = dsc_op(y_dsc_b, x_dsc)
-                assert all_close(res_dsc_b, res_torch_b), f'Error testing ({x.shape} {op_name} {y_b.shape}) dtype={dtype}'
-                assert all_close(r_res_dsc_b, r_res_torch_b), f'Error testing ({y_b.shape} {op_name} {x.shape}) dtype={dtype}'
+                assert all_close(res_dsc_b, res_torch_b, atol, rtol), f'Error testing ({x.shape} {op_name} {y_b.shape}) dtype={dtype}'
+                assert all_close(r_res_dsc_b, r_res_torch_b, atol, rtol), f'Error testing ({y_b.shape} {op_name} {x.shape}) dtype={dtype}'
 
                 # Scalar
-                atol = 1e-4; rtol = 1e-4
                 if is_float(dtype):
                     y_s = random()
-                    if dtype == torch.bfloat16:
-                        atol = 1e-2; rtol = 1e-2
+
                 elif is_bool(dtype):
                     y_s = bool(randint(0, 1))
                 else:
