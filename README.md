@@ -35,7 +35,7 @@ instruction, no changes needed.
 On CPU the core operations are written from scratch in portable C++, this makes code written using DSC extremely portable.
 
 
-- **No runtime allocations**: DSC has it's own custom memory allocator, memory is pre-allocated
+- **No runtime allocations**: DSC has its own custom memory allocator, memory is pre-allocated
 only once so no extra calls to `malloc()` or `free()` are required. It's also possible
 to switch to a linear allocator to remove the (minimal) overhead introduced by a general purpose allocator.
 
@@ -47,11 +47,12 @@ to switch to a linear allocator to remove the (minimal) overhead introduced by a
 Getting started with DSC is very simple. The only requirements are:
 - A compiler with good support for C++20
 - GNU Make for building
+- `lld` for linking
 
 On a Linux-based system these can be obtained with:
 ```shell
 sudo apt update
-sudo apt install build-essential
+sudo apt install build-essential lld
 ```
 
 ### Installation

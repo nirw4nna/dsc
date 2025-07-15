@@ -12,7 +12,7 @@ NVCCFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -ccbin=$(CXX) -arch=na
 CXXFLAGS	=	-std=c++20 -I./dsc/include/ -Wall -Wextra -Wformat -Wnoexcept  \
  				-Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
  				-Wlogical-op -Wcast-align -fno-exceptions -fno-rtti -pthread
-LDFLAGS		=	-lm
+LDFLAGS		=	-lm -fuse-ld=lld
 
 UNAME_M		:=	$(shell uname -m)
 UNAME_S		:=	$(shell uname -s)
