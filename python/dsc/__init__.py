@@ -55,7 +55,7 @@ from dsc.tensor import (
     where,
 )
 from dsc.dtype import Dtype, bool_, i32, bf16, f32, f64
-from dsc.profiler import start_recording, stop_recording, profile, trace
+from dsc.profiler import trace
 from dsc.device import Device
 import dsc.gpu as gpu
 import dsc.nn as nn

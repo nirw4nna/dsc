@@ -8,6 +8,7 @@
 #include "cpu/dsc_blas.h"
 #include "cpu/dsc_iter.h"
 #include "cpu/dsc_ops.h"
+#include "cpu/dsc_tracing.h"
 #include "dsc_device.h"
 #include <cstring> // memcpy
 #include <random>
@@ -53,6 +54,8 @@ static DSC_INLINE void cast_op(dsc_device *dev,
 void dsc_cpu_cast(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_CAST_OP(x, out);
+
     switch (x->dtype) {
         case BOOL:
             cast_op<bool>(dev, x, out);

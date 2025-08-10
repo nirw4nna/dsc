@@ -53,7 +53,7 @@ enum dsc_dtype : u8 {
     F64,
 };
 
-constexpr static usize DSC_DTYPE_SIZE[DSC_DTYPES] = {
+static constexpr usize DSC_DTYPE_SIZE[DSC_DTYPES] = {
         sizeof(bool),
         sizeof(i32),
         sizeof(bf16),
@@ -61,7 +61,7 @@ constexpr static usize DSC_DTYPE_SIZE[DSC_DTYPES] = {
         sizeof(f64),
 };
 
-constexpr static const char *DSC_DTYPE_NAMES[DSC_DTYPES] = {
+static constexpr const char *DSC_DTYPE_NAMES[DSC_DTYPES] = {
         "bool",
         "i32",
         "bf16",

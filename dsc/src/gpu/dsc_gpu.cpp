@@ -7,6 +7,7 @@
 #include "gpu/dsc_gpu.h"
 #include "dsc_device.h"
 #include "gpu/dsc_ops.h"
+#include "gpu/dsc_tracing.h"
 
 
 #define init_slice_idx(ARR, SLICES) \
@@ -69,8 +70,11 @@ static DSC_INLINE void cast_op(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_gpu_cast(dsc_device *, const dsc_tensor *DSC_RESTRICT x,
+void dsc_gpu_cast(dsc_device *dev,
+                  const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_CAST_OP(x, out, DSC_GPU_BLOCKS(x->ne), DSC_GPU_DEFAULT_THREADS);
+
     switch (x->dtype) {
         case BOOL:
             cast_op<bool>(x, out);

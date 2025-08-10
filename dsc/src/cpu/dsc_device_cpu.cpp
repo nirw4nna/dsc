@@ -5,6 +5,7 @@
 // (https://opensource.org/license/bsd-3-clause).
 
 #include "cpu/dsc_blas.h"
+#include "cpu/dsc_tracing.h"
 #include "dsc_device.h"
 #include <cstring>
 
@@ -35,6 +36,8 @@ static void cpu_dispose(dsc_device *dev) {
     dsc_blas_ctx *blas_ctx = (dsc_blas_ctx *) dev->extra_info;
     dsc_blas_destroy(blas_ctx);
 
+    dsc_cpu_tracing_dispose(dev->trace_ctx);
+
     DSC_LOG_INFO("%s device disposed", DSC_DEVICE_NAMES[dev->type]);
 }
 
@@ -46,12 +49,17 @@ dsc_device *dsc_cpu_device(const usize mem_size) {
         .device_mem = {},
         .alignment = 64, // I don't know about this...
         .extra_info = dsc_blas_init(),
+        .trace_ctx = dsc_cpu_tracing_init(),
         .mem_size = DSC_ALIGN(mem_size, DSC_DEVICE_CPU_ALIGN),
         .used_mem = 0,
         .type = CPU,
         .memcpy = cpu_memcpy,
         .memset = cpu_memset,
         .dispose = cpu_dispose,
+        .next_trace = dsc_cpu_next_trace,
+        .dump_trace = dsc_cpu_tracing_dump,
+        .dump_json_metadata = dsc_cpu_dump_json_metadata,
+        .insert_user_trace = dsc_cpu_insert_user_trace
     };
 
     dev.device_mem = dsc_aligned_alloc(DSC_DEVICE_CPU_ALIGN, dev.mem_size);

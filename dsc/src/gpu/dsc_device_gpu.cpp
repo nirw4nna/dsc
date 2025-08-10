@@ -5,6 +5,7 @@
 // (https://opensource.org/license/bsd-3-clause).
 
 #include "gpu/dsc_gpu.h"
+#include "gpu/dsc_tracing.h"
 #include "dsc_device.h"
 
 // As per https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#device-memory-accesses
@@ -41,6 +42,8 @@ static void gpu_dispose(dsc_device *dev) {
 
     DSC_GPU_CHECK(gpu_free(info->rand_state));
 
+    dsc_gpu_tracing_dispose(dev->trace_ctx);
+
     DSC_LOG_INFO("%s:%s:%d device %s disposed",
                  DSC_DEVICE_NAMES[dev->type],
                  DSC_GPU_PLATFORM_NAMES[DSC_GPU_PLATFORM],
@@ -68,12 +71,18 @@ dsc_device *dsc_gpu_device(usize mem_size, const int dev_idx) {
         .device_mem = {},
         .alignment = DSC_DEVICE_GPU_ALIGN,
         .extra_info = &extra,
+        .trace_ctx = dsc_gpu_tracing_init(),
         .mem_size = DSC_ALIGN(mem_size, DSC_DEVICE_GPU_ALIGN),
         .used_mem = 0,
         .type = GPU,
         .memcpy = gpu_memcpy_wrapper,
         .memset = gpu_memset_wrapper,
         .dispose = gpu_dispose,
+        .next_trace = dsc_gpu_next_trace,
+        .dump_trace = dsc_gpu_tracing_dump,
+        .dump_json_metadata = dsc_gpu_dump_json_metadata,
+        // I think it's not useful to add a GPU event from Python so this function should not be called on a GPU device
+        .insert_user_trace = nullptr,
     };
 
     DSC_GPU_CHECK(gpu_set_device(dev_idx));

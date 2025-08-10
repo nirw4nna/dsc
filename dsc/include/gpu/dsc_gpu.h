@@ -87,7 +87,7 @@ static DSC_INLINE bool dsc_gpu_has_bf16() {
 // GPU-specific operations
 //
 
-extern void dsc_gpu_cast(dsc_device *, const dsc_tensor *DSC_RESTRICT x,
+extern void dsc_gpu_cast(dsc_device *dev, const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
 
 extern void dsc_gpu_arange(dsc_device *, dsc_tensor *DSC_RESTRICT x,
