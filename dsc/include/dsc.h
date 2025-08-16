@@ -149,14 +149,7 @@ extern "C" {
 
 struct dsc_ctx;
 struct dsc_data_buffer;
-
-// TODO: this probably shouldn't be in this file
-struct dsc_trace_ctx {
-    void *traces[DSC_MAX_CHUNKS];
-    void *current_trace;
-    int current_trace_idx;
-    int n_chunks, n_traces;
-};
+struct dsc_trace_ctx;
 
 enum dsc_device_type : i8 {
     DEFAULT = -1,

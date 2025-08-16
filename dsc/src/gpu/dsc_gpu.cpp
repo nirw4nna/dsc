@@ -74,7 +74,6 @@ void dsc_gpu_cast(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT out) {
     DSC_TRACE_CAST_OP(x, out, DSC_GPU_BLOCKS(x->ne), DSC_GPU_DEFAULT_THREADS);
-
     switch (x->dtype) {
         case BOOL:
             cast_op<bool>(x, out);
@@ -106,10 +105,11 @@ static DSC_GPU_KERNEL void k_assign_op(T *DSC_RESTRICT x, const int n,
     }
 }
 
-void dsc_gpu_arange(dsc_device *,
+void dsc_gpu_arange(dsc_device *dev,
                     dsc_tensor *DSC_RESTRICT x,
                     const f64 start, const f64 step) {
     const int n = x->ne;
+    DSC_TRACE_ARANGE_OP(x, start, step, DSC_GPU_BLOCKS(n), DSC_GPU_DEFAULT_THREADS);
     switch (x->dtype) {
         case I32: {
             DSC_DATA(i32, x);
@@ -181,17 +181,17 @@ static DSC_GPU_KERNEL void k_repeat(const T *DSC_RESTRICT x,
     }
 }
 
-void dsc_gpu_repeat(dsc_device *,
+void dsc_gpu_repeat(dsc_device *dev,
                     const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out,
                     const int repeats, const int axis_idx) {
-    const int n = out->ne;
-
     // Prepare kernel params
     repeat_params params{};
     memcpy(params.out_shape, out->shape, DSC_MAX_DIMS * sizeof(*out->shape));
     memcpy(params.x_stride, x->stride, DSC_MAX_DIMS * sizeof(*x->stride));
 
+    const int n = out->ne;
+    DSC_TRACE_REPEAT_OP(x, out, repeats, axis_idx, DSC_GPU_BLOCKS(n), DSC_GPU_DEFAULT_THREADS);
     switch (out->dtype) {
         case BOOL: {
             DSC_DATA(bool, x);
@@ -261,7 +261,7 @@ static DSC_GPU_KERNEL void k_randn(gpu_rand_state *state,
 
 void dsc_gpu_randn(dsc_device *dev, dsc_tensor *DSC_RESTRICT x) {
     const dsc_gpu_dev_info *info = (dsc_gpu_dev_info *) dev->extra_info;
-
+    DSC_TRACE_RANDN_OP(x, 1, DSC_GPU_DEFAULT_THREADS);
     switch (x->dtype) {
         case BF16: {
             DSC_DATA(bf16, x);
@@ -351,6 +351,7 @@ void dsc_gpu_concat(dsc_device *dev,
     memcpy(out_params.shape, out->shape, DSC_MAX_DIMS * sizeof(*out_params.shape));
 
     const int n = out->ne;
+    DSC_TRACE_CONCAT_OP(out, tensors, axis_idx, DSC_GPU_BLOCKS(n), DSC_GPU_DEFAULT_THREADS);
     switch (out->dtype) {
         case BOOL: {
             DSC_DATA(bool, out);
@@ -408,7 +409,7 @@ static DSC_GPU_KERNEL void k_transpose(const T *DSC_RESTRICT x,
     }
 }
 
-void dsc_gpu_transpose(dsc_device *,
+void dsc_gpu_transpose(dsc_device *dev,
                        const dsc_tensor *DSC_RESTRICT x,
                        dsc_tensor *DSC_RESTRICT out,
                        const int *new_shape,
@@ -418,6 +419,7 @@ void dsc_gpu_transpose(dsc_device *,
     memcpy(params.new_stride, new_stride, DSC_MAX_DIMS * sizeof(*params.new_stride));
 
     const int n = out->ne;
+    DSC_TRACE_TRANSPOSE_OP(x, out, DSC_GPU_BLOCKS(n), DSC_GPU_DEFAULT_THREADS);
     switch (out->dtype) {
         case BOOL: {
             DSC_DATA(bool, x);
@@ -484,17 +486,17 @@ static DSC_GPU_KERNEL void k_tril(const T *DSC_RESTRICT x,
     }
 }
 
-void dsc_gpu_tril(dsc_device *,
+void dsc_gpu_tril(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   const int diagonal,
                   dsc_tensor *DSC_RESTRICT out) {
-    const int n = x->ne;
-
     tril_params params;
     // x and out have the same shape and dtype
     memcpy(params.shape, x->shape, DSC_MAX_DIMS * sizeof(*x->shape));
     memcpy(params.stride, x->stride, DSC_MAX_DIMS * sizeof(*x->stride));
 
+    const int n = x->ne;
+    DSC_TRACE_TRIL_OP(x, out, diagonal, DSC_GPU_BLOCKS(n), DSC_GPU_DEFAULT_THREADS);
     switch (x->dtype) {
         case BOOL: {
             DSC_DATA(bool, x);
@@ -615,12 +617,13 @@ static DSC_INLINE void set_slice_params(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_gpu_get_slice(dsc_device *,
+void dsc_gpu_get_slice(dsc_device *dev,
                        const dsc_tensor *DSC_RESTRICT x,
                        dsc_tensor *DSC_RESTRICT out,
                        const int n_slices, const dsc_slice *slices,
                        const bool whole) {
     if (whole) {
+        // TODO: move in dsc.cpp
         DSC_DATA(void, x);
         DSC_DATA(void, out);
         DSC_GPU_CHECK(gpu_memcpy(out_data, x_data, out->ne * DSC_DTYPE_SIZE[out->dtype], gpu_memcpy_device_2_device));
@@ -633,6 +636,7 @@ void dsc_gpu_get_slice(dsc_device *,
     set_slice_params(x, n_slices, slices, &params);
 
     const int n = out->ne;
+    DSC_TRACE_GET_SLICE(x, out, slices, n_slices, DSC_GPU_BLOCKS(n), DSC_GPU_DEFAULT_THREADS);
     switch (out->dtype) {
         case BOOL: {
             DSC_DATA(bool, x);
@@ -699,13 +703,14 @@ static DSC_GPU_KERNEL void k_set_slice(T *DSC_RESTRICT xa,
     }
 }
 
-void dsc_gpu_set_slice(dsc_device *,
+void dsc_gpu_set_slice(dsc_device *dev,
                        dsc_tensor *DSC_RESTRICT xa,
                        const bool xa_scalar,
                        const dsc_tensor *DSC_RESTRICT xb,
                        const bool xb_scalar,
                        const int n_slices, const dsc_slice *slices,
                        const bool whole) {
+
     if (xa_scalar) {
         int offset = 0;
         for (int i = 0; i < n_slices; ++i)
@@ -713,6 +718,7 @@ void dsc_gpu_set_slice(dsc_device *,
 
         DSC_DATA(byte, xa);
         DSC_DATA(void, xb);
+        DSC_TRACE_SET_SLICE(xa, xb, slices, n_slices, 0, 0);
         DSC_GPU_CHECK(gpu_memcpy(xa_data + (offset * DSC_DTYPE_SIZE[xa->dtype]),
                                  xb_data, DSC_DTYPE_SIZE[xa->dtype], gpu_memcpy_device_2_device));
     } else {
@@ -728,7 +734,7 @@ void dsc_gpu_set_slice(dsc_device *,
             params.shape[dim] = (ne_i + step_i - 1) / step_i;
             n *= params.shape[dim];
         }
-
+        DSC_TRACE_SET_SLICE(xa, xb, slices, n_slices, DSC_GPU_BLOCKS(n), DSC_GPU_DEFAULT_THREADS);
         switch (xa->dtype) {
             case BOOL: {
                 DSC_DATA(bool, xa);
@@ -926,38 +932,43 @@ static DSC_INLINE void binary_op(const dsc_tensor *xa,
     }
 }
 
-void dsc_gpu_add(dsc_device *,
+void dsc_gpu_add(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(xa, xb, out, DSC_GPU_BLOCKS(out->ne), DSC_GPU_DEFAULT_THREADS);
     binary_op(xa, xb, out, gpu_add_op());
 }
 
-void dsc_gpu_sub(dsc_device *,
+void dsc_gpu_sub(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(xa, xb, out, DSC_GPU_BLOCKS(out->ne), DSC_GPU_DEFAULT_THREADS);
     binary_op(xa, xb, out, gpu_sub_op());
 }
 
-void dsc_gpu_mul(dsc_device *,
+void dsc_gpu_mul(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(xa, xb, out, DSC_GPU_BLOCKS(out->ne), DSC_GPU_DEFAULT_THREADS);
     binary_op(xa, xb, out, gpu_mul_op());
 }
 
-void dsc_gpu_div(dsc_device *,
+void dsc_gpu_div(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(xa, xb, out, DSC_GPU_BLOCKS(out->ne), DSC_GPU_DEFAULT_THREADS);
     binary_op(xa, xb, out, gpu_div_op());
 }
 
-void dsc_gpu_pow(dsc_device *,
+void dsc_gpu_pow(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(xa, xb, out, DSC_GPU_BLOCKS(out->ne), DSC_GPU_DEFAULT_THREADS);
     binary_op(xa, xb, out, gpu_pow_op());
 }
 
@@ -1029,6 +1040,9 @@ void dsc_gpu_matmul(dsc_device *dev,
                     dsc_tensor *DSC_RESTRICT out) {
     const dsc_gpu_dev_info *info = (dsc_gpu_dev_info *) dev->extra_info;
 
+    const int m = dsc_tensor_get_dim(out, -2);
+    const int is_gevm = m == 1;
+    DSC_TRACE_MATMUL(xa, xb, trans_b, out, is_gevm, 0, 0);
     switch (xa->dtype) {
         case BF16: {
             gemm_op<bf16>(info->blas_handle, xa, xb, trans_b, out);
@@ -1046,11 +1060,13 @@ void dsc_gpu_matmul(dsc_device *dev,
     }
 }
 
-void dsc_gpu_compare(dsc_device *,
+void dsc_gpu_compare(dsc_device *dev,
                      const dsc_tensor *xa,
                      const dsc_tensor *xb,
                      const dsc_comparison_op comp,
                      dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(xa, xb, out, DSC_GPU_BLOCKS(out->ne), DSC_GPU_DEFAULT_THREADS);
+
     switch (comp) {
         case EQ:
             binary_op(xa, xb, out, gpu_eq_op());
@@ -1098,17 +1114,16 @@ static DSC_GPU_KERNEL void k_masked_fill(T *DSC_RESTRICT x,
     }
 }
 
-void dsc_gpu_masked_fill(dsc_device *,
+void dsc_gpu_masked_fill(dsc_device *dev,
                          dsc_tensor *DSC_RESTRICT x,
                          const dsc_tensor *DSC_RESTRICT mask,
                          const f64 value) {
-    const int n = x->ne;
-
     masked_fill_params params;
     memcpy(params.mask_shape, mask->shape, DSC_MAX_DIMS * sizeof(*mask->shape));
     memcpy(params.mask_stride, mask->stride, DSC_MAX_DIMS * sizeof(*mask->stride));
 
-
+    const int n = x->ne;
+    DSC_TRACE_MASK_OP(x, mask, value, DSC_GPU_BLOCKS(n), DSC_GPU_DEFAULT_THREADS);
     switch (x->dtype) {
         case BOOL: {
             DSC_DATA(bool, x);
@@ -1186,15 +1201,15 @@ static DSC_GPU_KERNEL void k_outer(const T *DSC_RESTRICT xa,
     }
 }
 
-void dsc_gpu_outer(dsc_device *,
+void dsc_gpu_outer(dsc_device *dev,
                    const dsc_tensor *DSC_RESTRICT xa,
                    const dsc_tensor *DSC_RESTRICT xb,
                    dsc_tensor *DSC_RESTRICT out) {
-    const int n = out->ne;
-
     outer_params params;
     memcpy(params.shape, out->shape, DSC_MAX_DIMS * sizeof(*out->shape));
 
+    const int n = out->ne;
+    DSC_TRACE_OUTER_OP(xa, xb, out, DSC_GPU_BLOCKS(n), DSC_GPU_DEFAULT_THREADS);
     switch (xa->dtype) {
         case BOOL: {
             DSC_DATA(bool, xa);
@@ -1276,7 +1291,7 @@ static DSC_GPU_KERNEL void k_where(const bool *DSC_RESTRICT condition,
     }
 }
 
-void dsc_gpu_where(dsc_device *,
+void dsc_gpu_where(dsc_device *dev,
                    const dsc_tensor *DSC_RESTRICT condition,
                    const dsc_tensor *DSC_RESTRICT input,
                    const dsc_tensor *DSC_RESTRICT other,
@@ -1293,6 +1308,7 @@ void dsc_gpu_where(dsc_device *,
     memcpy(params.other_stride, other->stride, DSC_MAX_DIMS * sizeof(*other->stride));
 
     const int n = out->ne;
+    DSC_TRACE_WHERE_OP(condition, input, other, out, DSC_GPU_BLOCKS(n), DSC_GPU_DEFAULT_THREADS);
     switch (out->dtype) {
         case BOOL: {
             DSC_DATA(bool, input);
@@ -1393,33 +1409,38 @@ static DSC_INLINE void unary_op(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_gpu_cos(dsc_device *,
+void dsc_gpu_cos(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_UNARY_OP(x, out, DSC_GPU_BLOCKS(x->ne), DSC_GPU_DEFAULT_THREADS);
     unary_op(x, out, gpu_cos_op());
 }
 
-void dsc_gpu_sin(dsc_device *,
+void dsc_gpu_sin(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_UNARY_OP(x, out, DSC_GPU_BLOCKS(x->ne), DSC_GPU_DEFAULT_THREADS);
     unary_op(x, out, gpu_sin_op());
 }
 
-void dsc_gpu_tanh(dsc_device *,
+void dsc_gpu_tanh(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_UNARY_OP(x, out, DSC_GPU_BLOCKS(x->ne), DSC_GPU_DEFAULT_THREADS);
     unary_op(x, out, gpu_tanh_op());
 }
 
-void dsc_gpu_exp(dsc_device *,
+void dsc_gpu_exp(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_UNARY_OP(x, out, DSC_GPU_BLOCKS(x->ne), DSC_GPU_DEFAULT_THREADS);
     unary_op(x, out, gpu_exp_op());
 }
 
-void dsc_gpu_sqrt(dsc_device *,
+void dsc_gpu_sqrt(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_UNARY_OP(x, out, DSC_GPU_BLOCKS(x->ne), DSC_GPU_DEFAULT_THREADS);
     unary_op(x, out, gpu_sqrt_op());
 }
 
@@ -1493,10 +1514,11 @@ static DSC_INLINE void reduce_op(const dsc_tensor *DSC_RESTRICT x,
                                           n, op, atomic_op, params);
 }
 
-void dsc_gpu_sum(dsc_device *,
+void dsc_gpu_sum(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out,
                  const int axis_idx) {
+    DSC_TRACE_UNARY_AXIS_OP(x, out, axis_idx, DSC_GPU_BLOCKS(out->ne), DSC_GPU_DEFAULT_THREADS);
     switch (out->dtype) {
         case F32:
             reduce_op<f32, gpu_add_op, gpu_atomic_add_op>(x, out, axis_idx, 0.f,
@@ -1510,10 +1532,11 @@ void dsc_gpu_sum(dsc_device *,
     }
 }
 
-void dsc_gpu_min(dsc_device *,
+void dsc_gpu_min(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out,
                  const int axis_idx) {
+    DSC_TRACE_UNARY_AXIS_OP(x, out, axis_idx, DSC_GPU_BLOCKS(out->ne), DSC_GPU_DEFAULT_THREADS);
     switch (out->dtype) {
         case F32:
             reduce_op<f32, gpu_min_op, gpu_atomic_min_op>(x, out, axis_idx, dsc_inf<f32, true>(),
@@ -1527,10 +1550,11 @@ void dsc_gpu_min(dsc_device *,
     }
 }
 
-void dsc_gpu_max(dsc_device *,
+void dsc_gpu_max(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out,
                  const int axis_idx) {
+    DSC_TRACE_UNARY_AXIS_OP(x, out, axis_idx, DSC_GPU_BLOCKS(out->ne), DSC_GPU_DEFAULT_THREADS);
     switch (out->dtype) {
         case F32:
             reduce_op<f32, gpu_max_op, gpu_atomic_max_op>(x, out, axis_idx, dsc_inf<f32, false>(),

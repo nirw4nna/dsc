@@ -11,15 +11,15 @@
 #include "gpu/dsc_gpu.h"
 
 
-#define INSERT_TYPED_GPU_TRACE(T, type_, grid_dim_, block_dim_) \
+#undef DSC_INSERT_TYPED_TRACE
+#undef DSC_INSERT_NAMED_TRACE
+
+#define DSC_INSERT_TYPED_TRACE(T, type_, grid_dim_, block_dim_) \
     dsc_gpu_trace_tracker<T> trace__ { dev->trace_ctx, __FUNCTION__, (type_), (grid_dim_), (block_dim_), &args__ }
 
-// NOTE: it's very similar to its CPU counterpart, maybe I can do better...
-#define DSC_TRACE_CAST_OP(X, OUT, grid_dim_, block_dim_) \
-    dsc_cast_args args__{};                              \
-    DSC_TRACE_SET_TENSOR(X, x);                          \
-    args__.new_dtype = (OUT)->dtype;                     \
-    INSERT_TYPED_GPU_TRACE(dsc_cast_args, DSC_CAST_OP, grid_dim_, block_dim_)
+#define DSC_INSERT_NAMED_TRACE(T, type_, name_, grid_dim_, block_dim_) \
+    dsc_gpu_trace_tracker<T> trace__ { dev->trace_ctx, (name_), (type_), (grid_dim_), (block_dim_), &args__ }
+
 
 struct dsc_gpu_trace {
     dsc_trace_common base;
@@ -36,11 +36,11 @@ struct dsc_gpu_trace {
 template<typename T>
 struct dsc_gpu_trace_tracker {
     dsc_gpu_trace_tracker(dsc_trace_ctx *ctx,
-                      const char *name,
-                      const dsc_trace_type type,
-                      const dim3 grid_dim,
-                      const dim3 block_dim,
-                      const T *args) : ctx_(ctx) {
+                          const char *name,
+                          const dsc_trace_type type,
+                          const dim3 grid_dim,
+                          const dim3 block_dim,
+                          const T *args) {
         using namespace internal::tracing;
 
         check_if_full<dsc_gpu_trace>(ctx);
@@ -59,7 +59,6 @@ struct dsc_gpu_trace_tracker {
     }
 
 private:
-    dsc_trace_ctx *ctx_;
     dsc_gpu_trace *trace_;
 };
 
@@ -99,8 +98,9 @@ static void dsc_gpu_tracing_dump(void *trace, FILE *json_file) {
              gpu_trace->block_dim.z);
 
     // Console dumping
-    printf("*** [%ld] \033[38;5;208mGPU\033[0m\t%-40s %.2fms (%6ldus)\t|\t%10.2fGB/s (%ldB)\n",
+    printf("*** [%ld] \033[38;5;208m%-12s\033[0m %-40s %.2fms (%6ldus)\t|\t%10.2fGB/s (%ldB)\n",
            base->ingestion_time_us,
+           "GPU",
            formatted_kernel_name,
            elapsed_ms,
            elapsed_us,

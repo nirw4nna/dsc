@@ -12,7 +12,7 @@ NVCCFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -ccbin=$(CXX) -arch=na
 CXXFLAGS	=	-std=c++20 -I./dsc/include/ -Wall -Wextra -Wformat -Wnoexcept  \
  				-Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
  				-Wlogical-op -Wcast-align -fno-exceptions -fno-rtti -pthread
-LDFLAGS		=	-lm -fuse-ld=lld
+LDFLAGS		=	-lm -fuse-ld=mold
 
 UNAME_M		:=	$(shell uname -m)
 UNAME_S		:=	$(shell uname -s)
@@ -77,10 +77,10 @@ else
 	HIPCCFLAGS	+=	-O0 -fno-omit-frame-pointer -g
 endif
 
-ifdef DSC_ENABLE_TRACING
-	CXXFLAGS	+=	-DDSC_ENABLE_TRACING
-	NVCCFLAGS	+=	-DDSC_ENABLE_TRACING
-	HIPCCFLAGS	+=	-DDSC_ENABLE_TRACING
+ifdef DSC_TRACING
+	CXXFLAGS	+=	-DSC_TRACING=1
+	NVCCFLAGS	+=	-DSC_TRACING=1
+	HIPCCFLAGS	+=	-DSC_TRACING=1
 endif
 
 # If we are not compiling the shared object and are in debug mode then run in ASAN mode

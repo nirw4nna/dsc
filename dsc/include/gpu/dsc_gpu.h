@@ -7,7 +7,7 @@
 #pragma once
 
 #include "dsc.h"
-#include "dsc_device.h"
+// #include "dsc_device.h"
 
 #if defined(DSC_CUDA) && defined(DSC_HIP)
 #   error "DSC can't be compiled with both CUDA and HIP support"
@@ -26,8 +26,8 @@
 
 #define DSC_GPU_KERNEL             __global__
 #define DSC_GPU_FUNC               __device__
-#define DSC_GPU_DEFAULT_THREADS    ((int) 256)
-#define DSC_GPU_MAX_BLOCKS         ((int) 256)
+#define DSC_GPU_DEFAULT_THREADS    ((uint) 256)
+#define DSC_GPU_MAX_BLOCKS         ((uint) 256)
 
 #define DSC_GPU_BLOCKS(n)    DSC_MIN(DSC_GPU_MAX_BLOCKS, DSC_CEIL(n, DSC_GPU_DEFAULT_THREADS))
 #define DSC_GPU_TID()        const int tid = (int) (threadIdx.x + blockIdx.x * blockDim.x)
@@ -90,10 +90,10 @@ static DSC_INLINE bool dsc_gpu_has_bf16() {
 extern void dsc_gpu_cast(dsc_device *dev, const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_gpu_arange(dsc_device *, dsc_tensor *DSC_RESTRICT x,
+extern void dsc_gpu_arange(dsc_device *dev, dsc_tensor *DSC_RESTRICT x,
                            f64 start, f64 step);
 
-extern void dsc_gpu_repeat(dsc_device *,
+extern void dsc_gpu_repeat(dsc_device *dev,
                            const dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out,
                            int repeats, int axis_idx);
@@ -106,13 +106,13 @@ extern void dsc_gpu_concat(dsc_device *dev,
                            dsc_tensor *DSC_RESTRICT out,
                            int axis_idx);
 
-extern void dsc_gpu_transpose(dsc_device *,
+extern void dsc_gpu_transpose(dsc_device *dev,
                               const dsc_tensor *DSC_RESTRICT x,
                               dsc_tensor *DSC_RESTRICT out,
                               const int *new_shape,
                               const int *new_stride);
 
-extern void dsc_gpu_tril(dsc_device *,
+extern void dsc_gpu_tril(dsc_device *dev,
                          const dsc_tensor *DSC_RESTRICT x,
                          int diagonal,
                          dsc_tensor *DSC_RESTRICT out);
@@ -120,13 +120,13 @@ extern void dsc_gpu_tril(dsc_device *,
 // ============================================================
 // Indexing and Slicing
 
-extern void dsc_gpu_get_slice(dsc_device *,
+extern void dsc_gpu_get_slice(dsc_device *dev,
                               const dsc_tensor *DSC_RESTRICT x,
                               dsc_tensor *DSC_RESTRICT out,
                               int n_slices, const dsc_slice *slices,
                               bool whole);
 
-extern void dsc_gpu_set_slice(dsc_device *,
+extern void dsc_gpu_set_slice(dsc_device *dev,
                               dsc_tensor *DSC_RESTRICT xa,
                               bool xa_scalar,
                               const dsc_tensor *DSC_RESTRICT xb,
@@ -138,54 +138,54 @@ extern void dsc_gpu_set_slice(dsc_device *,
 // ============================================================
 // Binary Operations
 
-extern void dsc_gpu_add(dsc_device *,
+extern void dsc_gpu_add(dsc_device *dev,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
-extern void dsc_gpu_sub(dsc_device *,
+extern void dsc_gpu_sub(dsc_device *dev,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
-extern void dsc_gpu_mul(dsc_device *,
+extern void dsc_gpu_mul(dsc_device *dev,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
-extern void dsc_gpu_div(dsc_device *,
+extern void dsc_gpu_div(dsc_device *dev,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
-extern void dsc_gpu_pow(dsc_device *,
+extern void dsc_gpu_pow(dsc_device *dev,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
-extern void dsc_gpu_matmul(dsc_device *,
+extern void dsc_gpu_matmul(dsc_device *dev,
                            const dsc_tensor *DSC_RESTRICT xa,
                            const dsc_tensor *DSC_RESTRICT xb,
                            bool trans_b,
                            dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_gpu_compare(dsc_device *,
+extern void dsc_gpu_compare(dsc_device *dev,
                             const dsc_tensor *xa,
                             const dsc_tensor *xb,
                             dsc_comparison_op comp,
                             dsc_tensor *out);
 
-extern void dsc_gpu_masked_fill(dsc_device *,
+extern void dsc_gpu_masked_fill(dsc_device *dev,
                                 dsc_tensor *DSC_RESTRICT x,
                                 const dsc_tensor *DSC_RESTRICT mask,
                                 f64 value);
 
-extern void dsc_gpu_outer(dsc_device *,
+extern void dsc_gpu_outer(dsc_device *dev,
                           const dsc_tensor *DSC_RESTRICT xa,
                           const dsc_tensor *DSC_RESTRICT xb,
                           dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_gpu_where(dsc_device *,
+extern void dsc_gpu_where(dsc_device *dev,
                           const dsc_tensor *DSC_RESTRICT condition,
                           const dsc_tensor *DSC_RESTRICT input,
                           const dsc_tensor *DSC_RESTRICT other,
@@ -194,40 +194,40 @@ extern void dsc_gpu_where(dsc_device *,
 // ============================================================
 // Unary Operations
 
-extern void dsc_gpu_cos(dsc_device *,
+extern void dsc_gpu_cos(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_gpu_sin(dsc_device *,
+extern void dsc_gpu_sin(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_gpu_tanh(dsc_device *,
+extern void dsc_gpu_tanh(dsc_device *dev,
                          const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_gpu_exp(dsc_device *,
+extern void dsc_gpu_exp(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_gpu_sqrt(dsc_device *,
+extern void dsc_gpu_sqrt(dsc_device *dev,
                          const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
 
 // ============================================================
 // Unary Operations Along Axis
 
-extern void dsc_gpu_sum(dsc_device *,
+extern void dsc_gpu_sum(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out,
                         int axis_idx);
 
-extern void dsc_gpu_min(dsc_device *,
+extern void dsc_gpu_min(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out,
                         int axis_idx);
 
-extern void dsc_gpu_max(dsc_device *,
+extern void dsc_gpu_max(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out,
                         int axis_idx);

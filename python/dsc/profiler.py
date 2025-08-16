@@ -11,13 +11,17 @@ from http.server import SimpleHTTPRequestHandler
 import socketserver
 from functools import wraps
 import atexit
+import os
 
+
+PERFETTO = os.getenv('PERFETTO', '0') != '0'
 
 @atexit.register
 def _dump_traces():
     # TODO: only if envar is set!
     _dsc_dump_traces(_get_ctx())
-    _serve_traces()
+    if PERFETTO:
+        _serve_traces()
 
 
 def _is_tracing_enabled() -> bool:

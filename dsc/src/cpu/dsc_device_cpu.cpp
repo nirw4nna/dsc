@@ -58,8 +58,7 @@ dsc_device *dsc_cpu_device(const usize mem_size) {
         .dispose = cpu_dispose,
         .next_trace = dsc_cpu_next_trace,
         .dump_trace = dsc_cpu_tracing_dump,
-        .dump_json_metadata = dsc_cpu_dump_json_metadata,
-        .insert_user_trace = dsc_cpu_insert_user_trace
+        .dump_json_metadata = dsc_cpu_dump_json_metadata
     };
 
     dev.device_mem = dsc_aligned_alloc(DSC_DEVICE_CPU_ALIGN, dev.mem_size);

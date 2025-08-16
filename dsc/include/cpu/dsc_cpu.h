@@ -16,21 +16,22 @@ struct dsc_device;
 // CPU-specific operations
 //
 
-extern void dsc_cpu_cast(dsc_device *, const dsc_tensor *DSC_RESTRICT x,
+extern void dsc_cpu_cast(dsc_device *dev,
+                         const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_cpu_arange(dsc_device *,
+extern void dsc_cpu_arange(dsc_device *dev,
                            dsc_tensor *DSC_RESTRICT x,
                            f64 start, f64 step);
 
-extern void dsc_cpu_repeat(dsc_device *,
+extern void dsc_cpu_repeat(dsc_device *dev,
                            const dsc_tensor *DSC_RESTRICT x,
                            dsc_tensor *DSC_RESTRICT out,
                            int repeats, int axis_idx);
 
-extern void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x);
+extern void dsc_cpu_randn(dsc_device *dev, dsc_tensor *DSC_RESTRICT x);
 
-extern void dsc_cpu_topk(dsc_device *,
+extern void dsc_cpu_topk(dsc_device *dev,
                          const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT tmp_values,
                          dsc_tensor *DSC_RESTRICT tmp_indexes,
@@ -39,24 +40,24 @@ extern void dsc_cpu_topk(dsc_device *,
                          int k, int axis_idx,
                          bool largest);
 
-extern void dsc_cpu_multinomial(dsc_device *,
+extern void dsc_cpu_multinomial(dsc_device *dev,
                                 const dsc_tensor *DSC_RESTRICT x,
                                 dsc_tensor *DSC_RESTRICT out,
                                 int num_samples);
 
-extern void dsc_cpu_concat(dsc_device *,
+extern void dsc_cpu_concat(dsc_device *dev,
                            dsc_tensor **to_concat,
                            int tensors,
                            dsc_tensor *DSC_RESTRICT out,
                            int axis_idx);
 
-extern void dsc_cpu_transpose(dsc_device *,
+extern void dsc_cpu_transpose(dsc_device *dev,
                               const dsc_tensor *DSC_RESTRICT x,
                               dsc_tensor *DSC_RESTRICT out,
                               const int *new_shape,
                               const int *new_stride);
 
-extern void dsc_cpu_tril(dsc_device *,
+extern void dsc_cpu_tril(dsc_device *dev,
                          const dsc_tensor *DSC_RESTRICT x,
                          int diagonal,
                          dsc_tensor *DSC_RESTRICT out);
@@ -65,13 +66,13 @@ extern void dsc_cpu_tril(dsc_device *,
 // Indexing and Slicing
 //
 
-extern void dsc_cpu_get_slice(dsc_device *,
+extern void dsc_cpu_get_slice(dsc_device *dev,
                               const dsc_tensor *DSC_RESTRICT x,
                               dsc_tensor *DSC_RESTRICT out,
                               int n_slices, const dsc_slice *slices,
                               bool whole);
 
-extern void dsc_cpu_set_slice(dsc_device *,
+extern void dsc_cpu_set_slice(dsc_device *dev,
                               dsc_tensor *DSC_RESTRICT xa,
                               bool xa_scalar,
                               const dsc_tensor *DSC_RESTRICT xb,
@@ -83,54 +84,54 @@ extern void dsc_cpu_set_slice(dsc_device *,
 // ============================================================
 // Binary Operations
 
-extern void dsc_cpu_add(dsc_device *,
+extern void dsc_cpu_add(dsc_device *dev,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
-extern void dsc_cpu_sub(dsc_device *,
+extern void dsc_cpu_sub(dsc_device *dev,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
-extern void dsc_cpu_mul(dsc_device *,
+extern void dsc_cpu_mul(dsc_device *dev,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
-extern void dsc_cpu_div(dsc_device *,
+extern void dsc_cpu_div(dsc_device *dev,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
-extern void dsc_cpu_pow(dsc_device *,
+extern void dsc_cpu_pow(dsc_device *dev,
                         const dsc_tensor *xa,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
-extern void dsc_cpu_matmul(dsc_device *dev,
+extern void dsc_cpu_matmul(dsc_device *devdev,
                            const dsc_tensor *DSC_RESTRICT xa,
                            const dsc_tensor *DSC_RESTRICT xb,
                            bool trans_b,
                            dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_cpu_compare(dsc_device *,
+extern void dsc_cpu_compare(dsc_device *dev,
                             const dsc_tensor *xa,
                             const dsc_tensor *xb,
                             dsc_comparison_op comp,
                             dsc_tensor *out);
 
-extern void dsc_cpu_masked_fill(dsc_device *,
+extern void dsc_cpu_masked_fill(dsc_device *dev,
                                 dsc_tensor *x,
                                 const dsc_tensor *mask,
                                 f64 value);
 
-extern void dsc_cpu_outer(dsc_device *,
+extern void dsc_cpu_outer(dsc_device *dev,
                           const dsc_tensor *DSC_RESTRICT xa,
                           const dsc_tensor *DSC_RESTRICT xb,
                           dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_cpu_where(dsc_device *,
+extern void dsc_cpu_where(dsc_device *dev,
                           const dsc_tensor *DSC_RESTRICT condition,
                           const dsc_tensor *DSC_RESTRICT input,
                           const dsc_tensor *DSC_RESTRICT other,
@@ -139,40 +140,40 @@ extern void dsc_cpu_where(dsc_device *,
 // ============================================================
 // Unary Operations
 
-extern void dsc_cpu_cos(dsc_device *,
+extern void dsc_cpu_cos(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_cpu_sin(dsc_device *,
+extern void dsc_cpu_sin(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_cpu_tanh(dsc_device *dev,
+extern void dsc_cpu_tanh(dsc_device *devdev,
                          const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_cpu_exp(dsc_device *,
+extern void dsc_cpu_exp(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_cpu_sqrt(dsc_device *,
+extern void dsc_cpu_sqrt(dsc_device *dev,
                          const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
 
 // ============================================================
 // Unary Operations Along Axis
 
-extern void dsc_cpu_sum(dsc_device *,
+extern void dsc_cpu_sum(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out,
                         int axis_idx);
 
-extern void dsc_cpu_min(dsc_device *,
+extern void dsc_cpu_min(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out,
                         int axis_idx);
 
-extern void dsc_cpu_max(dsc_device *,
+extern void dsc_cpu_max(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out,
                         int axis_idx);

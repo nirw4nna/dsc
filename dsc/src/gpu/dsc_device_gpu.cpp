@@ -81,8 +81,6 @@ dsc_device *dsc_gpu_device(usize mem_size, const int dev_idx) {
         .next_trace = dsc_gpu_next_trace,
         .dump_trace = dsc_gpu_tracing_dump,
         .dump_json_metadata = dsc_gpu_dump_json_metadata,
-        // I think it's not useful to add a GPU event from Python so this function should not be called on a GPU device
-        .insert_user_trace = nullptr,
     };
 
     DSC_GPU_CHECK(gpu_set_device(dev_idx));

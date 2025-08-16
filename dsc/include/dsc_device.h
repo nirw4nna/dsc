@@ -67,8 +67,6 @@ struct dsc_device {
     void (*dump_trace)                  (void *trace, FILE *json_file);
     // Dump device-specific json metadata events (i.e. set processor name). This is purely cosmetic
     void (*dump_json_metadata)          (FILE *json_file, void *extra_info);
-    // Insert a user-provided trace into this device context
-    void (*insert_user_trace)           (dsc_trace_ctx *ctx, const char *name, u64 start, u64 duration);
 };
 
 namespace internal::alloc {
