@@ -16,16 +16,19 @@ import os
 
 PERFETTO = os.getenv('PERFETTO', '0') != '0'
 
-@atexit.register
-def _dump_traces():
-    # TODO: only if envar is set!
-    _dsc_dump_traces(_get_ctx())
-    if PERFETTO:
-        _serve_traces()
-
 
 def _is_tracing_enabled() -> bool:
     return bool(_dsc_tracing_enabled())
+
+
+@atexit.register
+def _dump_traces():
+    if not _is_tracing_enabled():
+        return
+
+    _dsc_dump_traces(_get_ctx())
+    if PERFETTO:
+        _serve_traces()
 
 
 def trace(name: str):

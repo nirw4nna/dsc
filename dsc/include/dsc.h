@@ -6,6 +6,7 @@
 
 #pragma once
 
+// #define DSC_TRACING
 // =============================================================== //
 // =========================== Notepad =========================== //
 // =============================================================== //
@@ -147,9 +148,9 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 extern "C" {
 #endif
 
-struct dsc_ctx;
 struct dsc_data_buffer;
 struct dsc_trace_ctx;
+struct dsc_device;
 
 enum dsc_device_type : i8 {
     DEFAULT = -1,
@@ -193,6 +194,12 @@ struct dsc_tensor {
     int n_dim;
     dsc_dtype dtype;
     dsc_device_type device;
+};
+
+struct dsc_ctx {
+    dsc_device *devices[DSC_MAX_DEVICES];
+    dsc_tensor *tensors;
+    dsc_device_type default_device;
 };
 
 struct dsc_pair {

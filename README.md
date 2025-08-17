@@ -47,12 +47,11 @@ to switch to a linear allocator to remove the (minimal) overhead introduced by a
 Getting started with DSC is very simple. The only requirements are:
 - A compiler with good support for C++20
 - GNU Make for building
-- `mold` for linking
 
 On a Linux-based system these can be obtained with:
 ```shell
 sudo apt update
-sudo apt install build-essential mold
+sudo apt install build-essential
 ```
 
 ### Installation
@@ -86,11 +85,11 @@ python3 -c "import dsc; x = dsc.arange(10); print(x)"
 ```
 
 ### Environment Variables
-| Variable        | Description                                                                                                                                               |
-|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| DSC_NUM_THREADS | Use multiple threads (CPU). If you set it to -1 it will use half of your available cores (**default=1**)                                                  |
-| PERFETTO        | Enable the built-in Perfetto server. This way DSC will automatically upload the latest traces file to [Perfetto](https://ui.perfetto.dev) (**default=0**) |
-| TRACE           | Enable tracing DSC kernels. This option requires DSC to be compiled with tracing support enabled (**default=0**)                                          |
+| Variable        | Description                                                                                                                                                                                               |
+|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| DSC_NUM_THREADS | Use multiple threads (CPU). If you set it to -1 it will use half of your available cores (**default=1**)                                                                                                  |
+| TRACE           | Enable tracing DSC kernels. This option requires DSC to be compiled with tracing support enabled (**default=0**)                                                                                          |
+| PERFETTO        | Enable the built-in Perfetto server. This way DSC will automatically upload the latest traces file to [Perfetto](https://ui.perfetto.dev). This option requires `TRACE=1` to be effective (**default=0**) |   
 
 ### Notes on GPU support
 DSC supports both AMD and NVIDIA GPUs. If compiled with `DSC_GPU=1` it will automatically detect the appropriate backend.

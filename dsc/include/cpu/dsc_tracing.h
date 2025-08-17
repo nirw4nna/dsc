@@ -6,9 +6,11 @@
 
 #pragma once
 
-
 #include "dsc.h"
 #include "dsc_tracing_common.h"
+
+#if defined(DSC_TRACING)
+
 #include <unistd.h>     // getpid()
 #include <pthread.h>    // pthread_self()
 
@@ -16,11 +18,11 @@
 #undef DSC_INSERT_TYPED_TRACE
 #undef DSC_INSERT_NAMED_TRACE
 
-#define DSC_INSERT_TYPED_TRACE(T, type_) \
-    dsc_cpu_trace_tracker<T> trace__ { dev->trace_ctx, __FUNCTION__, (type_), &args__ }
+#define DSC_INSERT_TYPED_TRACE(DEV, T, type_) \
+    dsc_cpu_trace_tracker<T> trace__ { (DEV)->trace_ctx, __FUNCTION__, (type_), &args__ }
 
-#define DSC_INSERT_NAMED_TRACE(T, type_, name_) \
-    dsc_cpu_trace_tracker<T> trace__ { dev->trace_ctx, (name_), (type_), &args__ }
+#define DSC_INSERT_NAMED_TRACE(DEV, T, type_, name_) \
+    dsc_cpu_trace_tracker<T> trace__ { (DEV)->trace_ctx, (name_), (type_), &args__ }
 
 
 struct dsc_cpu_trace {
@@ -30,6 +32,9 @@ struct dsc_cpu_trace {
     int pid;
 };
 
+static const int dsc_main_pid = getpid();
+static const u64 dsc_main_tid = pthread_self();
+
 template<typename T>
 struct dsc_cpu_trace_tracker {
     dsc_cpu_trace_tracker(dsc_trace_ctx *ctx,
@@ -38,21 +43,25 @@ struct dsc_cpu_trace_tracker {
                           const T *args) {
         using namespace internal::tracing;
 
-        check_if_full<dsc_cpu_trace>(ctx);
-        trace_ = next_empty_trace<dsc_cpu_trace>(ctx);
-        fill_trace(&trace_->base, name, type, args);
-        trace_->pid = getpid();
-        trace_->tid = pthread_self();
-        trace_->start_us = time_us();
+        if (dsc_tracing_is_enabled()) {
+            check_if_full<dsc_cpu_trace>(ctx);
+            trace_ = next_empty_trace<dsc_cpu_trace>(ctx);
+            fill_trace(&trace_->base, name, type, args);
+            trace_->pid = dsc_main_pid;
+            trace_->tid = dsc_main_tid;
+            trace_->start_us = time_us();
+        }
     }
 
     ~dsc_cpu_trace_tracker() {
         using namespace internal::tracing;
-        trace_->stop_us= time_us();
+        if (trace_) {
+            trace_->stop_us= time_us();
+        }
     }
 
 private:
-    dsc_cpu_trace *trace_;
+    dsc_cpu_trace *trace_ = nullptr;
 };
 
 static DSC_INLINE dsc_trace_ctx *dsc_cpu_tracing_init() {
@@ -159,6 +168,8 @@ static DSC_INLINE void dsc_cpu_insert_user_trace(dsc_trace_ctx *ctx,
                                                  const char *name,
                                                  const u64 start,
                                                  const u64 duration) {
+    if (!dsc_tracing_is_enabled()) return;
+
     dsc_cpu_trace *trace = internal::tracing::next_empty_trace<dsc_cpu_trace>(ctx);
     internal::tracing::fill_trace(&trace->base, name, DSC_TRACE_CUSTOM);
     // For user-generated traces the ingestion time must be inserted manually
@@ -166,6 +177,17 @@ static DSC_INLINE void dsc_cpu_insert_user_trace(dsc_trace_ctx *ctx,
     trace->start_us = start;
     trace->stop_us = start + duration;
     // NOTE: maybe it's a good idea to put these kind of events on a separate pid/tid?
-    trace->pid = getpid();
-    trace->tid = pthread_self();
+    trace->pid = dsc_main_pid;
+    trace->tid = dsc_main_tid;
 }
+
+#else
+
+static DSC_INLINE dsc_trace_ctx *dsc_cpu_tracing_init() { return nullptr; }
+static DSC_INLINE void dsc_cpu_tracing_dispose(const dsc_trace_ctx *) {}
+static DSC_INLINE void dsc_cpu_tracing_dump(void *, FILE *) {}
+static DSC_INLINE void dsc_cpu_next_trace(dsc_trace_ctx *) {}
+static DSC_INLINE void dsc_cpu_dump_json_metadata(FILE *, void *) {}
+static DSC_INLINE void dsc_cpu_insert_user_trace(dsc_trace_ctx *, const char *, const u64, const u64) {}
+
+#endif // DSC_TRACING

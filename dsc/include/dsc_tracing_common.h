@@ -7,6 +7,10 @@
 #pragma once
 
 #include "dsc.h"
+
+#if defined(DSC_TRACING)
+
+#include "dsc_device.h"
 #include <cstdlib>
 #include <ctime>        // timespec
 #include <cinttypes>    // PRIxPTR
@@ -22,178 +26,178 @@
     args__.field.device = (X)->device;                                                         \
     args__.field.addr = (uintptr_t) (X)
 
-#define DSC_TRACE_TENSOR_NEW(shape_, n_dim_, dtype_, device_, lazy_, data_, data_device_, ...) \
-    dsc_tensor_alloc_args args__{};                                                            \
-    memcpy(&args__.x.shape, (shape_), (n_dim_) * sizeof(*(shape_)));                           \
-    args__.x.n_dim = (n_dim_);                                                                 \
-    args__.x.dtype = (dtype_);                                                                 \
-    args__.x.device = (device_);                                                               \
-    args__.x.addr = 0;                                                                         \
-    args__.data = (data_);                                                                     \
-    args__.data_device = (data_device_);                                                       \
-    args__.lazy = (lazy_);                                                                     \
-    DSC_INSERT_TYPED_TRACE(dsc_tensor_alloc_args, DSC_TENSOR_ALLOC, ##__VA_ARGS__)
+#define DSC_TRACE_TENSOR_NEW(DEV, shape_, n_dim_, dtype_, device_, lazy_, data_, data_device_, ...) \
+    dsc_tensor_alloc_args args__{};                                                                 \
+    memcpy(&args__.x.shape, (shape_), (n_dim_) * sizeof(*(shape_)));                                \
+    args__.x.n_dim = (n_dim_);                                                                      \
+    args__.x.dtype = (dtype_);                                                                      \
+    args__.x.device = (device_);                                                                    \
+    args__.x.addr = 0;                                                                              \
+    args__.data = (data_);                                                                          \
+    args__.data_device = (data_device_);                                                            \
+    args__.lazy = (lazy_);                                                                          \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_tensor_alloc_args, DSC_TENSOR_ALLOC, ##__VA_ARGS__)
 
-#define DSC_TRACE_TENSOR_FREE(X, ...) \
-    dsc_tensor_free_args args__{};    \
-    DSC_TRACE_SET_TENSOR(X, x);       \
-    DSC_INSERT_TYPED_TRACE(dsc_tensor_free_args, DSC_TENSOR_FREE, ##__VA_ARGS__)
+#define DSC_TRACE_TENSOR_FREE(DEV, X, ...) \
+    dsc_tensor_free_args args__{};         \
+    DSC_TRACE_SET_TENSOR(X, x);            \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_tensor_free_args, DSC_TENSOR_FREE, ##__VA_ARGS__)
 
-#define DSC_TRACE_CAST_OP(X, OUT, ...) \
-    dsc_cast_args args__{};            \
-    DSC_TRACE_SET_TENSOR(X, x);        \
-    args__.new_dtype = (OUT)->dtype;   \
-    DSC_INSERT_TYPED_TRACE(dsc_cast_args, DSC_CAST_OP, ##__VA_ARGS__)
+#define DSC_TRACE_CAST_OP(DEV, X, OUT, ...) \
+    dsc_cast_args args__{};                 \
+    DSC_TRACE_SET_TENSOR(X, x);             \
+    args__.new_dtype = (OUT)->dtype;        \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_cast_args, DSC_CAST_OP, ##__VA_ARGS__)
 
-#define DSC_TRACE_BINARY_OP(XA, XB, OUT, ...) \
-    dsc_binary_args args__{};                 \
-    DSC_TRACE_SET_TENSOR(XA, xa);             \
-    DSC_TRACE_SET_TENSOR(XB, xb);             \
-    DSC_TRACE_SET_TENSOR(OUT, out);           \
-    DSC_INSERT_TYPED_TRACE(dsc_binary_args, DSC_BINARY_OP, ##__VA_ARGS__)
+#define DSC_TRACE_BINARY_OP(DEV, XA, XB, OUT, ...) \
+    dsc_binary_args args__{};                      \
+    DSC_TRACE_SET_TENSOR(XA, xa);                  \
+    DSC_TRACE_SET_TENSOR(XB, xb);                  \
+    DSC_TRACE_SET_TENSOR(OUT, out);                \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_binary_args, DSC_BINARY_OP, ##__VA_ARGS__)
 
-#define DSC_TRACE_UNARY_OP(X, OUT, ...) \
-    dsc_unary_args args__{};            \
-    DSC_TRACE_SET_TENSOR(X, x);         \
-    DSC_TRACE_SET_TENSOR(OUT, out);     \
-    DSC_INSERT_TYPED_TRACE(dsc_unary_args, DSC_UNARY_OP, ##__VA_ARGS__)
-
-#define DSC_TRACE_UNARY_AXIS_OP(X, OUT, axis_, ...) \
-    dsc_unary_axis_args args__{};                   \
-    DSC_TRACE_SET_TENSOR(X, x);                     \
-    DSC_TRACE_SET_TENSOR(OUT, out);                 \
-    args__.axis = (axis_);                          \
-    DSC_INSERT_TYPED_TRACE(dsc_unary_axis_args, DSC_UNARY_AXIS_OP, ##__VA_ARGS__)
-
-#define DSC_TRACE_MATMUL(XA, XB, trans_b_, OUT, is_gevm_, ...) \
-    dsc_matmul_args args__{};                                  \
-    DSC_TRACE_SET_TENSOR(XA, xa);                              \
-    DSC_TRACE_SET_TENSOR(XB, xb);                              \
-    DSC_TRACE_SET_TENSOR(OUT, out);                            \
-    args__.trans_b = (trans_b_);                               \
-    DSC_INSERT_NAMED_TRACE(dsc_matmul_args, DSC_MATMUL_OP, ((trans_b_) && (is_gevm_)) ? "dsc_gevm" : "dsc_gemm", ##__VA_ARGS__)
-
-#define DSC_TRACE_MASK_OP(X, MASK, value_, ...) \
-    dsc_mask_args args__{};                     \
-    DSC_TRACE_SET_TENSOR(X, x);                 \
-    DSC_TRACE_SET_TENSOR(MASK, mask);           \
-    args__.value = (value_);                    \
-    DSC_INSERT_TYPED_TRACE(dsc_mask_args, DSC_MASK_OP, ##__VA_ARGS__)
-
-#define DSC_TRACE_OUTER_OP(XA, XB, OUT, ...) \
-    dsc_outer_args args__{};                 \
-    DSC_TRACE_SET_TENSOR(XA, xa);            \
-    DSC_TRACE_SET_TENSOR(XB, xb);            \
+#define DSC_TRACE_UNARY_OP(DEV, X, OUT, ...) \
+    dsc_unary_args args__{};                 \
+    DSC_TRACE_SET_TENSOR(X, x);              \
     DSC_TRACE_SET_TENSOR(OUT, out);          \
-    DSC_INSERT_TYPED_TRACE(dsc_outer_args, DSC_OUTER_OP, ##__VA_ARGS__)
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_unary_args, DSC_UNARY_OP, ##__VA_ARGS__)
 
-#define DSC_TRACE_WHERE_OP(CONDITION, INPUT, OTHER, OUT, ...) \
-    dsc_where_args args__{};                                  \
-    DSC_TRACE_SET_TENSOR(CONDITION, condition);               \
-    DSC_TRACE_SET_TENSOR(INPUT, input);                       \
-    DSC_TRACE_SET_TENSOR(OTHER, other);                       \
-    DSC_TRACE_SET_TENSOR(OUT, out);                           \
-    DSC_INSERT_TYPED_TRACE(dsc_where_args, DSC_WHERE_OP, ##__VA_ARGS__)
+#define DSC_TRACE_UNARY_AXIS_OP(DEV, X, OUT, axis_, ...) \
+    dsc_unary_axis_args args__{};                        \
+    DSC_TRACE_SET_TENSOR(X, x);                          \
+    DSC_TRACE_SET_TENSOR(OUT, out);                      \
+    args__.axis = (axis_);                               \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_unary_axis_args, DSC_UNARY_AXIS_OP, ##__VA_ARGS__)
 
-#define DSC_TRACE_GET_SLICE(X, OUT, slices_, n_slices_, ...)            \
+#define DSC_TRACE_MATMUL_OP(DEV, XA, XB, trans_b_, OUT, is_gevm_, ...) \
+    dsc_matmul_args args__{};                                          \
+    DSC_TRACE_SET_TENSOR(XA, xa);                                      \
+    DSC_TRACE_SET_TENSOR(XB, xb);                                      \
+    DSC_TRACE_SET_TENSOR(OUT, out);                                    \
+    args__.trans_b = (trans_b_);                                       \
+    DSC_INSERT_NAMED_TRACE((DEV), dsc_matmul_args, DSC_MATMUL_OP, ((trans_b_) && (is_gevm_)) ? "dsc_gevm" : "dsc_gemm", ##__VA_ARGS__)
+
+#define DSC_TRACE_MASK_OP(DEV, X, MASK, value_, ...) \
+    dsc_mask_args args__{};                          \
+    DSC_TRACE_SET_TENSOR(X, x);                      \
+    DSC_TRACE_SET_TENSOR(MASK, mask);                \
+    args__.value = (value_);                         \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_mask_args, DSC_MASK_OP, ##__VA_ARGS__)
+
+#define DSC_TRACE_OUTER_OP(DEV, XA, XB, OUT, ...) \
+    dsc_outer_args args__{};                      \
+    DSC_TRACE_SET_TENSOR(XA, xa);                 \
+    DSC_TRACE_SET_TENSOR(XB, xb);                 \
+    DSC_TRACE_SET_TENSOR(OUT, out);               \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_outer_args, DSC_OUTER_OP, ##__VA_ARGS__)
+
+#define DSC_TRACE_WHERE_OP(DEV, CONDITION, INPUT, OTHER, OUT, ...) \
+    dsc_where_args args__{};                                       \
+    DSC_TRACE_SET_TENSOR(CONDITION, condition);                    \
+    DSC_TRACE_SET_TENSOR(INPUT, input);                            \
+    DSC_TRACE_SET_TENSOR(OTHER, other);                            \
+    DSC_TRACE_SET_TENSOR(OUT, out);                                \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_where_args, DSC_WHERE_OP, ##__VA_ARGS__)
+
+#define DSC_TRACE_GET_SLICE(DEV, X, OUT, slices_, n_slices_, ...)       \
     dsc_get_slice_args args__{};                                        \
     DSC_TRACE_SET_TENSOR(X, x);                                         \
     DSC_TRACE_SET_TENSOR(OUT, out);                                     \
     memcpy(args__.slices, (slices_), (n_slices_) * sizeof(*(slices_))); \
     args__.n_slices = (n_slices_);                                      \
-    DSC_INSERT_TYPED_TRACE(dsc_get_slice_args, DSC_GET_SLICE, ##__VA_ARGS__)
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_get_slice_args, DSC_GET_SLICE, ##__VA_ARGS__)
 
-#define DSC_TRACE_GET_TENSOR(X, INDEXES, ...) \
-    dsc_get_tensor_args args__{};             \
-    DSC_TRACE_SET_TENSOR(X, x);               \
-    DSC_TRACE_SET_TENSOR(INDEXES, indexes);   \
-    DSC_INSERT_TYPED_TRACE(dsc_get_tensor_args, DSC_GET_TENSOR, ##__VA_ARGS__)
+#define DSC_TRACE_GET_TENSOR(DEV, X, INDEXES, ...) \
+    dsc_get_tensor_args args__{};                  \
+    DSC_TRACE_SET_TENSOR(X, x);                    \
+    DSC_TRACE_SET_TENSOR(INDEXES, indexes);        \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_get_tensor_args, DSC_GET_TENSOR, ##__VA_ARGS__)
 
-#define DSC_TRACE_GET_IDX(X, indexes_, n_indexes_, out_shape_, out_n_dim_, ...)   \
-    dsc_get_idx_args args__{};                                                    \
-    DSC_TRACE_SET_TENSOR(X, x);                                                   \
-    memcpy(args__.indexes, (indexes_), (n_indexes_) * sizeof(*(indexes_)));       \
-    memcpy(args__.out_shape, (out_shape_), (out_n_dim_) * sizeof(*(out_shape_))); \
-    args__.n_indexes = (n_indexes_);                                              \
-    args__.out_n_dim = (out_n_dim_);                                              \
-    DSC_INSERT_TYPED_TRACE(dsc_get_idx_args, DSC_GET_IDX, ##__VA_ARGS__)
+#define DSC_TRACE_GET_IDX(DEV, X, indexes_, n_indexes_, out_shape_, out_n_dim_, ...) \
+    dsc_get_idx_args args__{};                                                       \
+    DSC_TRACE_SET_TENSOR(X, x);                                                      \
+    memcpy(args__.indexes, (indexes_), (n_indexes_) * sizeof(*(indexes_)));          \
+    memcpy(args__.out_shape, (out_shape_), (out_n_dim_) * sizeof(*(out_shape_)));    \
+    args__.n_indexes = (n_indexes_);                                                 \
+    args__.out_n_dim = (out_n_dim_);                                                 \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_get_idx_args, DSC_GET_IDX, ##__VA_ARGS__)
 
-#define DSC_TRACE_SET_SLICE(XA, XB, slices_, n_slices_, ...)            \
+#define DSC_TRACE_SET_SLICE(DEV, XA, XB, slices_, n_slices_, ...)       \
     dsc_set_slice_args args__{};                                        \
     DSC_TRACE_SET_TENSOR(XA, xa);                                       \
     DSC_TRACE_SET_TENSOR(XB, xb);                                       \
     memcpy(args__.slices, (slices_), (n_slices_) * sizeof(*(slices_))); \
     args__.n_slices = (n_slices_);                                      \
-    DSC_INSERT_TYPED_TRACE(dsc_set_slice_args, DSC_SET_SLICE, ##__VA_ARGS__)
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_set_slice_args, DSC_SET_SLICE, ##__VA_ARGS__)
 
-#define DSC_TRACE_RANDN_OP(X, ...) \
-    dsc_randn_args args__{};       \
-    DSC_TRACE_SET_TENSOR(X, x);    \
-    DSC_INSERT_TYPED_TRACE(dsc_randn_args, DSC_RANDN_OP, ##__VA_ARGS__)
+#define DSC_TRACE_RANDN_OP(DEV, X, ...) \
+    dsc_randn_args args__{};            \
+    DSC_TRACE_SET_TENSOR(X, x);         \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_randn_args, DSC_RANDN_OP, ##__VA_ARGS__)
 
-#define DSC_TRACE_TOPK_OP(X, k_, axis_, largest_, ...) \
-    dsc_topk_args args__{};                            \
-    DSC_TRACE_SET_TENSOR(X, x);                        \
-    args__.k = (k_);                                   \
-    args__.axis = (axis_);                             \
-    args__.largest = (largest_);                       \
-    DSC_INSERT_TYPED_TRACE(dsc_topk_args, DSC_TOPK_OP, ##__VA_ARGS__)
-
-#define DSC_TRACE_MULTINOMIAL_OP(X, OUT, num_samples_, ...) \
-    dsc_multinomial_args args__{};                          \
+#define DSC_TRACE_TOPK_OP(DEV, X, k_, axis_, largest_, ...) \
+    dsc_topk_args args__{};                                 \
     DSC_TRACE_SET_TENSOR(X, x);                             \
-    DSC_TRACE_SET_TENSOR(OUT, out);                         \
-    args__.num_samples = (num_samples_);                    \
-    DSC_INSERT_TYPED_TRACE(dsc_multinomial_args, DSC_MULTINOMIAL_OP, ##__VA_ARGS__)
+    args__.k = (k_);                                        \
+    args__.axis = (axis_);                                  \
+    args__.largest = (largest_);                            \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_topk_args, DSC_TOPK_OP, ##__VA_ARGS__)
 
-#define DSC_TRACE_ARANGE_OP(X, start_, step_, ...) \
-    dsc_arange_args args__{};                      \
-    DSC_TRACE_SET_TENSOR(X, x);                    \
-    args__.start = (start_);                       \
-    args__.step = (step_);                         \
-    DSC_INSERT_TYPED_TRACE(dsc_arange_args, DSC_ARANGE_OP, ##__VA_ARGS__)
+#define DSC_TRACE_MULTINOMIAL_OP(DEV, X, OUT, num_samples_, ...) \
+    dsc_multinomial_args args__{};                               \
+    DSC_TRACE_SET_TENSOR(X, x);                                  \
+    DSC_TRACE_SET_TENSOR(OUT, out);                              \
+    args__.num_samples = (num_samples_);                         \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_multinomial_args, DSC_MULTINOMIAL_OP, ##__VA_ARGS__)
 
-#define DSC_TRACE_REPEAT_OP(X, OUT, repeats_, axis_, ...) \
-    dsc_repeat_args args__{};                             \
-    DSC_TRACE_SET_TENSOR(X, x);                           \
-    DSC_TRACE_SET_TENSOR(OUT, out);                       \
-    args__.repeats = (repeats_);                          \
-    args__.axis = (axis_);                                \
-    DSC_INSERT_TYPED_TRACE(dsc_repeat_args, DSC_REPEAT_OP, ##__VA_ARGS__)
+#define DSC_TRACE_ARANGE_OP(DEV, X, start_, step_, ...) \
+    dsc_arange_args args__{};                           \
+    DSC_TRACE_SET_TENSOR(X, x);                         \
+    args__.start = (start_);                            \
+    args__.step = (step_);                              \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_arange_args, DSC_ARANGE_OP, ##__VA_ARGS__)
 
-#define DSC_TRACE_COPY_OP(X, data_, nb_, data_device_, ...) \
-    dsc_copy_args args__{};                                 \
-    DSC_TRACE_SET_TENSOR(X, x);                             \
-    args__.data = (uintptr_t) (data_);                      \
-    args__.nb = (nb_);                                      \
-    args__.data_device = (data_device_);                    \
-    DSC_INSERT_TYPED_TRACE(dsc_copy_args, DSC_COPY_OP, ##__VA_ARGS__)
+#define DSC_TRACE_REPEAT_OP(DEV, X, OUT, repeats_, axis_, ...) \
+    dsc_repeat_args args__{};                                  \
+    DSC_TRACE_SET_TENSOR(X, x);                                \
+    DSC_TRACE_SET_TENSOR(OUT, out);                            \
+    args__.repeats = (repeats_);                               \
+    args__.axis = (axis_);                                     \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_repeat_args, DSC_REPEAT_OP, ##__VA_ARGS__)
 
-#define DSC_TRACE_TO_OP(X, new_device_, ...) \
-    dsc_to_args args__{};                    \
-    DSC_TRACE_SET_TENSOR(X, x);              \
-    args__.new_device = (new_device_);      \
-    DSC_INSERT_TYPED_TRACE(dsc_to_args, DSC_TO_OP, ##__VA_ARGS__)
+#define DSC_TRACE_COPY_OP(DEV, X, data_, nb_, data_device_, ...) \
+    dsc_copy_args args__{};                                      \
+    DSC_TRACE_SET_TENSOR(X, x);                                  \
+    args__.data = (uintptr_t) (data_);                           \
+    args__.nb = (nb_);                                           \
+    args__.data_device = (data_device_);                         \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_copy_args, DSC_COPY_OP, ##__VA_ARGS__)
 
-#define DSC_TRACE_CONCAT_OP(OUT, tensors_, axis_, ...) \
-    dsc_concat_args args__{};                          \
-    DSC_TRACE_SET_TENSOR(OUT, out);                    \
-    args__.tensors = (tensors_);                       \
-    args__.axis = (axis_);                             \
-    DSC_INSERT_TYPED_TRACE(dsc_concat_args, DSC_CONCAT_OP, ##__VA_ARGS__)
-
-#define DSC_TRACE_TRANSPOSE_OP(X, OUT, ...) \
-    dsc_transpose_args args__{};            \
-    DSC_TRACE_SET_TENSOR(X, x);             \
-    DSC_TRACE_SET_TENSOR(OUT, out);         \
-    DSC_INSERT_TYPED_TRACE(dsc_transpose_args, DSC_TRANSPOSE_OP, ##__VA_ARGS__)
-
-#define DSC_TRACE_TRIL_OP(X, OUT, diagonal_, ...) \
-    dsc_tril_args args__{};                       \
+#define DSC_TRACE_TO_OP(DEV, X, new_device_, ...) \
+    dsc_to_args args__{};                         \
     DSC_TRACE_SET_TENSOR(X, x);                   \
-    DSC_TRACE_SET_TENSOR(OUT, out);               \
-    args__.diagonal = (diagonal_);                \
-    DSC_INSERT_TYPED_TRACE(dsc_tril_args, DSC_TRIL_OP, ##__VA_ARGS__)
+    args__.new_device = (new_device_);            \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_to_args, DSC_TO_OP, ##__VA_ARGS__)
+
+#define DSC_TRACE_CONCAT_OP(DEV, OUT, tensors_, axis_, ...) \
+    dsc_concat_args args__{};                               \
+    DSC_TRACE_SET_TENSOR(OUT, out);                         \
+    args__.tensors = (tensors_);                            \
+    args__.axis = (axis_);                                  \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_concat_args, DSC_CONCAT_OP, ##__VA_ARGS__)
+
+#define DSC_TRACE_TRANSPOSE_OP(DEV, X, OUT, ...) \
+    dsc_transpose_args args__{};                 \
+    DSC_TRACE_SET_TENSOR(X, x);                  \
+    DSC_TRACE_SET_TENSOR(OUT, out);              \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_transpose_args, DSC_TRANSPOSE_OP, ##__VA_ARGS__)
+
+#define DSC_TRACE_TRIL_OP(DEV, X, OUT, diagonal_, ...) \
+    dsc_tril_args args__{};                            \
+    DSC_TRACE_SET_TENSOR(X, x);                        \
+    DSC_TRACE_SET_TENSOR(OUT, out);                    \
+    args__.diagonal = (diagonal_);                     \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_tril_args, DSC_TRIL_OP, ##__VA_ARGS__)
 
 #define TYPED_FILL(NAME, ARGS)                       \
     if constexpr (dsc_is_type<T, ARGS>()) {          \
@@ -832,8 +836,127 @@ DSC_INLINE void dump_trace_base(FILE *f, const dsc_trace_common *trace) {
             break;
     }
 }
+
+DSC_INLINE bool is_valid_trace(const void *trace) {
+    if (!trace) return false;
+
+    const dsc_trace_common *base = (const dsc_trace_common *) trace;
+    return base->type != DSC_TRACE_EMPY;
 }
 
+DSC_INLINE bool trace_var_is_set() {
+    const char *trace_str = std::getenv("TRACE");
+    bool enabled = false;
+
+    if (trace_str) {
+        const int tracing_flag = std::atoi(trace_str);
+        enabled = tracing_flag != 0;
+    }
+
+    return enabled;
+}
+}
+
+static DSC_INLINE bool dsc_tracing_is_enabled() {
+    static const bool tracing_enabled = internal::tracing::trace_var_is_set();
+
+    return tracing_enabled;
+}
+
+static DSC_INLINE void dsc_tracing_dump(dsc_ctx *ctx) {
+    if (!dsc_tracing_is_enabled()) return;
+
+    dsc_trace_ctx *tracing_ctxs[DSC_MAX_DEVICES];
+    for (int i = 0; i < DSC_MAX_DEVICES; ++i) {
+        const dsc_device *device = ctx->devices[i];
+        tracing_ctxs[i] = device->trace_ctx;
+    }
+
+    FILE *json_file = fopen("traces.json", "wt");
+    DSC_ASSERT(json_file);
+
+    fprintf(json_file, "[\n");
+
+    // Dump json metadata before dumping actual traces
+    for (int i = 0; i < DSC_MAX_DEVICES; ++i) {
+        const dsc_device *device = ctx->devices[i];
+        device->dump_json_metadata(json_file, device->extra_info);
+    }
+
+    printf("\n");
+
+    // NOTE: this doesn't make sense here!
+    while (true) {
+        // Find the first potential trace for dumping
+        int dump_device_idx = 0;
+        void *trace_to_dump = nullptr;
+        for (int i = 0; i < DSC_MAX_DEVICES && !internal::tracing::is_valid_trace(trace_to_dump); ++i) {
+            trace_to_dump = tracing_ctxs[i]->current_trace;
+            dump_device_idx = i;
+        }
+
+        if (!internal::tracing::is_valid_trace(trace_to_dump)) break;
+
+        const dsc_trace_common *base = (dsc_trace_common *)trace_to_dump;
+
+        // At each step iterate over all the devices and get the current trace (if any)
+        for (int i = 0; i < DSC_MAX_DEVICES; ++i) {
+            // Skip if the device is the same of the current trace to dump
+            if (i == dump_device_idx) continue;
+
+            void *this_trace = tracing_ctxs[i]->current_trace;
+            if (!internal::tracing::is_valid_trace(this_trace)) continue;
+
+            // If we found a valid trace compare the ingestion timestamp
+            if (const dsc_trace_common *this_base = (dsc_trace_common *) this_trace;
+                this_base->ingestion_time_us < base->ingestion_time_us) {
+                trace_to_dump = this_trace;
+                dump_device_idx = i;
+            }
+        }
+
+        // Dump only the trace that came in first and advance the current pointer only for that device
+        ctx->devices[dump_device_idx]->dump_trace(trace_to_dump, json_file);
+        ctx->devices[dump_device_idx]->next_trace(tracing_ctxs[dump_device_idx]);
+    }
+    printf("\n");
+    fflush(stdout);
+
+    fprintf(json_file, "]");
+    fclose(json_file);
+}
 
 #undef TYPED_FILL
 #undef TYPED_DUMP
+
+#else
+
+#define DSC_TRACE_TENSOR_NEW(DEV, shape_, n_dim_, dtype_, device_, lazy_, data_, data_device_, ...)  (DSC_UNUSED(DEV))
+#define DSC_TRACE_TENSOR_FREE(DEV, X, ...)                                                           (DSC_UNUSED(DEV))
+#define DSC_TRACE_CAST_OP(DEV, X, OUT, ...)                                                          (DSC_UNUSED(DEV))
+#define DSC_TRACE_BINARY_OP(DEV, XA, XB, OUT, ...)                                                   (DSC_UNUSED(DEV))
+#define DSC_TRACE_UNARY_OP(DEV, X, OUT, ...)                                                         (DSC_UNUSED(DEV))
+#define DSC_TRACE_UNARY_AXIS_OP(DEV, X, OUT, axis_, ...)                                             (DSC_UNUSED(DEV))
+#define DSC_TRACE_MATMUL_OP(DEV, XA, XB, trans_b_, OUT, is_gevm_, ...)                               (DSC_UNUSED(DEV))
+#define DSC_TRACE_MASK_OP(DEV, X, MASK, value_, ...)                                                 (DSC_UNUSED(DEV))
+#define DSC_TRACE_OUTER_OP(DEV, XA, XB, OUT, ...)                                                    (DSC_UNUSED(DEV))
+#define DSC_TRACE_WHERE_OP(DEV, CONDITION, INPUT, OTHER, OUT, ...)                                   (DSC_UNUSED(DEV))
+#define DSC_TRACE_GET_SLICE(DEV, X, OUT, slices_, n_slices_, ...)                                    (DSC_UNUSED(DEV))
+#define DSC_TRACE_GET_TENSOR(DEV, X, INDEXES, ...)                                                   (DSC_UNUSED(DEV))
+#define DSC_TRACE_GET_IDX(DEV, X, indexes_, n_indexes_, out_shape_, out_n_dim_, ...)                 (DSC_UNUSED(DEV))
+#define DSC_TRACE_SET_SLICE(DEV, XA, XB, slices_, n_slices_, ...)                                    (DSC_UNUSED(DEV))
+#define DSC_TRACE_RANDN_OP(DEV, X, ...)                                                              (DSC_UNUSED(DEV))
+#define DSC_TRACE_TOPK_OP(DEV, X, k_, axis_, largest_, ...)                                          (DSC_UNUSED(DEV))
+#define DSC_TRACE_MULTINOMIAL_OP(DEV, X, OUT, num_samples_, ...)                                     (DSC_UNUSED(DEV))
+#define DSC_TRACE_ARANGE_OP(DEV, X, start_, step_, ...)                                              (DSC_UNUSED(DEV))
+#define DSC_TRACE_REPEAT_OP(DEV, X, OUT, repeats_, axis_, ...)                                       (DSC_UNUSED(DEV))
+#define DSC_TRACE_COPY_OP(DEV, X, data_, nb_, data_device_, ...)                                     (DSC_UNUSED(DEV))
+#define DSC_TRACE_TO_OP(DEV, X, new_device_, ...)                                                    (DSC_UNUSED(DEV))
+#define DSC_TRACE_CONCAT_OP(DEV, OUT, tensors_, axis_, ...)                                          (DSC_UNUSED(DEV))
+#define DSC_TRACE_TRANSPOSE_OP(DEV, X, OUT, ...)                                                     (DSC_UNUSED(DEV))
+#define DSC_TRACE_TRIL_OP(DEV, X, OUT, diagonal_, ...)                                               (DSC_UNUSED(DEV))
+
+static consteval bool dsc_tracing_is_enabled() { return false; }
+static DSC_INLINE void dsc_tracing_dump(dsc_ctx *) {}
+
+#endif // DSC_TRACING

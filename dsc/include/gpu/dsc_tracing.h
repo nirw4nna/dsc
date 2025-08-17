@@ -8,17 +8,19 @@
 
 #include "dsc.h"
 #include "dsc_tracing_common.h"
-#include "gpu/dsc_gpu.h"
 
+#if defined(DSC_TRACING)
+
+#include "gpu/dsc_gpu.h"
 
 #undef DSC_INSERT_TYPED_TRACE
 #undef DSC_INSERT_NAMED_TRACE
 
-#define DSC_INSERT_TYPED_TRACE(T, type_, grid_dim_, block_dim_) \
-    dsc_gpu_trace_tracker<T> trace__ { dev->trace_ctx, __FUNCTION__, (type_), (grid_dim_), (block_dim_), &args__ }
+#define DSC_INSERT_TYPED_TRACE(DEV, T, type_, grid_dim_, block_dim_) \
+    dsc_gpu_trace_tracker<T> trace__ { (DEV)->trace_ctx, __FUNCTION__, (type_), (grid_dim_), (block_dim_), &args__ }
 
-#define DSC_INSERT_NAMED_TRACE(T, type_, name_, grid_dim_, block_dim_) \
-    dsc_gpu_trace_tracker<T> trace__ { dev->trace_ctx, (name_), (type_), (grid_dim_), (block_dim_), &args__ }
+#define DSC_INSERT_NAMED_TRACE(DEV, T, type_, name_, grid_dim_, block_dim_) \
+    dsc_gpu_trace_tracker<T> trace__ { (DEV)->trace_ctx, (name_), (type_), (grid_dim_), (block_dim_), &args__ }
 
 
 struct dsc_gpu_trace {
@@ -43,23 +45,27 @@ struct dsc_gpu_trace_tracker {
                           const T *args) {
         using namespace internal::tracing;
 
-        check_if_full<dsc_gpu_trace>(ctx);
-        trace_ = next_empty_trace<dsc_gpu_trace>(ctx);
-        fill_trace(&trace_->base, name, type, args);
-        gpu_event_create(&trace_->start_event);
-        gpu_event_create(&trace_->stop_event);
-        trace_->grid_dim = grid_dim;
-        trace_->block_dim = block_dim;
-        trace_->elapsed_ms = 0.f;
-        gpu_event_record(trace_->start_event);
+        if (dsc_tracing_is_enabled()) {
+            check_if_full<dsc_gpu_trace>(ctx);
+            trace_ = next_empty_trace<dsc_gpu_trace>(ctx);
+            fill_trace(&trace_->base, name, type, args);
+            gpu_event_create(&trace_->start_event);
+            gpu_event_create(&trace_->stop_event);
+            trace_->grid_dim = grid_dim;
+            trace_->block_dim = block_dim;
+            trace_->elapsed_ms = 0.f;
+            gpu_event_record(trace_->start_event);
+        }
     }
 
     ~dsc_gpu_trace_tracker() {
-        gpu_event_record(trace_->stop_event);
+        if (trace_) {
+            gpu_event_record(trace_->stop_event);
+        }
     }
 
 private:
-    dsc_gpu_trace *trace_;
+    dsc_gpu_trace *trace_ = nullptr;
 };
 
 static DSC_INLINE dsc_trace_ctx *dsc_gpu_tracing_init() {
@@ -70,7 +76,7 @@ static DSC_INLINE void dsc_gpu_tracing_dispose(const dsc_trace_ctx *ctx) {
     internal::tracing::dispose(ctx);
 }
 
-static void dsc_gpu_tracing_dump(void *trace, FILE *json_file) {
+static DSC_INLINE void dsc_gpu_tracing_dump(void *trace, FILE *json_file) {
     dsc_gpu_trace *gpu_trace = (dsc_gpu_trace *) trace;
 
     if (gpu_trace->to_eval()) {
@@ -130,11 +136,11 @@ static void dsc_gpu_tracing_dump(void *trace, FILE *json_file) {
     }
 }
 
-static void dsc_gpu_next_trace(dsc_trace_ctx *ctx) {
+static DSC_INLINE void dsc_gpu_next_trace(dsc_trace_ctx *ctx) {
     internal::tracing::advance_current_trace<dsc_gpu_trace>(ctx);
 }
 
-static void dsc_gpu_dump_json_metadata(FILE *json_file, void *extra_info) {
+static DSC_INLINE void dsc_gpu_dump_json_metadata(FILE *json_file, void *extra_info) {
     const dsc_gpu_dev_info *dev_info = (dsc_gpu_dev_info *) extra_info;
     fprintf(json_file, R"({"name":"process_name","ph":"M","pid":%d,"tid":0,"args":{"name":"%s:%s"},"process_sort_index":100})" ",\n",
             dev_info->dev_idx,
@@ -143,3 +149,13 @@ static void dsc_gpu_dump_json_metadata(FILE *json_file, void *extra_info) {
     fprintf(json_file, R"({"name":"thread_name","ph":"M","pid":%d,"tid":0,"args":{"name":"Stream"},"thread_sort_index":101})" ",\n",
             dev_info->dev_idx);
 }
+
+#else
+
+static DSC_INLINE dsc_trace_ctx *dsc_gpu_tracing_init() { return nullptr; }
+static DSC_INLINE void dsc_gpu_tracing_dispose(const dsc_trace_ctx *) {}
+static DSC_INLINE void dsc_gpu_tracing_dump(void *, FILE *) {}
+static DSC_INLINE void dsc_gpu_next_trace(dsc_trace_ctx *) {}
+static DSC_INLINE void dsc_gpu_dump_json_metadata(FILE *, void *) {}
+
+#endif // DSC_TRACING

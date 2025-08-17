@@ -196,11 +196,6 @@ constexpr static dsc_dtype DSC_TYPE_AT_LEAST_FLOAT_TABLE[DSC_MAX_DEVICES][DSC_DT
                 F64,// F64
         }};
 
-struct dsc_ctx {
-    dsc_device *devices[DSC_MAX_DEVICES];
-    dsc_tensor *tensors;
-    dsc_device_type default_device;
-};
 
 // ============================================================
 // Initialization
@@ -253,13 +248,11 @@ void dsc_ctx_free(dsc_ctx *ctx) {
 
 void dsc_tensor_free(dsc_ctx *ctx, dsc_tensor *x) {
     if (x == nullptr) return;
-    dsc_device *dev = dsc_get_device(CPU);
-    DSC_TRACE_TENSOR_FREE(x);
+    DSC_TRACE_TENSOR_FREE(dsc_get_device(CPU), x);
 
     if (x->buf != nullptr) {
         // If buf == nullptr then this is a lazy tensor
-        dsc_device *x_dev = dsc_get_device(x->device);
-        dsc_data_free(x_dev, x->buf);
+        dsc_data_free(dsc_get_device(x->device), x->buf);
     }
 
     dsc_tensor_set_invalid(x);
@@ -351,85 +344,19 @@ bool dsc_gpu_has_bf16(dsc_ctx *) {
 // Tracing
 
 bool dsc_tracing_enabled() {
-    // TODO: implement
-    return true;
-    // return DSC_TRACING > 0;
+    return dsc_tracing_is_enabled();
 }
 
 void dsc_insert_trace(dsc_ctx *ctx,
                       const char *name,
                       const u64 start,
                       const u64 duration) {
-    const dsc_device *device = dsc_get_device(CPU);
-    dsc_cpu_insert_user_trace(device->trace_ctx, name, start, duration);
-}
-
-static DSC_INLINE bool is_valid_trace(const void *trace) {
-    if (!trace) return false;
-
-    const dsc_trace_common *base = (const dsc_trace_common *) trace;
-    return base->type != DSC_TRACE_EMPY;
+    const dsc_device *dev = dsc_get_device(CPU);
+    dsc_cpu_insert_user_trace(dev->trace_ctx, name, start, duration);
 }
 
 void dsc_dump_traces(dsc_ctx *ctx) {
-    dsc_trace_ctx *tracing_ctxs[DSC_MAX_DEVICES];
-    for (int i = 0; i < DSC_MAX_DEVICES; ++i) {
-        const dsc_device *device = ctx->devices[i];
-        tracing_ctxs[i] = device->trace_ctx;
-    }
-
-    FILE *json_file = fopen("traces.json", "wt");
-    DSC_ASSERT(json_file);
-
-    fprintf(json_file, "[\n");
-
-    // Dump json metadata before dumping actual traces
-    for (int i = 0; i < DSC_MAX_DEVICES; ++i) {
-        const dsc_device *device = ctx->devices[i];
-        device->dump_json_metadata(json_file, device->extra_info);
-    }
-
-    printf("\n");
-
-    // NOTE: this doesn't make sense here!
-    while (true) {
-        // Find the first potential trace for dumping
-        int dump_device_idx = 0;
-        void *trace_to_dump = nullptr;
-        for (int i = 0; i < DSC_MAX_DEVICES && !is_valid_trace(trace_to_dump); ++i) {
-            trace_to_dump = tracing_ctxs[i]->current_trace;
-            dump_device_idx = i;
-        }
-
-        if (!is_valid_trace(trace_to_dump)) break;
-
-        const dsc_trace_common *base = (dsc_trace_common *)trace_to_dump;
-
-        // At each step iterate over all the devices and get the current trace (if any)
-        for (int i = 0; i < DSC_MAX_DEVICES; ++i) {
-            // Skip if the device is the same of the current trace to dump
-            if (i == dump_device_idx) continue;
-
-            void *this_trace = tracing_ctxs[i]->current_trace;
-            if (!is_valid_trace(this_trace)) continue;
-
-            // If we found a valid trace compare the ingestion timestamp
-            if (const dsc_trace_common *this_base = (dsc_trace_common *) this_trace;
-                this_base->ingestion_time_us < base->ingestion_time_us) {
-                trace_to_dump = this_trace;
-                dump_device_idx = i;
-            }
-        }
-
-        // Dump only the trace that came in first and advance the current pointer only for that device
-        ctx->devices[dump_device_idx]->dump_trace(trace_to_dump, json_file);
-        ctx->devices[dump_device_idx]->next_trace(tracing_ctxs[dump_device_idx]);
-    }
-    printf("\n");
-    fflush(stdout);
-
-    fprintf(json_file, "]");
-    fclose(json_file);
+    dsc_tracing_dump(ctx);
 }
 
 // ============================================================
@@ -462,8 +389,7 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
                            const dsc_device_type data_device) {
     DSC_ASSERT((unsigned) n_dim <= DSC_MAX_DIMS);
 
-    const dsc_device *dev = dsc_get_device(CPU);
-    DSC_TRACE_TENSOR_NEW(shape, n_dim, dtype, device, lazy, data, data_device);
+    DSC_TRACE_TENSOR_NEW(dsc_get_device(CPU), shape, n_dim, dtype, device, lazy, data, data_device);
 
     int ne = 1;
     for (int i = 0; i < n_dim; ++i) ne *= shape[i];
@@ -473,8 +399,7 @@ dsc_tensor *dsc_new_tensor(dsc_ctx *ctx,
     DSC_ASSERT(new_tensor != nullptr);
 
     if (buf == nullptr) {
-        dsc_device *buf_dev = dsc_get_device(device);
-        if (!lazy) new_tensor->buf = dsc_data_alloc(buf_dev, ne * DSC_DTYPE_SIZE[dtype]);
+        if (!lazy) new_tensor->buf = dsc_data_alloc(dsc_get_device(device), ne * DSC_DTYPE_SIZE[dtype]);
         else new_tensor->buf = nullptr;
     } else {
         dsc_tensor_set_buffer(ctx, new_tensor, buf);
@@ -561,12 +486,12 @@ dsc_tensor *dsc_tensor_4d(dsc_ctx *ctx, const dsc_dtype dtype,
 template<typename Tin, typename Tout = Tin>
 static DSC_INLINE dsc_tensor *wrap(dsc_ctx *ctx, const Tin val,
                                    const dsc_device_type device) {
+    // FIXME: I really don't like this function (or the idea of wrapping in general)
     dsc_tensor *out = dsc_tensor_1d(ctx, dsc_type_mapping<Tout>::value, 1, device);
 
-    dsc_device *dev = dsc_get_device(device);
     DSC_DATA(Tout, out);
     const Tout v_out = cpu_cast_op().operator()<Tin, Tout>(val);
-    dev->memcpy(out_data, &v_out, sizeof(Tout), TO_DEVICE);
+    dsc_get_device(device)->memcpy(out_data, &v_out, sizeof(Tout), TO_DEVICE);
     return out;
 }
 
@@ -660,8 +585,7 @@ dsc_pair dsc_topk(dsc_ctx *ctx,
     dsc_tensor *out_indexes = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], I32, CPU);
 
     // For now, topk runs always on CPU. If x is not a CPU tensor create a temporary copy
-    dsc_device *cpu_dev = dsc_get_device(CPU);
-    dsc_cpu_topk(cpu_dev, x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
+    dsc_cpu_topk(dsc_get_device(CPU), x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
 
     dsc_tensor_free(ctx, tmp_values);
     dsc_tensor_free(ctx, tmp_indexes);
@@ -684,8 +608,7 @@ dsc_tensor *dsc_multinomial(dsc_ctx *ctx,
 
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], I32, CPU);
     // For now, multinomial runs always on the CPU.
-    dsc_device *cpu_dev = dsc_get_device(CPU);
-    dsc_cpu_multinomial(cpu_dev, x, out, num_samples);
+    dsc_cpu_multinomial(dsc_get_device(CPU), x, out, num_samples);
     return out;
 }
 
@@ -714,12 +637,10 @@ void dsc_copy(dsc_ctx *ctx,
     DSC_ASSERT(x->ne * DSC_DTYPE_SIZE[x->dtype] >= nb);
     DSC_ASSERT(x->device == data_device);
 
-    dsc_device *dev = dsc_get_device(CPU);
-    DSC_TRACE_COPY_OP(x, data, nb, data_device);
+    DSC_TRACE_COPY_OP(dsc_get_device(CPU), x, data, nb, data_device);
 
     DSC_DATA(void, x);
-    dsc_device *x_dev = dsc_get_device(x->device);
-    x_dev->memcpy(x_data, data, nb, ON_DEVICE);
+    dsc_get_device(x->device)->memcpy(x_data, data, nb, ON_DEVICE);
 }
 
 dsc_tensor *dsc_to(dsc_ctx *ctx,
@@ -727,8 +648,7 @@ dsc_tensor *dsc_to(dsc_ctx *ctx,
                    const dsc_device_type new_device) {
     if (x->device == new_device) return x;
 
-    dsc_device *dev = dsc_get_device(CPU);
-    DSC_TRACE_TO_OP(x, new_device);
+    DSC_TRACE_TO_OP(dsc_get_device(CPU), x, new_device);
 
     if (x->device == GPU) dsc_gpu_sync();
     dsc_tensor *out = dsc_new_tensor(ctx, x->n_dim,
@@ -736,17 +656,14 @@ dsc_tensor *dsc_to(dsc_ctx *ctx,
                                      x->dtype, new_device);
 
     if (x->device == GPU) {
-        dsc_device *gpu_dev = dsc_get_device(GPU);
-        gpu_dev->memcpy(out->buf->data, x->buf->data,
-                    x->ne * DSC_DTYPE_SIZE[x->dtype], FROM_DEVICE);
+        dsc_get_device(GPU)->memcpy(out->buf->data, x->buf->data,
+                                    x->ne * DSC_DTYPE_SIZE[x->dtype], FROM_DEVICE);
     } else if (new_device == GPU) {
-        dsc_device *gpu_dev = dsc_get_device(GPU);
-        gpu_dev->memcpy(out->buf->data, x->buf->data,
-                    x->ne * DSC_DTYPE_SIZE[x->dtype], TO_DEVICE);
+        dsc_get_device(GPU)->memcpy(out->buf->data, x->buf->data,
+                                    x->ne * DSC_DTYPE_SIZE[x->dtype], TO_DEVICE);
     } else {
-        dsc_device *new_dev = dsc_get_device(x->device);
-        new_dev->memcpy(out->buf->data, x->buf->data,
-                    x->ne * DSC_DTYPE_SIZE[x->dtype], ON_DEVICE);
+        dsc_get_device(x->device)->memcpy(out->buf->data, x->buf->data,
+                                          x->ne * DSC_DTYPE_SIZE[x->dtype], ON_DEVICE);
     }
 
     return out;
@@ -816,7 +733,7 @@ dsc_tensor *dsc_concat(dsc_ctx *ctx, const int axis,
 
     if (axis == DSC_VALUE_NONE) {
         // Flatten
-        dsc_device *dev = dsc_get_device(device);
+        const dsc_device *dev = dsc_get_device(device);
 
         int ne = 0;
         for (int i = 0; i < tensors; ++i) ne += to_concat[i]->ne;
@@ -967,8 +884,7 @@ dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
         memcpy(out_shape, &x->shape[DSC_MAX_DIMS - out_n_dim], out_n_dim * sizeof(*x->shape));
     }
 
-    const dsc_device *dev = dsc_get_device(CPU);
-    DSC_TRACE_GET_IDX(x, el_idx, indexes, out_shape, out_n_dim);
+    DSC_TRACE_GET_IDX(dsc_get_device(CPU), x, el_idx, indexes, out_shape, out_n_dim);
 
     dsc_tensor *out = dsc_new_tensor(ctx, out_n_dim, out_shape, x->dtype, x->device);
 
@@ -977,12 +893,11 @@ dsc_tensor *dsc_tensor_get_idx(dsc_ctx *ctx,
         offset += (dsc_tensor_get_stride(x, i) * el_idx[i]);
     }
 
-    const dsc_device *x_dev = dsc_get_device(x->device);
 
     DSC_DATA(void, out);
     DSC_DATA(byte, x);
-    x_dev->memcpy(out_data, x_data + (offset * DSC_DTYPE_SIZE[x->dtype]),
-                out->ne * DSC_DTYPE_SIZE[out->dtype], ON_DEVICE);
+    dsc_get_device(x->device)->memcpy(out_data, x_data + (offset * DSC_DTYPE_SIZE[x->dtype]),
+                                      out->ne * DSC_DTYPE_SIZE[out->dtype], ON_DEVICE);
 
     return out;
 }
@@ -1100,8 +1015,7 @@ dsc_tensor *dsc_tensor_get_tensor(dsc_ctx *ctx,
     const int out_ndim = indexes->n_dim + 1;
     DSC_ASSERT(out_ndim <= DSC_MAX_DIMS);
 
-    const dsc_device *dev = dsc_get_device(CPU);
-    DSC_TRACE_GET_TENSOR(x, indexes);
+    DSC_TRACE_GET_TENSOR(dsc_get_device(CPU), x, indexes);
 
     int out_shape[DSC_MAX_DIMS]{};
     const int count = dsc_tensor_get_dim(x, -1);
@@ -1358,9 +1272,8 @@ dsc_tensor *dsc_matmul(dsc_ctx *ctx,
     cast_binary_params();
 
     // Matmul requires the result to be zero-initialized
-    dsc_device *dev = dsc_get_device(xa->device);
     DSC_DATA(void, out);
-    dev->memset(out_data, 0, out->ne * DSC_DTYPE_SIZE[out->dtype]);
+    dsc_get_device(xa->device)->memset(out_data, 0, out->ne * DSC_DTYPE_SIZE[out->dtype]);
 
     DSC_DISPATCH(xa->device, matmul, xa, xb, trans_b, out);
 
