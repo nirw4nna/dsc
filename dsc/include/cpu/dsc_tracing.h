@@ -72,7 +72,8 @@ static DSC_INLINE void dsc_cpu_tracing_dispose(const dsc_trace_ctx *ctx) {
     internal::tracing::dispose(ctx);
 }
 
-static DSC_INLINE  void dsc_cpu_tracing_dump(void *trace, FILE *json_file) {
+static DSC_INLINE void dsc_cpu_tracing_dump(void *trace, FILE *json_file,
+                                            const bool to_console, const bool to_json) {
     static constexpr const char *COLOR_NONE = "\033[0m";
     static constexpr const char *COLOR_CUSTOM = "\033[38;5;51m"; // cyan
     static constexpr const char *COLOR_COPY = "\033[38;5;201m"; // deep magenta
@@ -83,76 +84,80 @@ static DSC_INLINE  void dsc_cpu_tracing_dump(void *trace, FILE *json_file) {
     const u64 elapsed_us = cpu_trace->stop_us - cpu_trace->start_us;
     const f64 bandwidth = (f64) base->rw_bytes / ((f64) elapsed_us * 1e-6 * DSC_GB(1));
 
-    char device_str[16];
-    if (base->type == DSC_COPY_OP) {
-        snprintf(device_str, sizeof(device_str), "%s <- %s",
-                 DSC_DEVICE_NAMES[base->copy.x.device],
-                 DSC_DEVICE_NAMES[base->copy.data_device]);
-    } else if (base->type == DSC_TO_OP) {
-        snprintf(device_str, sizeof(device_str), "%s <- %s",
-                 DSC_DEVICE_NAMES[base->to.new_device],
-                 DSC_DEVICE_NAMES[base->to.x.device]);
-    } else if (base->type == DSC_GET_IDX) {
-        snprintf(device_str, sizeof(device_str), "%s <- %s",
-                 DSC_DEVICE_NAMES[base->get_idx.x.device],
-                 DSC_DEVICE_NAMES[base->get_idx.x.device]);
-    } else if (base->type == DSC_GET_TENSOR) {
-        snprintf(device_str, sizeof(device_str), "%s <- %s",
-                 DSC_DEVICE_NAMES[base->get_tensor.x.device],
-                 DSC_DEVICE_NAMES[base->get_tensor.x.device]);
-    } else {
-        snprintf(device_str, sizeof(device_str), "CPU");
+    if (to_console) {
+        char device_str[16];
+        if (base->type == DSC_COPY_OP) {
+            snprintf(device_str, sizeof(device_str), "%s <- %s",
+                     DSC_DEVICE_NAMES[base->copy.x.device],
+                     DSC_DEVICE_NAMES[base->copy.data_device]);
+        } else if (base->type == DSC_TO_OP) {
+            snprintf(device_str, sizeof(device_str), "%s <- %s",
+                     DSC_DEVICE_NAMES[base->to.new_device],
+                     DSC_DEVICE_NAMES[base->to.x.device]);
+        } else if (base->type == DSC_GET_IDX) {
+            snprintf(device_str, sizeof(device_str), "%s <- %s",
+                     DSC_DEVICE_NAMES[base->get_idx.x.device],
+                     DSC_DEVICE_NAMES[base->get_idx.x.device]);
+        } else if (base->type == DSC_GET_TENSOR) {
+            snprintf(device_str, sizeof(device_str), "%s <- %s",
+                     DSC_DEVICE_NAMES[base->get_tensor.x.device],
+                     DSC_DEVICE_NAMES[base->get_tensor.x.device]);
+        } else {
+            snprintf(device_str, sizeof(device_str), "CPU");
+        }
+
+        const char *ansi_color_1 = "", *ansi_color_2 = "";
+        switch (base->type) {
+            case DSC_COPY_OP:
+            case DSC_TO_OP:
+            case DSC_GET_IDX:
+            case DSC_GET_TENSOR:
+                ansi_color_1 = COLOR_COPY;
+                ansi_color_2 = COLOR_NONE;
+                break;
+            case DSC_TRACE_CUSTOM:
+                ansi_color_1 = COLOR_CUSTOM;
+                ansi_color_2 = COLOR_NONE;
+                break;
+            default:
+                break;
+        }
+
+        printf("*** [%ld] %-12s %s%-40s%s %.2fms (%6ldus)\t|",
+               base->ingestion_time_us,
+               device_str,
+               ansi_color_1,
+               base->name,
+               ansi_color_2,
+               (f64) elapsed_us * 1e-3,
+               elapsed_us);
+
+        // Don't show bandwidth for custom traces
+        if (base->type != DSC_TRACE_CUSTOM && base->type != DSC_TENSOR_ALLOC && base->type != DSC_TENSOR_FREE) {
+            printf("\t%10.2fGB/s (%ldB)",
+                   bandwidth,
+                   base->rw_bytes);
+        }
+
+        printf("\n");
     }
 
-    const char *ansi_color_1 = "", *ansi_color_2 = "";
-    switch (base->type) {
-        case DSC_COPY_OP:
-        case DSC_TO_OP:
-        case DSC_GET_IDX:
-        case DSC_GET_TENSOR:
-            ansi_color_1 = COLOR_COPY;
-            ansi_color_2 = COLOR_NONE;
-            break;
-        case DSC_TRACE_CUSTOM:
-            ansi_color_1 = COLOR_CUSTOM;
-            ansi_color_2 = COLOR_NONE;
-            break;
-        default:
-            break;
+    if (to_json) {
+        fprintf(json_file, R"({"name":"%s","cat":"%s","ph":"X","ts":%ld,"dur":%ld,"pid":%d,"tid":%ld)",
+                base->name,
+                DSC_TRACE_CATEGORY[base->type],
+                base->ingestion_time_us,
+                elapsed_us,
+                cpu_trace->pid,
+                cpu_trace->tid);
+
+        fprintf(json_file, R"(,"args":{)");
+
+        if (base->type != DSC_TRACE_CUSTOM) fprintf(json_file, R"("bandwidth":"%.2fGB/s")", bandwidth);
+
+        internal::tracing::dump_trace_base(json_file, base);
+        fprintf(json_file, R"(}})" ",\n");
     }
-
-    printf("*** [%ld] %-12s %s%-40s%s %.2fms (%6ldus)\t|",
-           base->ingestion_time_us,
-           device_str,
-           ansi_color_1,
-           base->name,
-           ansi_color_2,
-           (f64) elapsed_us * 1e-3,
-           elapsed_us);
-
-    // Don't show bandwidth for custom traces
-    if (base->type != DSC_TRACE_CUSTOM && base->type != DSC_TENSOR_ALLOC && base->type != DSC_TENSOR_FREE) {
-        printf("\t%10.2fGB/s (%ldB)",
-               bandwidth,
-               base->rw_bytes);
-    }
-
-    printf("\n");
-
-    fprintf(json_file, R"({"name":"%s","cat":"%s","ph":"X","ts":%ld,"dur":%ld,"pid":%d,"tid":%ld)",
-            base->name,
-            DSC_TRACE_CATEGORY[base->type],
-            base->ingestion_time_us,
-            elapsed_us,
-            cpu_trace->pid,
-            cpu_trace->tid);
-
-    fprintf(json_file, R"(,"args":{)");
-
-    if (base->type != DSC_TRACE_CUSTOM) fprintf(json_file, R"("bandwidth":"%.2fGB/s")", bandwidth);
-
-    internal::tracing::dump_trace_base(json_file, base);
-    fprintf(json_file, R"(}})" ",\n");
 }
 
 static DSC_INLINE void dsc_cpu_next_trace(dsc_trace_ctx *ctx) {
@@ -185,7 +190,7 @@ static DSC_INLINE void dsc_cpu_insert_user_trace(dsc_trace_ctx *ctx,
 
 static DSC_INLINE dsc_trace_ctx *dsc_cpu_tracing_init() { return nullptr; }
 static DSC_INLINE void dsc_cpu_tracing_dispose(const dsc_trace_ctx *) {}
-static DSC_INLINE void dsc_cpu_tracing_dump(void *, FILE *) {}
+static DSC_INLINE void dsc_cpu_tracing_dump(void *, FILE *, bool, bool) {}
 static DSC_INLINE void dsc_cpu_next_trace(dsc_trace_ctx *) {}
 static DSC_INLINE void dsc_cpu_dump_json_metadata(FILE *, void *) {}
 static DSC_INLINE void dsc_cpu_insert_user_trace(dsc_trace_ctx *, const char *, const u64, const u64) {}

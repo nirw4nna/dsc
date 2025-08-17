@@ -64,7 +64,7 @@ struct dsc_device {
 
     // Iterator method to get to the next trace. Will update trace_ctx->current_trace
     void (*next_trace)                  (dsc_trace_ctx *ctx);
-    void (*dump_trace)                  (void *trace, FILE *json_file);
+    void (*dump_trace)                  (void *trace, FILE *json_file, bool to_console, bool to_json);
     // Dump device-specific json metadata events (i.e. set processor name). This is purely cosmetic
     void (*dump_json_metadata)          (FILE *json_file, void *extra_info);
 };

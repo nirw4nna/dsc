@@ -76,7 +76,8 @@ static DSC_INLINE void dsc_gpu_tracing_dispose(const dsc_trace_ctx *ctx) {
     internal::tracing::dispose(ctx);
 }
 
-static DSC_INLINE void dsc_gpu_tracing_dump(void *trace, FILE *json_file) {
+static DSC_INLINE void dsc_gpu_tracing_dump(void *trace, FILE *json_file,
+                                            const bool to_console, const bool to_json) {
     dsc_gpu_trace *gpu_trace = (dsc_gpu_trace *) trace;
 
     if (gpu_trace->to_eval()) {
@@ -91,44 +92,47 @@ static DSC_INLINE void dsc_gpu_tracing_dump(void *trace, FILE *json_file) {
     const u64 elapsed_us = (u64) (elapsed_ms * 1e3);
     const f64 bandwidth = (f64) base->rw_bytes / (elapsed_ms * 1e-3 * DSC_GB(1));
 
-    // So that we can align this
-    char formatted_kernel_name[256];
-    snprintf(formatted_kernel_name, 256,
-             "%s<(%d,%d,%d), (%d,%d,%d)>",
-             base->name,
-             gpu_trace->grid_dim.x,
-             gpu_trace->grid_dim.y,
-             gpu_trace->grid_dim.z,
-             gpu_trace->block_dim.x,
-             gpu_trace->block_dim.y,
-             gpu_trace->block_dim.z);
+    if (to_console) {
+        // So that we can align this
+        char formatted_kernel_name[256];
+        snprintf(formatted_kernel_name, 256,
+                 "%s<(%d,%d,%d), (%d,%d,%d)>",
+                 base->name,
+                 gpu_trace->grid_dim.x,
+                 gpu_trace->grid_dim.y,
+                 gpu_trace->grid_dim.z,
+                 gpu_trace->block_dim.x,
+                 gpu_trace->block_dim.y,
+                 gpu_trace->block_dim.z);
 
-    // Console dumping
-    printf("*** [%ld] \033[38;5;208m%-12s\033[0m %-40s %.2fms (%6ldus)\t|\t%10.2fGB/s (%ldB)\n",
-           base->ingestion_time_us,
-           "GPU",
-           formatted_kernel_name,
-           elapsed_ms,
-           elapsed_us,
-           bandwidth,
-           base->rw_bytes);
+        // Console dumping
+        printf("*** [%ld] \033[38;5;208m%-12s\033[0m %-40s %.2fms (%6ldus)\t|\t%10.2fGB/s (%ldB)\n",
+               base->ingestion_time_us,
+               "GPU",
+               formatted_kernel_name,
+               elapsed_ms,
+               elapsed_us,
+               bandwidth,
+               base->rw_bytes);
+    }
 
-    // json dumping
-    fprintf(json_file, R"({"name":"%s","cat":"%s","ph":"X","ts":%ld,"dur":%ld,"pid":0,"tid":0)",
-            base->name,
-            DSC_TRACE_CATEGORY[base->type],
-            base->ingestion_time_us,
-            elapsed_us);
-    fprintf(json_file, R"(,"args":{"bandwidth":"%.2fGB/s")", bandwidth);
-    internal::tracing::dump_trace_base(json_file, base);
-    fprintf(json_file, R"==(,"launch_config":{"grid":"(%d,%d,%d)","block":"(%d,%d,%d)"}})==",
-            gpu_trace->grid_dim.x,
-            gpu_trace->grid_dim.y,
-            gpu_trace->grid_dim.z,
-            gpu_trace->block_dim.x,
-            gpu_trace->block_dim.y,
-            gpu_trace->block_dim.z);
-    fprintf(json_file, R"(})" ",\n");
+    if (to_json) {
+        fprintf(json_file, R"({"name":"%s","cat":"%s","ph":"X","ts":%ld,"dur":%ld,"pid":0,"tid":0)",
+                base->name,
+                DSC_TRACE_CATEGORY[base->type],
+                base->ingestion_time_us,
+                elapsed_us);
+        fprintf(json_file, R"(,"args":{"bandwidth":"%.2fGB/s")", bandwidth);
+        internal::tracing::dump_trace_base(json_file, base);
+        fprintf(json_file, R"==(,"launch_config":{"grid":"(%d,%d,%d)","block":"(%d,%d,%d)"}})==",
+                gpu_trace->grid_dim.x,
+                gpu_trace->grid_dim.y,
+                gpu_trace->grid_dim.z,
+                gpu_trace->block_dim.x,
+                gpu_trace->block_dim.y,
+                gpu_trace->block_dim.z);
+        fprintf(json_file, R"(})" ",\n");
+    }
 
     if (gpu_trace->to_eval()) {
         DSC_GPU_CHECK(gpu_event_destroy(gpu_trace->start_event));
@@ -154,7 +158,7 @@ static DSC_INLINE void dsc_gpu_dump_json_metadata(FILE *json_file, void *extra_i
 
 static DSC_INLINE dsc_trace_ctx *dsc_gpu_tracing_init() { return nullptr; }
 static DSC_INLINE void dsc_gpu_tracing_dispose(const dsc_trace_ctx *) {}
-static DSC_INLINE void dsc_gpu_tracing_dump(void *, FILE *) {}
+static DSC_INLINE void dsc_gpu_tracing_dump(void *, FILE *, bool, bool) {}
 static DSC_INLINE void dsc_gpu_next_trace(dsc_trace_ctx *) {}
 static DSC_INLINE void dsc_gpu_dump_json_metadata(FILE *, void *) {}
 

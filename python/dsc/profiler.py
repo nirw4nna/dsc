@@ -14,9 +14,6 @@ import atexit
 import os
 
 
-PERFETTO = os.getenv('PERFETTO', '0') != '0'
-
-
 def _is_tracing_enabled() -> bool:
     return bool(_dsc_tracing_enabled())
 
@@ -27,7 +24,8 @@ def _dump_traces():
         return
 
     _dsc_dump_traces(_get_ctx())
-    if PERFETTO:
+    trace_value = int(os.getenv('TRACE', '0'))
+    if trace_value >= 2:
         _serve_traces()
 
 

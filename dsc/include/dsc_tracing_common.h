@@ -844,21 +844,20 @@ DSC_INLINE bool is_valid_trace(const void *trace) {
     return base->type != DSC_TRACE_EMPY;
 }
 
-DSC_INLINE bool trace_var_is_set() {
+DSC_INLINE int trace_var() {
     const char *trace_str = std::getenv("TRACE");
-    bool enabled = false;
+    int trace = 0;
 
     if (trace_str) {
-        const int tracing_flag = std::atoi(trace_str);
-        enabled = tracing_flag != 0;
+        trace = std::atoi(trace_str);
     }
 
-    return enabled;
+    return trace;
 }
 }
 
 static DSC_INLINE bool dsc_tracing_is_enabled() {
-    static const bool tracing_enabled = internal::tracing::trace_var_is_set();
+    static const bool tracing_enabled = internal::tracing::trace_var() > 0;
 
     return tracing_enabled;
 }
@@ -866,26 +865,32 @@ static DSC_INLINE bool dsc_tracing_is_enabled() {
 static DSC_INLINE void dsc_tracing_dump(dsc_ctx *ctx) {
     if (!dsc_tracing_is_enabled()) return;
 
+    static const bool dump_to_json = internal::tracing::trace_var() & (1 << 1);
+    static const bool dump_to_console = internal::tracing::trace_var() & 1;
+
     dsc_trace_ctx *tracing_ctxs[DSC_MAX_DEVICES];
     for (int i = 0; i < DSC_MAX_DEVICES; ++i) {
         const dsc_device *device = ctx->devices[i];
         tracing_ctxs[i] = device->trace_ctx;
     }
 
-    FILE *json_file = fopen("traces.json", "wt");
-    DSC_ASSERT(json_file);
+    FILE *json_file = nullptr;
+    if (dump_to_json) {
+        json_file = fopen("traces.json", "wt");
+        DSC_ASSERT(json_file);
+        fprintf(json_file, "[\n");
 
-    fprintf(json_file, "[\n");
-
-    // Dump json metadata before dumping actual traces
-    for (int i = 0; i < DSC_MAX_DEVICES; ++i) {
-        const dsc_device *device = ctx->devices[i];
-        device->dump_json_metadata(json_file, device->extra_info);
+        // Dump json metadata before dumping actual traces
+        for (int i = 0; i < DSC_MAX_DEVICES; ++i) {
+            const dsc_device *device = ctx->devices[i];
+            device->dump_json_metadata(json_file, device->extra_info);
+        }
     }
 
-    printf("\n");
+    if (dump_to_console) {
+        printf("\n");
+    }
 
-    // NOTE: this doesn't make sense here!
     while (true) {
         // Find the first potential trace for dumping
         int dump_device_idx = 0;
@@ -916,14 +921,19 @@ static DSC_INLINE void dsc_tracing_dump(dsc_ctx *ctx) {
         }
 
         // Dump only the trace that came in first and advance the current pointer only for that device
-        ctx->devices[dump_device_idx]->dump_trace(trace_to_dump, json_file);
+        ctx->devices[dump_device_idx]->dump_trace(trace_to_dump, json_file, dump_to_console, dump_to_json);
         ctx->devices[dump_device_idx]->next_trace(tracing_ctxs[dump_device_idx]);
     }
-    printf("\n");
-    fflush(stdout);
 
-    fprintf(json_file, "]");
-    fclose(json_file);
+    if (dump_to_console) {
+        printf("\n");
+        fflush(stdout);
+    }
+
+    if (dump_to_json) {
+        fprintf(json_file, "]");
+        fclose(json_file);
+    }
 }
 
 #undef TYPED_FILL

@@ -241,7 +241,6 @@ class Qwen25Model(nn.Module):
         h = self.norm(h)
         return self.lm_head(h), next_kv_caches
 
-    @dsc.profile()
     def generate(self, idx: dsc.Tensor, tokenizer, max_new_tokens: int, top_k: int = 10):
         prompt_processing_start = perf_counter()
         prompt_tokens = idx.reshape(1, -1)
