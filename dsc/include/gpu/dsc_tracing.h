@@ -146,9 +146,8 @@ static DSC_INLINE void dsc_gpu_next_trace(dsc_trace_ctx *ctx) {
 
 static DSC_INLINE void dsc_gpu_dump_json_metadata(FILE *json_file, void *extra_info) {
     const dsc_gpu_dev_info *dev_info = (dsc_gpu_dev_info *) extra_info;
-    fprintf(json_file, R"({"name":"process_name","ph":"M","pid":%d,"tid":0,"args":{"name":"%s:%s"},"process_sort_index":100})" ",\n",
+    fprintf(json_file, R"({"name":"process_name","ph":"M","pid":%d,"tid":0,"args":{"name":"%s"},"process_sort_index":100})" ",\n",
             dev_info->dev_idx,
-            DSC_GPU_PLATFORM_NAMES[dev_info->platform],
             dev_info->name);
     fprintf(json_file, R"({"name":"thread_name","ph":"M","pid":%d,"tid":0,"args":{"name":"Stream"},"thread_sort_index":101})" ",\n",
             dev_info->dev_idx);

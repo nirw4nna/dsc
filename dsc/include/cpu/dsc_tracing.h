@@ -32,9 +32,6 @@ struct dsc_cpu_trace {
     int pid;
 };
 
-static const int dsc_main_pid = getpid();
-static const u64 dsc_main_tid = pthread_self();
-
 template<typename T>
 struct dsc_cpu_trace_tracker {
     dsc_cpu_trace_tracker(dsc_trace_ctx *ctx,
@@ -43,12 +40,14 @@ struct dsc_cpu_trace_tracker {
                           const T *args) {
         using namespace internal::tracing;
 
-        if (dsc_tracing_is_enabled()) {
+        // Memory allocations are CPU-only
+        static const bool filter_alloc = dsc_get_env("TRACE_ALLOC", 0) == 0;
+        if (dsc_tracing_is_enabled() && (!filter_alloc || (type != DSC_TENSOR_ALLOC && type != DSC_TENSOR_FREE))) {
             check_if_full<dsc_cpu_trace>(ctx);
             trace_ = next_empty_trace<dsc_cpu_trace>(ctx);
             fill_trace(&trace_->base, name, type, args);
-            trace_->pid = dsc_main_pid;
-            trace_->tid = dsc_main_tid;
+            trace_->pid = getpid();
+            trace_->tid = pthread_self();
             trace_->start_us = time_us();
         }
     }
@@ -182,8 +181,8 @@ static DSC_INLINE void dsc_cpu_insert_user_trace(dsc_trace_ctx *ctx,
     trace->start_us = start;
     trace->stop_us = start + duration;
     // NOTE: maybe it's a good idea to put these kind of events on a separate pid/tid?
-    trace->pid = dsc_main_pid;
-    trace->tid = dsc_main_tid;
+    trace->pid = getpid();
+    trace->tid = pthread_self();
 }
 
 #else

@@ -75,7 +75,8 @@
     DSC_TRACE_SET_TENSOR(XB, xb);                                      \
     DSC_TRACE_SET_TENSOR(OUT, out);                                    \
     args__.trans_b = (trans_b_);                                       \
-    DSC_INSERT_NAMED_TRACE((DEV), dsc_matmul_args, DSC_MATMUL_OP, ((trans_b_) && (is_gevm_)) ? "dsc_gevm" : "dsc_gemm", ##__VA_ARGS__)
+    const bool is_gpu__ = (DEV)->type == GPU;                          \
+    DSC_INSERT_NAMED_TRACE((DEV), dsc_matmul_args, DSC_MATMUL_OP, ((trans_b_) && (is_gevm_)) ? (is_gpu__ ? "dsc_gpu_gevm" : "dsc_cpu_gevm") : (is_gpu__ ? "dsc_gpu_gemm" : "dsc_cpu_gemm"), ##__VA_ARGS__)
 
 #define DSC_TRACE_MASK_OP(DEV, X, MASK, value_, ...) \
     dsc_mask_args args__{};                          \
@@ -640,6 +641,7 @@ static constexpr const char *DSC_TRACE_CATEGORY[] = {
     "op;mask",
     "op;outer",
     "op;where",
+    "op;idx;get",
     "op;slice;get",
     "op;tensor;get",
     "op;slice;set",
@@ -843,21 +845,10 @@ DSC_INLINE bool is_valid_trace(const void *trace) {
     const dsc_trace_common *base = (const dsc_trace_common *) trace;
     return base->type != DSC_TRACE_EMPY;
 }
-
-DSC_INLINE int trace_var() {
-    const char *trace_str = std::getenv("TRACE");
-    int trace = 0;
-
-    if (trace_str) {
-        trace = std::atoi(trace_str);
-    }
-
-    return trace;
-}
 }
 
 static DSC_INLINE bool dsc_tracing_is_enabled() {
-    static const bool tracing_enabled = internal::tracing::trace_var() > 0;
+    static const bool tracing_enabled = dsc_get_env("TRACE") > 0;
 
     return tracing_enabled;
 }
@@ -865,8 +856,8 @@ static DSC_INLINE bool dsc_tracing_is_enabled() {
 static DSC_INLINE void dsc_tracing_dump(dsc_ctx *ctx) {
     if (!dsc_tracing_is_enabled()) return;
 
-    static const bool dump_to_json = internal::tracing::trace_var() & (1 << 1);
-    static const bool dump_to_console = internal::tracing::trace_var() & 1;
+    static const bool dump_to_json = dsc_get_env("TRACE") & (1 << 1);
+    static const bool dump_to_console = dsc_get_env("TRACE") & 1;
 
     dsc_trace_ctx *tracing_ctxs[DSC_MAX_DEVICES];
     for (int i = 0; i < DSC_MAX_DEVICES; ++i) {

@@ -23,6 +23,7 @@
 // (6) Use the same approach to pass shape as `full`               //
 // =============================================================== //
 
+#include <cstdlib> // getenv, atoi
 #include <cstdio>
 #include "dsc_dtype.h"
 
@@ -213,6 +214,17 @@ struct dsc_slice {
         };
     };
 };
+
+// ============================================================
+// Helpers
+
+static DSC_INLINE int dsc_get_env(const char *env, int value = 0) {
+    if (const char *str = std::getenv(env)) {
+        value = std::atoi(str);
+    }
+
+    return value;
+}
 
 // ============================================================
 // Initialization
