@@ -88,7 +88,7 @@ static DSC_INLINE void dsc_gpu_tracing_dump(void *trace, FILE *json_file,
 
     const dsc_trace_common *base = &gpu_trace->base;
 
-    const f64 elapsed_ms = gpu_trace->elapsed_ms;
+    const f64 elapsed_ms = (f64) gpu_trace->elapsed_ms;
     const u64 elapsed_us = (u64) (elapsed_ms * 1e3);
     const f64 bandwidth = (f64) base->rw_bytes / (elapsed_ms * 1e-3 * DSC_GB(1));
 
