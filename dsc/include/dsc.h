@@ -23,17 +23,29 @@
 // (6) Use the same approach to pass shape as `full`               //
 // =============================================================== //
 
+#include <cstdlib> // getenv, atoi
 #include <cstdio>
-#include <cstdlib>
 #include "dsc_dtype.h"
 
 
 #if !defined(DSC_MAX_OBJS)
-#    define DSC_MAX_OBJS     ((int) 1'000)
+#    define DSC_MAX_OBJS            ((int) 1'000)
 #endif
-#define DSC_MAX_DEVICES      ((int) 2)
-#define DSC_DEFAULT_DEVICE   CPU
-#define DSC_COMPARISON_OPS   ((int) 6)
+
+#define DSC_MAX_DEVICES             ((int) 2)
+#define DSC_DEFAULT_DEVICE          CPU
+#define DSC_COMPARISON_OPS          ((int) 6)
+#define DSC_TRACE_NAME_MAX          ((int) 32)
+#define DSC_TRACE_CAT_MAX           ((int) 16)
+
+#if !defined(DSC_MAX_TRACES_PER_CHUNK)
+#   define DSC_MAX_TRACES_PER_CHUNK 1'000'000
+#endif
+
+#if !defined(DSC_MAX_CHUNKS)
+#   define DSC_MAX_CHUNKS 100
+#endif
+
 
 static_assert(DSC_MAX_DEVICES == 2, "DSC_MAX_DEVICES != 2 - update the code");
 static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the code");
@@ -82,6 +94,7 @@ static_assert(DSC_COMPARISON_OPS == 6, "DSC_COMPARISON_OPS != 6 - update the cod
 #define DSC_CEIL(x, y)       (((x) + ((y) - 1)) / (y))
 #define DSC_B_TO_KB(b)       ((f64) (b) / 1024.)
 #define DSC_B_TO_MB(b)       ((f64) (b) / (1024. * 1024.))
+#define DSC_GB(gb)           ((usize) ((gb) * 1024ULL * 1024ULL * 1024ULL))
 #define DSC_MB(mb)           ((usize) ((mb) * 1024ULL * 1024ULL))
 #define DSC_KB(kb)           ((usize) ((kb) * 1024ULL))
 
@@ -135,15 +148,9 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 extern "C" {
 #endif
 
-struct dsc_ctx;
 struct dsc_data_buffer;
-struct dsc_trace;
-enum dsc_trace_phase : char;
-
-struct dsc_traces {
-    dsc_trace *traces;
-    u64 n_traces;
-};
+struct dsc_trace_ctx;
+struct dsc_device;
 
 enum dsc_device_type : i8 {
     DEFAULT = -1,
@@ -189,6 +196,12 @@ struct dsc_tensor {
     dsc_device_type device;
 };
 
+struct dsc_ctx {
+    dsc_device *devices[DSC_MAX_DEVICES];
+    dsc_tensor *tensors;
+    dsc_device_type default_device;
+};
+
 struct dsc_pair {
     dsc_tensor *first, *second;
 };
@@ -201,6 +214,17 @@ struct dsc_slice {
         };
     };
 };
+
+// ============================================================
+// Helpers
+
+static DSC_INLINE int dsc_get_env(const char *env, int value = 0) {
+    if (const char *str = std::getenv(env)) {
+        value = std::atoi(str);
+    }
+
+    return value;
+}
 
 // ============================================================
 // Initialization
@@ -245,16 +269,12 @@ extern bool dsc_gpu_has_bf16(dsc_ctx *);
 // ============================================================
 // Tracing
 
-extern bool dsc_tracing_enabled(dsc_ctx *);
-
-extern void dsc_traces_record(dsc_ctx *ctx,
-                              bool record = true);
+extern bool dsc_tracing_enabled();
 
 extern void dsc_insert_trace(dsc_ctx *ctx,
                              const char *name,
-                             const char *cat,
-                             u64 ts,
-                             dsc_trace_phase phase);
+                             u64 start,
+                             u64 duration);
 
 extern void dsc_dump_traces(dsc_ctx *ctx);
 

@@ -183,5 +183,6 @@ class Embedding(Module):
         super().__init__()
         self.weight = Parameter((num_embeddings, embedding_size), dtype=dtype)
 
+    @trace('Embedding')
     def forward(self, x: Tensor) -> Tensor:
         return self.weight[x]

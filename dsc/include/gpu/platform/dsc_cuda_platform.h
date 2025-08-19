@@ -93,3 +93,15 @@ static DSC_INLINE cublasStatus_t gpu_blas_bfgemm(const gpu_blas_handle handle, c
                         out, out_dtype, stride_out,
                         compute_dtype, CUBLAS_GEMM_DEFAULT);
 }
+
+// ============================================================
+// Event API
+//
+
+#define gpu_event_create        cudaEventCreate
+#define gpu_event_destroy       cudaEventDestroy
+#define gpu_event_record        cudaEventRecord
+#define gpu_event_synchronize   cudaEventSynchronize
+#define gpu_event_elapsed       cudaEventElapsedTime
+
+using gpu_event = cudaEvent_t;

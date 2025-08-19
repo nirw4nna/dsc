@@ -32,7 +32,6 @@ _DSC_MAX_DIMS = 4
 _DSC_TRACE_NAME_MAX = 32
 _DSC_TRACE_CAT_MAX = 16
 _DSC_VALUE_NONE = 2**31 - 1
-_DSC_TRACE_FILE = 'traces.json'
 _DSC_PLATFORM_CUDA = 0
 _DSC_PLATFORM_ROCM = 1
 
@@ -65,11 +64,6 @@ class _DscTensor(Structure):
         ('dtype', c_uint8),
         ('device', c_int8),
     ]
-
-class _DscTracePhase(Enum):
-    BEGIN = 'B'
-    END = 'E'
-    COMPLETE = 'X'
 
 class _DscComparison(Enum):
     EQ = 0
@@ -223,33 +217,23 @@ _lib.dsc_gpu_has_bf16.argtypes = [_DscCtx]
 _lib.dsc_gpu_has_bf16.restype = c_bool
 
 
-# extern bool dsc_tracing_enabled(dsc_ctx *);
-def _dsc_tracing_enabled(ctx: _DscCtx) -> c_bool:
-    return _lib.dsc_tracing_enabled(ctx)
+# extern bool dsc_tracing_enabled();
+def _dsc_tracing_enabled() -> c_bool:
+    return _lib.dsc_tracing_enabled()
 
 
-_lib.dsc_tracing_enabled.argtypes = [_DscCtx]
+_lib.dsc_tracing_enabled.argtypes = []
 _lib.dsc_tracing_enabled.restype = c_bool
-
-
-# extern void dsc_traces_record(dsc_ctx *ctx, bool record);
-def _dsc_traces_record(ctx: _DscCtx, record: bool):
-    _lib.dsc_traces_record(ctx, c_bool(record))
-
-
-_lib.dsc_traces_record.argtypes = [_DscCtx, c_bool]
-_lib.dsc_traces_record.restype = None
 
 
 # extern void dsc_insert_trace(dsc_ctx *ctx,
 #                              const char *name,
-#                              const char *cat,
-#                              u64 ts,
-#                              dsc_trace_phase phase);
-def _dsc_insert_trace(ctx: _DscCtx, name: bytes, cat: bytes, ts: int, phase: bytes):
-    return _lib.dsc_insert_trace(ctx, name, cat, c_uint64(ts), phase)
+#                              u64 start,
+#                              u64 duration);
+def _dsc_insert_trace(ctx: _DscCtx, name: bytes, start: int, duration: int):
+    return _lib.dsc_insert_trace(ctx, name, c_uint64(start), c_uint64(duration))
 
-_lib.dsc_insert_trace.argtypes = [_DscCtx, c_char_p, c_char_p, c_uint64, c_char]
+_lib.dsc_insert_trace.argtypes = [_DscCtx, c_char_p, c_uint64, c_uint64]
 _lib.dsc_insert_trace.restype = None
 
 

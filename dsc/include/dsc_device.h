@@ -7,6 +7,7 @@
 #pragma once
 
 #include "dsc.h"
+#include <cstdlib>
 
 #define dsc_node_is_free(PTR) ((PTR)->data == nullptr && (PTR)->next == nullptr && (PTR)->size == 0)
 #define dsc_node_mark_free(PTR) \
@@ -52,12 +53,20 @@ struct dsc_device {
     // Extra device-specific infos
     void *extra_info;
 
+    dsc_trace_ctx *trace_ctx;
+
     usize mem_size, used_mem;
     dsc_device_type type;
 
     void (*memcpy)  (void *dst, const void *src, usize nb, dsc_memcpy_dir dir);
     void (*memset)  (void *dst, int c, usize nb);
     void (*dispose) (dsc_device *dev);
+
+    // Iterator method to get to the next trace. Will update trace_ctx->current_trace
+    void (*next_trace)                  (dsc_trace_ctx *ctx);
+    void (*dump_trace)                  (void *trace, FILE *json_file, bool to_console, bool to_json);
+    // Dump device-specific json metadata events (i.e. set processor name). This is purely cosmetic
+    void (*dump_json_metadata)          (FILE *json_file, void *extra_info);
 };
 
 namespace internal::alloc {

@@ -8,6 +8,7 @@
 #include "cpu/dsc_blas.h"
 #include "cpu/dsc_iter.h"
 #include "cpu/dsc_ops.h"
+#include "cpu/dsc_tracing.h"
 #include "dsc_device.h"
 #include <cstring> // memcpy
 #include <random>
@@ -53,6 +54,8 @@ static DSC_INLINE void cast_op(dsc_device *dev,
 void dsc_cpu_cast(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_CAST_OP(dev, x, out);
+
     switch (x->dtype) {
         case BOOL:
             cast_op<bool>(dev, x, out);
@@ -85,9 +88,10 @@ static DSC_INLINE void assign_op(dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_cpu_arange(dsc_device *,
+void dsc_cpu_arange(dsc_device *dev,
                     dsc_tensor *DSC_RESTRICT x,
                     const f64 start, const f64 step) {
+    DSC_TRACE_ARANGE_OP(dev, x, start, step);
     switch (x->dtype) {
         case I32:
             assign_op<i32>(x, (i32) start, (i32) step);
@@ -123,10 +127,11 @@ static DSC_INLINE void repeat(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_cpu_repeat(dsc_device *,
+void dsc_cpu_repeat(dsc_device *dev,
                     const dsc_tensor *DSC_RESTRICT x,
                     dsc_tensor *DSC_RESTRICT out,
                     const int repeats, const int axis_idx) {
+    DSC_TRACE_REPEAT_OP(dev, x, out, repeats, axis_idx);
     switch (x->dtype) {
         case BOOL:
             repeat<bool>(x, out, repeats, axis_idx);
@@ -158,7 +163,8 @@ static DSC_INLINE void fill_randn(dsc_tensor *DSC_RESTRICT x) {
     }
 }
 
-void dsc_cpu_randn(dsc_device *, dsc_tensor *DSC_RESTRICT x) {
+void dsc_cpu_randn(dsc_device *dev, dsc_tensor *DSC_RESTRICT x) {
+    DSC_TRACE_RANDN_OP(dev, x);
     switch (x->dtype) {
         case F32:
             fill_randn<f32>(x);
@@ -212,7 +218,7 @@ static DSC_INLINE void topk(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_cpu_topk(dsc_device *,
+void dsc_cpu_topk(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT tmp_values,
                   dsc_tensor *DSC_RESTRICT tmp_indexes,
@@ -220,6 +226,7 @@ void dsc_cpu_topk(dsc_device *,
                   dsc_tensor *DSC_RESTRICT out_indexes,
                   const int k, const int axis_idx,
                   const bool largest) {
+    DSC_TRACE_TOPK_OP(dev, x, k, axis_idx, largest);
     switch (x->dtype) {
         case I32:
             topk<i32>(x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
@@ -259,10 +266,11 @@ static DSC_INLINE void multinomial(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_cpu_multinomial(dsc_device *,
+void dsc_cpu_multinomial(dsc_device *dev,
                          const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out,
                          const int num_samples) {
+    DSC_TRACE_MULTINOMIAL_OP(dev, x, out, num_samples);
     switch (x->dtype) {
         case F32:
             multinomial<f32>(x, out, num_samples);
@@ -283,7 +291,6 @@ static DSC_INLINE void concat(dsc_tensor **to_concat,
                               dsc_tensor *DSC_RESTRICT out,
                               const int axis_idx) {
     DSC_DATA(T, out);
-    // Todo: validate the perf of this implementation
     dsc_axis_iterator *iterators = (dsc_axis_iterator *) alloca(tensors * sizeof(dsc_axis_iterator));
     for (int i = 0; i < tensors; ++i) iterators[i] = dsc_axis_iterator(to_concat[i], axis_idx);
 
@@ -305,11 +312,12 @@ static DSC_INLINE void concat(dsc_tensor **to_concat,
     }
 }
 
-void dsc_cpu_concat(dsc_device *,
+void dsc_cpu_concat(dsc_device *dev,
                     dsc_tensor **to_concat,
                     const int tensors,
                     dsc_tensor *DSC_RESTRICT out,
                     const int axis_idx) {
+    DSC_TRACE_CONCAT_OP(dev, out, tensors, axis_idx);
     switch (out->dtype) {
         case BOOL:
             concat<bool>(to_concat, tensors, out, axis_idx);
@@ -342,11 +350,12 @@ static DSC_INLINE void transpose(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_cpu_transpose(dsc_device *,
+void dsc_cpu_transpose(dsc_device *dev,
                        const dsc_tensor *DSC_RESTRICT x,
                        dsc_tensor *DSC_RESTRICT out,
                        const int *new_shape,
                        const int *new_stride) {
+    DSC_TRACE_TRANSPOSE_OP(dev, x, out);
     switch (x->dtype) {
         case BOOL:
             transpose<bool>(x, out, new_shape, new_stride);
@@ -382,10 +391,11 @@ static DSC_INLINE void tril(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_cpu_tril(dsc_device *,
+void dsc_cpu_tril(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   const int diagonal,
                   dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_TRIL_OP(dev, x, out, diagonal);
     switch (x->dtype) {
         case BOOL:
             tril<bool>(x, diagonal, out);
@@ -426,11 +436,13 @@ static DSC_INLINE void copy_slice(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_cpu_get_slice(dsc_device *,
+void dsc_cpu_get_slice(dsc_device *dev,
                        const dsc_tensor *DSC_RESTRICT x,
                        dsc_tensor *DSC_RESTRICT out,
                        const int n_slices, const dsc_slice *slices,
                        const bool whole) {
+    DSC_TRACE_GET_SLICE(dev, x, out, slices, n_slices);
+
     switch (out->dtype) {
         case BOOL:
             copy_slice<bool>(x, out, n_slices, slices, whole);
@@ -495,13 +507,14 @@ static DSC_INLINE void set_slice(dsc_tensor *DSC_RESTRICT xa,
     }
 }
 
-void dsc_cpu_set_slice(dsc_device *,
+void dsc_cpu_set_slice(dsc_device *dev,
                        dsc_tensor *DSC_RESTRICT xa,
                        const bool xa_scalar,
                        const dsc_tensor *DSC_RESTRICT xb,
                        const bool xb_scalar,
                        const int n_slices, const dsc_slice *slices,
                        const bool whole) {
+    DSC_TRACE_SET_SLICE(dev, xa, xb, slices, n_slices);
     switch (xa->dtype) {
         case BOOL:
             set_slice<bool>(xa, xa_scalar, xb, xb_scalar, n_slices, slices, whole);
@@ -611,6 +624,7 @@ void dsc_cpu_add(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(dev, xa, xb, out);
     binary_op(dev, xa, xb, out, cpu_add_op());
 }
 
@@ -618,6 +632,7 @@ void dsc_cpu_sub(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(dev, xa, xb, out);
     binary_op(dev, xa, xb, out, cpu_sub_op());
 }
 
@@ -625,6 +640,7 @@ void dsc_cpu_mul(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(dev, xa, xb, out);
     binary_op(dev, xa, xb, out, cpu_mul_op());
 }
 
@@ -632,6 +648,7 @@ void dsc_cpu_div(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(dev, xa, xb, out);
     binary_op(dev, xa, xb, out, cpu_div_op());
 }
 
@@ -639,6 +656,7 @@ void dsc_cpu_pow(dsc_device *dev,
                  const dsc_tensor *xa,
                  const dsc_tensor *xb,
                  dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(dev, xa, xb, out);
     binary_op(dev, xa, xb, out, cpu_pow_op());
 }
 
@@ -647,6 +665,7 @@ void dsc_cpu_compare(dsc_device *dev,
                      const dsc_tensor *xb,
                      const dsc_comparison_op comp,
                      dsc_tensor *out) {
+    DSC_TRACE_BINARY_OP(dev, xa, xb, out);
     switch (comp) {
         case EQ:
             binary_op(dev, xa, xb, out, cpu_eq_op());
@@ -684,10 +703,11 @@ static DSC_INLINE void masked_fill(dsc_tensor *x,
     }
 }
 
-void dsc_cpu_masked_fill(dsc_device *,
+void dsc_cpu_masked_fill(dsc_device *dev,
                          dsc_tensor *x,
                          const dsc_tensor *mask,
                          const f64 value) {
+    DSC_TRACE_MASK_OP(dev, x, mask, value);
     switch (x->dtype) {
         case BOOL:
             masked_fill(x, mask, (bool) value);
@@ -720,10 +740,11 @@ static DSC_INLINE void outer(const dsc_tensor *DSC_RESTRICT xa,
     }
 }
 
-void dsc_cpu_outer(dsc_device *,
+void dsc_cpu_outer(dsc_device *dev,
                    const dsc_tensor *DSC_RESTRICT xa,
                    const dsc_tensor *DSC_RESTRICT xb,
                    dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_OUTER_OP(dev, xa, xb, out);
     switch (xa->dtype) {
         case BOOL:
             outer<bool>(xa, xb, out);
@@ -770,11 +791,12 @@ static DSC_INLINE void where(const dsc_tensor *DSC_RESTRICT condition,
     }
 }
 
-void dsc_cpu_where(dsc_device *,
+void dsc_cpu_where(dsc_device *dev,
                    const dsc_tensor *DSC_RESTRICT condition,
                    const dsc_tensor *DSC_RESTRICT input,
                    const dsc_tensor *DSC_RESTRICT other,
                    dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_WHERE_OP(dev, condition, input, other, out);
     switch (input->dtype) {
         case BOOL:
             where<bool>(condition, input, other, out);
@@ -792,22 +814,23 @@ void dsc_cpu_where(dsc_device *,
     }
 }
 
-
 void dsc_cpu_matmul(dsc_device *dev,
                     const dsc_tensor *DSC_RESTRICT xa,
                     const dsc_tensor *DSC_RESTRICT xb,
                     const bool trans_b,
                     dsc_tensor *DSC_RESTRICT out) {
+    const int m = dsc_tensor_get_dim(out, -2);
+    // If the number of rows in the A matrix is 1 then this is a GEVM
+    const bool is_gevm = m == 1;
+    DSC_TRACE_MATMUL_OP(dev, xa, xb, trans_b, out, is_gevm);
+
     dsc_blas_ctx *blas_ctx = (dsc_blas_ctx *) dev->extra_info;
 
     const int stride_a = dsc_tensor_get_stride(xa, -2);
     const int stride_b = dsc_tensor_get_stride(xb, -2);
     const int stride_out = dsc_tensor_get_stride(out, -2);
-    const int m = dsc_tensor_get_dim(out, -2);
     const int n = dsc_tensor_get_dim(out, -1);
     const int k = dsc_tensor_get_dim(xa, -1);
-    // If the number of rows in the A matrix is 1 then this is a GEVM
-    const bool is_gevm = m == 1;
 
     const int d0_out = out->shape[0];
     const int d1_out = out->shape[1];
@@ -921,30 +944,35 @@ static DSC_INLINE void unary_op(dsc_device *dev,
 void dsc_cpu_cos(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_UNARY_OP(dev, x, out);
     unary_op(dev, x, out, cpu_cos_op());
 }
 
 void dsc_cpu_sin(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_UNARY_OP(dev, x, out);
     unary_op(dev, x, out, cpu_sin_op());
 }
 
 void dsc_cpu_tanh(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_UNARY_OP(dev, x, out);
     unary_op(dev, x, out, cpu_tanh_op());
 }
 
 void dsc_cpu_exp(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_UNARY_OP(dev, x, out);
     unary_op(dev, x, out, cpu_exp_op());
 }
 
 void dsc_cpu_sqrt(dsc_device *dev,
                   const dsc_tensor *DSC_RESTRICT x,
                   dsc_tensor *DSC_RESTRICT out) {
+    DSC_TRACE_UNARY_OP(dev, x, out);
     unary_op(dev, x, out, cpu_sqrt_op());
 }
 
@@ -972,10 +1000,11 @@ static DSC_INLINE void reduce(const dsc_tensor *DSC_RESTRICT x,
     }
 }
 
-void dsc_cpu_sum(dsc_device *,
+void dsc_cpu_sum(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out,
                  const int axis_idx) {
+    DSC_TRACE_UNARY_AXIS_OP(dev, x, out, axis_idx);
     switch (out->dtype) {
         case F32:
             reduce(x, out, axis_idx, 0.f, cpu_add_op());
@@ -987,10 +1016,11 @@ void dsc_cpu_sum(dsc_device *,
     }
 }
 
-void dsc_cpu_min(dsc_device *,
+void dsc_cpu_min(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out,
                  const int axis_idx) {
+    DSC_TRACE_UNARY_AXIS_OP(dev, x, out, axis_idx);
     switch (out->dtype) {
         case F32:
             reduce(x, out, axis_idx, dsc_inf<f32, true>(), cpu_min_op());
@@ -1002,10 +1032,11 @@ void dsc_cpu_min(dsc_device *,
     }
 }
 
-void dsc_cpu_max(dsc_device *,
+void dsc_cpu_max(dsc_device *dev,
                  const dsc_tensor *DSC_RESTRICT x,
                  dsc_tensor *DSC_RESTRICT out,
                  const int axis_idx) {
+    DSC_TRACE_UNARY_AXIS_OP(dev, x, out, axis_idx);
     switch (out->dtype) {
         case F32:
             reduce(x, out, axis_idx, dsc_inf<f32, false>(), cpu_max_op());

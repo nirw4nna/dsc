@@ -47,12 +47,11 @@ to switch to a linear allocator to remove the (minimal) overhead introduced by a
 Getting started with DSC is very simple. The only requirements are:
 - A compiler with good support for C++20
 - GNU Make for building
-- `lld` for linking
 
 On a Linux-based system these can be obtained with:
 ```shell
 sudo apt update
-sudo apt install build-essential lld
+sudo apt install build-essential
 ```
 
 ### Installation
@@ -76,16 +75,20 @@ to enable/disable specific features:
 |---------------|------------------------------------------------------------------------------|
 | DSC_LOG_LEVEL | Configure the logging level (values: [0-3] with 0 meaning everything on)     |
 | DSC_FAST      | Turn off logging (level=2) and compile with the highest optimisation level   |
-| DSC_GPU       | Enable GPU support                                                           |
+| DSC_GPU       | Enable GPU support (**default=0**)                                           |
 | DSC_MAX_OBJS  | Max number of DSC tensors that can be used at the same time (**default=1K**) |
+| DSC_TRACING   | Enable tracing (**default=0**)                                               |
 
 To verify that everything worked out as expected try a simple operation:
 ```shell
 python3 -c "import dsc; x = dsc.arange(10); print(x)"
 ```
-When running on the CPU it may be beneficial to use multiple threads for certain operations (i.e. when doing matrix-vector
-products). DSC has native support for concurrency, to enable it set the `DSC_NUM_THREADS` environment variable.
-If you set it to -1 it will use half of your available cores.
+
+### Environment Variables
+| Variable        | Description                                                                                                                                                                                                                                                         |
+|-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| DSC_NUM_THREADS | Use multiple threads (CPU). If you set it to -1 it will use half of your available cores (**default=1**)                                                                                                                                                            |
+| TRACE           | Enable tracing DSC kernels. Values: [0-3] with 0 meaning no tracing, 1 dump only to the console, 2 dump only as Perfetto-compatible json, 3 dump as both console and Perfetto. This option requires DSC to be compiled with tracing support enabled (**default=0**) |
 
 ### Notes on GPU support
 DSC supports both AMD and NVIDIA GPUs. If compiled with `DSC_GPU=1` it will automatically detect the appropriate backend.

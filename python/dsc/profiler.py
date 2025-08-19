@@ -4,13 +4,47 @@
 #  This code is licensed under the terms of the 3-clause BSD license
 #  (https://opensource.org/license/bsd-3-clause).
 
-from ._bindings import _DSC_TRACE_FILE, _dsc_tracing_enabled, _dsc_traces_record, _dsc_insert_trace, _dsc_dump_traces, _DscTracePhase
+from ._bindings import _dsc_tracing_enabled, _dsc_insert_trace, _dsc_dump_traces
 from .context import _get_ctx
 from time import perf_counter
-from contextlib import contextmanager
 from http.server import SimpleHTTPRequestHandler
 import socketserver
 from functools import wraps
+import atexit
+import os
+
+
+def _is_tracing_enabled() -> bool:
+    return bool(_dsc_tracing_enabled())
+
+
+@atexit.register
+def _dump_traces():
+    if not _is_tracing_enabled():
+        return
+
+    _dsc_dump_traces(_get_ctx())
+    trace_value = int(os.getenv('TRACE', '0'))
+    if trace_value >= 2:
+        _serve_traces()
+
+
+def trace(name: str):
+    def _decorator(func):
+        if not _is_tracing_enabled():
+            return func
+
+        # Encode name and cat once
+        name_ = name.encode('ascii')
+        @wraps(func)
+        def _wrapper(*args, **kwargs):
+            start_us = int(perf_counter() * 1e6)
+            res = func(*args, **kwargs)
+            end_us = int(perf_counter() * 1e6)
+            _dsc_insert_trace(_get_ctx(), name_, start_us, end_us - start_us)
+            return res
+        return _wrapper
+    return _decorator
 
 
 class _PerfettoServer(SimpleHTTPRequestHandler):
@@ -35,60 +69,8 @@ def _serve_traces():
     port = 9001
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(('127.0.0.1', port), _PerfettoServer) as httpd:
-        url = f'https://ui.perfetto.dev/#!/?url=http://127.0.0.1:{port}/{_DSC_TRACE_FILE}'
+        url = f'https://ui.perfetto.dev/#!/?url=http://127.0.0.1:{port}/traces.json'
         print(f'Open URL in browser: {url}')
 
-        while httpd.__dict__.get('last_request') != '/' + _DSC_TRACE_FILE:
+        while httpd.__dict__.get('last_request') != '/traces.json':
             httpd.handle_request()
-
-
-def start_recording():
-    _dsc_traces_record(_get_ctx(), True)
-
-
-def stop_recording(dump: bool = True, serve: bool = False):
-    _dsc_traces_record(_get_ctx(), False)
-
-    if dump or serve:
-        _dsc_dump_traces(_get_ctx())
-
-    if serve:
-        _serve_traces()
-
-def _is_tracing_enabled() -> bool:
-    # TODO: should I just remove ctx?
-    return bool(_dsc_tracing_enabled(None))
-
-def profile(serve: bool = True):
-    def _decorator(func):
-        if not _is_tracing_enabled():
-            return func
-        @wraps(func)
-        def _wrapper(*args, **kwargs):
-            start_recording()
-            res = func(*args, **kwargs)
-            stop_recording(serve=serve)
-            return res
-        return _wrapper
-    return _decorator
-
-
-_BEGIN_PHASE = _DscTracePhase.BEGIN.value.encode('ascii')
-_END_PHASE = _DscTracePhase.END.value.encode('ascii')
-
-def trace(name: str, cat: str = 'python'):
-    def _decorator(func):
-        if not _is_tracing_enabled():
-            return func
-
-        # Encode name and cat once
-        name_ = name.encode('ascii')
-        cat_ = cat.encode('ascii')
-        @wraps(func)
-        def _wrapper(*args, **kwargs):
-            _dsc_insert_trace(_get_ctx(), name_, cat_, int(perf_counter() * 1e6), _BEGIN_PHASE)
-            res = func(*args, **kwargs)
-            _dsc_insert_trace(_get_ctx(), name_, cat_, int(perf_counter() * 1e6), _END_PHASE)
-            return res
-        return _wrapper
-    return _decorator

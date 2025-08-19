@@ -87,9 +87,21 @@ static DSC_INLINE rocblas_status gpu_blas_bfgemm(const gpu_blas_handle handle, c
                                                  const void *DSC_RESTRICT beta, void *out, const gpu_blas_dtype out_dtype,
                                                  const int stride_out, const gpu_blas_dtype compute_dtype) {
     return rocblas_gemm_ex(handle, a_op, b_op, m, n, k,
-                        alpha, xa, a_dtype, stride_a,
-                        xb, b_dtype, stride_b, beta,
-                        out, out_dtype, stride_out,
-                        out, out_dtype, stride_out,
-                        compute_dtype, rocblas_gemm_algo_standard, 0, 0);
+                           alpha, xa, a_dtype, stride_a,
+                           xb, b_dtype, stride_b, beta,
+                           out, out_dtype, stride_out,
+                           out, out_dtype, stride_out,
+                           compute_dtype, rocblas_gemm_algo_standard, 0, 0);
 }
+
+// ============================================================
+// Event API
+//
+
+#define gpu_event_create        hipEventCreate
+#define gpu_event_destroy       hipEventDestroy
+#define gpu_event_record        hipEventRecord
+#define gpu_event_synchronize   hipEventSynchronize
+#define gpu_event_elapsed       hipEventElapsedTime
+
+using gpu_event = hipEvent_t;
