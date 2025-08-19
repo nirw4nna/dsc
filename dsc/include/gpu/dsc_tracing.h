@@ -49,18 +49,18 @@ struct dsc_gpu_trace_tracker {
             check_if_full<dsc_gpu_trace>(ctx);
             trace_ = next_empty_trace<dsc_gpu_trace>(ctx);
             fill_trace(&trace_->base, name, type, args);
-            gpu_event_create(&trace_->start_event);
-            gpu_event_create(&trace_->stop_event);
+            DSC_GPU_CHECK(gpu_event_create(&trace_->start_event));
+            DSC_GPU_CHECK(gpu_event_create(&trace_->stop_event));
             trace_->grid_dim = grid_dim;
             trace_->block_dim = block_dim;
             trace_->elapsed_ms = 0.f;
-            gpu_event_record(trace_->start_event);
+            DSC_GPU_CHECK(gpu_event_record(trace_->start_event));
         }
     }
 
     ~dsc_gpu_trace_tracker() {
         if (trace_) {
-            gpu_event_record(trace_->stop_event);
+            DSC_GPU_CHECK(gpu_event_record(trace_->stop_event));
         }
     }
 
