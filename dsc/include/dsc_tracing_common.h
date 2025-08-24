@@ -554,7 +554,7 @@ struct dsc_to_args {
     DSC_INLINE void json_dump(FILE * f) const {
         fprintf(f, R"(,"x":)");
         x.json_dump(f);
-        fprintf(f, R"(,"new_device":%s)", DSC_DEVICE_NAMES[new_device]);
+        fprintf(f, R"(,"new_device":"%s")", DSC_DEVICE_NAMES[new_device]);
     }
 };
 
