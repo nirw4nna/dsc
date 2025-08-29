@@ -15,7 +15,6 @@
 #include <ctime>        // timespec
 #include <cinttypes>    // PRIxPTR
 #include <cstring>
-#include <cmath>        // log
 
 
 #define DSC_TRACE_SET_TENSOR(X, field)                                                         \
@@ -136,13 +135,11 @@
     DSC_TRACE_SET_TENSOR(X, x);         \
     DSC_INSERT_TYPED_TRACE((DEV), dsc_randn_args, DSC_RANDN_OP, ##__VA_ARGS__)
 
-#define DSC_TRACE_TOPK_OP(DEV, X, k_, axis_, largest_, ...) \
-    dsc_topk_args args__{};                                 \
-    DSC_TRACE_SET_TENSOR(X, x);                             \
-    args__.k = (k_);                                        \
-    args__.axis = (axis_);                                  \
-    args__.largest = (largest_);                            \
-    DSC_INSERT_TYPED_TRACE((DEV), dsc_topk_args, DSC_TOPK_OP, ##__VA_ARGS__)
+#define DSC_TRACE_KTH_OP(DEV, X, k_, ...) \
+    dsc_kth_args args__{};                \
+    DSC_TRACE_SET_TENSOR(X, x);           \
+    args__.k = (k_);                      \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_kth_args, DSC_KTH_OP, ##__VA_ARGS__)
 
 #define DSC_TRACE_MULTINOMIAL_OP(DEV, X, OUT, num_samples_, ...) \
     dsc_multinomial_args args__{};                               \
@@ -477,17 +474,15 @@ struct dsc_randn_args {
     }
 };
 
-struct dsc_topk_args {
+struct dsc_kth_args {
     dsc_tensor_args x;
-    int k, axis;
-    bool largest;
+    int k;
 
-    // This is a rough bw estimate for topk sampling: N is for the read, NlogN for the sorting
-    DSC_INLINE u64 rw_bytes() const { const f64 n = x.ne; return (u64) (n * (1. + n * log(n)) * (f64) DSC_DTYPE_SIZE[x.dtype]); }
+    DSC_INLINE u64 rw_bytes() const { return x.ne * DSC_DTYPE_SIZE[x.dtype]; }
     DSC_INLINE void json_dump(FILE * f) const {
         fprintf(f, R"(,"x":)");
         x.json_dump(f);
-        fprintf(f, R"(,"k": %d,"axis": %d,"largest":"%s")", k, axis, largest ? "True" : "False");
+        fprintf(f, R"(,"k": %d)", k);
     }
 };
 
@@ -618,7 +613,7 @@ enum dsc_trace_type : u8 {
     DSC_SET_SLICE,
     DSC_CAST_OP,
     DSC_RANDN_OP,
-    DSC_TOPK_OP,
+    DSC_KTH_OP,
     DSC_MULTINOMIAL_OP,
     DSC_ARANGE_OP,
     DSC_REPEAT_OP,
@@ -647,7 +642,7 @@ static constexpr const char *DSC_TRACE_CATEGORY[] = {
     "op;slice;set",
     "op;cast",
     "op;randn",
-    "op;topk",
+    "op;kth",
     "op;multinomial",
     "op;arange",
     "op;repeat",
@@ -681,7 +676,7 @@ struct dsc_trace_common {
         dsc_set_slice_args set_slice;
         dsc_cast_args cast;
         dsc_randn_args randn;
-        dsc_topk_args topk;
+        dsc_kth_args kth;
         dsc_multinomial_args multinomial;
         dsc_arange_args arange;
         dsc_repeat_args repeat;
@@ -797,7 +792,7 @@ DSC_INLINE void fill_trace(dsc_trace_common *trace,
     TYPED_FILL(set_slice, dsc_set_slice_args)
     TYPED_FILL(cast, dsc_cast_args)
     TYPED_FILL(randn, dsc_randn_args)
-    TYPED_FILL(topk, dsc_topk_args)
+    TYPED_FILL(kth, dsc_kth_args)
     TYPED_FILL(multinomial, dsc_multinomial_args)
     TYPED_FILL(arange, dsc_arange_args)
     TYPED_FILL(repeat, dsc_repeat_args)
@@ -825,7 +820,7 @@ DSC_INLINE void dump_trace_base(FILE *f, const dsc_trace_common *trace) {
         TYPED_DUMP(DSC_SET_SLICE, set_slice);
         TYPED_DUMP(DSC_CAST_OP, cast);
         TYPED_DUMP(DSC_RANDN_OP, randn);
-        TYPED_DUMP(DSC_TOPK_OP, topk);
+        TYPED_DUMP(DSC_KTH_OP, kth);
         TYPED_DUMP(DSC_MULTINOMIAL_OP, multinomial);
         TYPED_DUMP(DSC_ARANGE_OP, arange);
         TYPED_DUMP(DSC_REPEAT_OP, repeat);
@@ -947,7 +942,7 @@ static DSC_INLINE void dsc_tracing_dump(dsc_ctx *ctx) {
 #define DSC_TRACE_GET_IDX(DEV, X, indexes_, n_indexes_, out_shape_, out_n_dim_, ...)                 (DSC_UNUSED(DEV))
 #define DSC_TRACE_SET_SLICE(DEV, XA, XB, slices_, n_slices_, ...)                                    (DSC_UNUSED(DEV))
 #define DSC_TRACE_RANDN_OP(DEV, X, ...)                                                              (DSC_UNUSED(DEV))
-#define DSC_TRACE_TOPK_OP(DEV, X, k_, axis_, largest_, ...)                                          (DSC_UNUSED(DEV))
+#define DSC_TRACE_KTH_OP(DEV, X, k_)                                                                 (DSC_UNUSED(DEV))
 #define DSC_TRACE_MULTINOMIAL_OP(DEV, X, OUT, num_samples_, ...)                                     (DSC_UNUSED(DEV))
 #define DSC_TRACE_ARANGE_OP(DEV, X, start_, step_, ...)                                              (DSC_UNUSED(DEV))
 #define DSC_TRACE_REPEAT_OP(DEV, X, OUT, repeats_, axis_, ...)                                       (DSC_UNUSED(DEV))

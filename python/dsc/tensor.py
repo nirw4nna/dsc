@@ -53,7 +53,7 @@ from ._bindings import (
     _dsc_tanh,
     _dsc_exp,
     _dsc_sqrt,
-    _dsc_topk,
+    _dsc_kth,
     _dsc_tensor_1d,
     _dsc_tensor_2d,
     _dsc_tensor_3d,
@@ -862,23 +862,21 @@ def randn(
     return Tensor(_dsc_randn(_get_ctx(), shape, dtype, _get_device(device)))
 
 
-# Note: topk and multinomial are CPU-only ops. This is very ugly and slow but for now it does the trick
-def topk(x: Tensor, k: int, axis: int = -1, largest: bool = True) -> Tuple[Tensor, Tensor]:
-    original_dtype = x.dtype
+# Note: kth and multinomial are CPU-only ops. This is very ugly and slow but for now it does the trick
+def kth(x: Tensor, k: int) -> Tensor:
     original_device = x.device
+    original_dtype = x.dtype
     if x.device == Device.GPU:
         if x.dtype == Dtype.BF16:
             x = x.cast(Dtype.F32)
         x = x.to('cpu')
-    res = _dsc_topk(_get_ctx(), x.c_ptr, k, axis, largest)
-    res_v = Tensor(res.first)
-    res_i = Tensor(res.second)
-    if res_v.device != original_device:
-        res_v = res_v.to(original_device)
-        res_i = res_i.to(original_device)
-    if res_v.dtype != original_dtype:
-        res_v = res_v.cast(original_dtype)
-    return res_v, res_i
+    out = Tensor(_dsc_kth(_get_ctx(), x.c_ptr, k))
+    if out.device != original_device:
+        out = out.to(original_device)
+    if out.dtype != original_dtype:
+        out = out.cast(original_dtype)
+    return out
+
 
 def multinomial(x: Tensor, num_samples: int) -> Tensor:
     original_device = x.device

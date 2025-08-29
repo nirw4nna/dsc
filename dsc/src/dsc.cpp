@@ -560,37 +560,17 @@ dsc_tensor *dsc_randn(dsc_ctx *ctx,
     return out;
 }
 
-dsc_pair dsc_topk(dsc_ctx *ctx,
-                  const dsc_tensor *DSC_RESTRICT x,
-                  const int k, const int axis,
-                  const bool largest) {
-    // Return the top K largest (smallest) elements of x along the given axis
-    DSC_ASSERT(x != nullptr);
+dsc_tensor *dsc_kth(dsc_ctx *ctx,
+                    const dsc_tensor *DSC_RESTRICT x,
+                    const int k) {
+    // Returns the K-th largest element of x
+    DSC_ASSERT(x->n_dim == 1);
     DSC_ASSERT(x->device == CPU);
 
-    const int axis_idx = dsc_tensor_dim_idx(x, axis);
-    const int axis_n = x->shape[axis_idx];
-    DSC_ASSERT((unsigned) axis_idx < (unsigned) DSC_MAX_DIMS);
-    DSC_ASSERT((unsigned) k < (unsigned) axis_n);
+    dsc_tensor *out = dsc_tensor_1d(ctx, x->dtype, 1, x->device);
+    dsc_cpu_kth(dsc_get_device(CPU), x, out, k);
 
-    int out_shape[DSC_MAX_DIMS]{};
-    memcpy(out_shape, x->shape, DSC_MAX_DIMS * sizeof(*x->shape));
-    out_shape[axis_idx] = k;
-
-    // TODO: (5)
-    // Allocate a temporary buffer, this will be used to sort the elements along the given axis
-    dsc_tensor *tmp_values = dsc_tensor_1d(ctx, x->dtype, axis_n, CPU);
-    dsc_tensor *tmp_indexes = dsc_tensor_1d(ctx, I32, axis_n, CPU);
-    dsc_tensor *out_values = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], x->dtype, CPU);
-    dsc_tensor *out_indexes = dsc_new_tensor(ctx, x->n_dim, &out_shape[dsc_tensor_dim_idx(x, 0)], I32, CPU);
-
-    // For now, topk runs always on CPU. If x is not a CPU tensor create a temporary copy
-    dsc_cpu_topk(dsc_get_device(CPU), x, tmp_values, tmp_indexes, out_values, out_indexes, k, axis_idx, largest);
-
-    dsc_tensor_free(ctx, tmp_values);
-    dsc_tensor_free(ctx, tmp_indexes);
-
-    return {out_values, out_indexes};
+    return out;
 }
 
 dsc_tensor *dsc_multinomial(dsc_ctx *ctx,

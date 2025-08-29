@@ -257,8 +257,7 @@ class Qwen25Model(nn.Module):
         # Loop
         generation_start = perf_counter()
         for _ in range(max_new_tokens):
-            v, _ = dsc.topk(next_token_logits, top_k)
-            k_th_value = v[:, -1]
+            k_th_value = dsc.kth(next_token_logits.reshape(-1), top_k)
             next_token_logits = next_token_logits.masked_fill(next_token_logits < k_th_value, float('-inf'))
             probs = F.softmax(next_token_logits, axis=-1)
 

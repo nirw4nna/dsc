@@ -215,33 +215,3 @@ def test_masked_fill():
             x[mask] = fill
             res_dsc = x_dsc.masked_fill(mask_dsc, fill)
             assert all_close(res_dsc, x)
-
-def test_topk():
-    k = 3
-    # Test against torch as it has the same simple API as DSC in this case
-    import torch
-
-    def _validate_axis(x: torch.Tensor, x_dsc: dsc.Tensor, axis: int, largest: bool):
-        res_v, res_i = torch.topk(x, k, dim=axis, largest=largest)
-        res_dsc_v, res_dsc_i = dsc.topk(x_dsc, k, axis=axis, largest=largest)
-        assert all_close(res_dsc_v, res_v.detach().cpu().numpy())
-        if x.dtype != torch.int32:
-            # Indexes returned by topk can be different when working with int tensors, just check the values
-            assert all_close(res_dsc_i, res_i.detach().cpu().numpy())
-
-    for n_dim in range(1, 5):
-        for dtype in DTYPES:
-            if is_bool(dtype):
-                continue
-            print(f'Testing topk with {n_dim}-dimensional tensors of type {dtype.__name__}')
-            x = random_nd([randint(5, 6) for _ in range(n_dim)], dtype)
-            x_torch = torch.from_numpy(x)
-            x_dsc = dsc.from_numpy(x)
-
-            for axis in range(-n_dim, 0):
-                _validate_axis(x_torch, x_dsc, axis, True)
-                _validate_axis(x_torch, x_dsc, axis, False)
-
-            for axis in range(0, n_dim):
-                _validate_axis(x_torch, x_dsc, axis, True)
-                _validate_axis(x_torch, x_dsc, axis, False)

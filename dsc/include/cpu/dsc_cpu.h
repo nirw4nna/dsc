@@ -31,14 +31,10 @@ extern void dsc_cpu_repeat(dsc_device *dev,
 
 extern void dsc_cpu_randn(dsc_device *dev, dsc_tensor *DSC_RESTRICT x);
 
-extern void dsc_cpu_topk(dsc_device *dev,
-                         const dsc_tensor *DSC_RESTRICT x,
-                         dsc_tensor *DSC_RESTRICT tmp_values,
-                         dsc_tensor *DSC_RESTRICT tmp_indexes,
-                         dsc_tensor *DSC_RESTRICT out_values,
-                         dsc_tensor *DSC_RESTRICT out_indexes,
-                         int k, int axis_idx,
-                         bool largest);
+extern void dsc_cpu_kth(dsc_device *dev,
+                        const dsc_tensor *DSC_RESTRICT x,
+                        dsc_tensor *DSC_RESTRICT out,
+                        int k);
 
 extern void dsc_cpu_multinomial(dsc_device *dev,
                                 const dsc_tensor *DSC_RESTRICT x,

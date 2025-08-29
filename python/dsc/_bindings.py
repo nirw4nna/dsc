@@ -29,8 +29,6 @@ from .device import Device
 
 
 _DSC_MAX_DIMS = 4
-_DSC_TRACE_NAME_MAX = 32
-_DSC_TRACE_CAT_MAX = 16
 _DSC_VALUE_NONE = 2**31 - 1
 _DSC_PLATFORM_CUDA = 0
 _DSC_PLATFORM_ROCM = 1
@@ -83,12 +81,6 @@ _OptionalTensor = Union[_DscTensor_p, None]
 
 class _DscSlice(Structure):
     _fields_ = [('start', c_int), ('stop', c_int), ('step', c_int)]
-
-class _DscPair(Structure):
-    _fields_ = [
-        ('first', _DscTensor_p),
-        ('second', _DscTensor_p)
-    ]
 
 
 # extern dsc_ctx *dsc_ctx_init(usize main_mem, usize scratch_mem);
@@ -477,24 +469,15 @@ _lib.dsc_randn.argtypes = [_DscCtx, c_int, POINTER(c_int), c_uint8, c_int8]
 _lib.dsc_randn.restype = _DscTensor_p
 
 
-# extern dsc_pair dsc_topk(dsc_ctx *ctx,
-#                          const dsc_tensor *DSC_RESTRICT x,
-#                          int k,
-#                          int axis = -1,
-#                          bool largest = true);
-def _dsc_topk(
-        ctx: _DscCtx,
-        x: _DscTensor_p,
-        k: int,
-        axis: int,
-        largest: bool,
-) -> _DscPair:
-    return _lib.dsc_topk(ctx, x, c_int(k), c_int(axis), c_bool(largest))
+# extern dsc_tensor *dsc_kth(dsc_ctx *ctx,
+#                            const dsc_tensor *DSC_RESTRICT x,
+#                            int k);
+def _dsc_kth(ctx: _DscCtx, x: _DscTensor_p, k: int) -> _DscTensor_p:
+    return _lib.dsc_kth(ctx, x, c_int(k))
 
 
-_lib.dsc_topk.argtypes = [_DscCtx, _DscTensor_p, c_int, c_int, c_bool]
-_lib.dsc_topk.restype = _DscPair
-
+_lib.dsc_kth.argtypes = [_DscCtx, _DscTensor_p, c_int]
+_lib.dsc_kth.restype = _DscTensor_p
 
 
 # extern dsc_tensor *dsc_multinomial(dsc_ctx *ctx,

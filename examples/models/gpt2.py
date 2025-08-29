@@ -148,7 +148,7 @@ class GPT2(nn.Module):
         self.kv_pos += T
         return logits
 
-    def generate(self, idx: dsc.Tensor, tokenizer, max_new_tokens: int, temp: float = 1, sample: bool = True) -> dsc.Tensor:
+    def generate(self, idx: dsc.Tensor, tokenizer, max_new_tokens: int, temp: float = 1) -> dsc.Tensor:
         assert max_new_tokens < self.hparams.block_size
         # Include the input in the response
         generated = idx
@@ -168,15 +168,12 @@ class GPT2(nn.Module):
                 logits = self(generated)
             # Apply temperature to the last row of each bach
             logits = logits[:, -1, :] * (1 / temp)
-            v, _ = dsc.topk(logits, 10)
-            # NOTE: the point here is that I want v[:, -1] to be broadcast to the entire logits tensor
-            # in DSC this is the case if v[:, -1] is a scalar (ie. 1D with 1 element)
-            logits = logits.masked_fill(logits < v[:, -1], -float('Inf'))
+
+            kth_value = dsc.kth(logits.reshape(-1), 10)
+            logits = logits.masked_fill(logits < kth_value, -float('Inf'))
             probs = F.softmax(logits, axis=-1)
-            if sample:
-                idx_next = dsc.multinomial(probs, num_samples=1)
-            else:
-                _, idx_next = dsc.topk(probs, k=1, axis=-1)
+
+            idx_next = dsc.multinomial(probs, num_samples=1)
 
             idx_next = idx_next.to('cpu')
             print(tokenizer.decode(idx_next[0]), end='', flush=True)

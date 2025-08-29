@@ -50,7 +50,7 @@ from dsc.tensor import (
     full_like,
     empty,
     empty_like,
-    topk,
+    kth,
     multinomial,
     where,
 )

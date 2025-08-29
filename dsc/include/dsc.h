@@ -202,10 +202,6 @@ struct dsc_ctx {
     dsc_device_type default_device;
 };
 
-struct dsc_pair {
-    dsc_tensor *first, *second;
-};
-
 struct dsc_slice {
     union {
         int d[3];
@@ -364,11 +360,9 @@ extern dsc_tensor *dsc_randn(dsc_ctx *ctx,
                              dsc_dtype dtype = DSC_DEFAULT_TYPE,
                              dsc_device_type device = DEFAULT);
 
-extern dsc_pair dsc_topk(dsc_ctx *ctx,
-                         const dsc_tensor *DSC_RESTRICT x,
-                         int k,
-                         int axis = -1,
-                         bool largest = true);
+extern dsc_tensor *dsc_kth(dsc_ctx *ctx,
+                           const dsc_tensor *DSC_RESTRICT x,
+                           int k);
 
 extern dsc_tensor *dsc_multinomial(dsc_ctx *ctx,
                                    const dsc_tensor *DSC_RESTRICT x,
