@@ -8,7 +8,7 @@
 #include "dsc_device.h"
 #include "gpu/dsc_ops.h"
 #include "gpu/dsc_tracing.h"
-
+#include "gpu/kernels/dsc_flash_attn.h"
 
 #define init_slice_idx(ARR, SLICES) \
     for (int i__ = 0; i__ < DSC_MAX_DIMS; ++i__) ARR[i__] = SLICES[i__].start
@@ -1564,4 +1564,58 @@ void dsc_gpu_max(dsc_device *dev,
             break;
         DSC_INVALID_CASE("unknown dtype=%d", out->dtype);
     }
+}
+
+// ============================================================
+// Custom Operations
+
+void dsc_gpu_scaled_dot_product_attention(dsc_device *,
+                                          const dsc_tensor *DSC_RESTRICT query,
+                                          const dsc_tensor *DSC_RESTRICT key,
+                                          const dsc_tensor *DSC_RESTRICT value,
+                                          dsc_tensor *DSC_RESTRICT out,
+                                          const bool enable_gqa) {
+    using namespace internal::gpu::kernels::flash_attn;
+
+    // Taken from the original paper
+    const int N = dsc_tensor_get_dim(query, -2); // sequence len
+    const int d = dsc_tensor_get_dim(query, -1); // head dim
+
+    // For now this implementation can only work with d <= 64
+    DSC_ASSERT(d <= 64);
+
+    const int Tr = DSC_CEIL(N, Br_f32);
+    const int Tc = DSC_CEIL(N, Bc_f32);
+
+    // The f32 kernel expects d to be a multiple of 2 to properly use matrix cores
+    const int d_eff = (d + 1) & ~1;
+
+    // Compute the shared memory size
+    const usize shared_mem_kernel = (2 * Bc_f32 * d_eff +// Kj + Vj
+                                     2 * Br_f32 * d_eff +// Qi + Oi
+                                     4 * Br_f32 +        // m_running + l_running + m_old_row + scaled_old_row
+                                     Br_f32 * Bc_f32     // Sij = QjKj^T
+                                     ) *
+                                    DSC_DTYPE_SIZE[query->dtype];
+
+    DSC_DATA(f32, query);
+    DSC_DATA(f32, key);
+    DSC_DATA(f32, value);
+    DSC_DATA(f32, out);
+
+    // If GQA is enabled K and V must be repeated, this is done by manipulating the offsets within the kernel
+    const int n_rep = enable_gqa ? (dsc_tensor_get_dim(query, 1) / dsc_tensor_get_dim(key, 1)) : 1;
+
+    dim3 grid_size(Tr, dsc_tensor_get_dim(query, -3), dsc_tensor_get_dim(query, -4));
+    dim3 block_size(DSC_GPU_DEFAULT_THREADS);
+    k_flash_attention_f32<<<grid_size, block_size, shared_mem_kernel>>>(
+            query_data, key_data, value_data,
+            out_data, N, d, Tc, n_rep,
+            dsc_tensor_get_stride(query, -4), dsc_tensor_get_stride(query, -3),
+            dsc_tensor_get_stride(key, -4), dsc_tensor_get_stride(key, -3),
+            dsc_tensor_get_stride(value, -4), dsc_tensor_get_stride(value, -3),
+            dsc_tensor_get_stride(out, -4), dsc_tensor_get_stride(out, -3));
+
+    // Check if kernel is launched successfully
+    DSC_GPU_CHECK(gpu_get_last_err());
 }

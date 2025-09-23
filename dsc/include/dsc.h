@@ -143,6 +143,7 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 #define dsc_new_view(CTX, X)          (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (X)->device, (X)->buf))
 #define dsc_for(idx, X)               for (int idx = 0; idx < (X)->ne; ++idx)
 #define dsc_is_scalar(X)              (X)->ne == 1
+#define dsc_tensor_nbytes(X)          (X)->ne * DSC_DTYPE_SIZE[(X)->dtype]
 
 #if defined(__cplusplus)
 extern "C" {
@@ -530,6 +531,20 @@ extern dsc_tensor *dsc_min(dsc_ctx *ctx,
                            dsc_tensor *DSC_RESTRICT out = nullptr,
                            int axis = -1,
                            bool keep_dims = true);
+
+// ============================================================
+// Custom Operations
+//
+// These are very domain-specific operations that are not part of the "core"
+// DSC library. They would be typically defined by users of the library
+// and should not live in the `dsc.h` file.
+
+extern dsc_tensor *dsc_scaled_dot_product_attention(dsc_ctx *ctx,
+                                                    const dsc_tensor *DSC_RESTRICT query,
+                                                    const dsc_tensor *DSC_RESTRICT key,
+                                                    const dsc_tensor *DSC_RESTRICT value,
+                                                    bool enable_gqa);
+
 
 #if defined(__cplusplus)
 }

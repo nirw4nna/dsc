@@ -39,11 +39,12 @@
 #define gpu_get_device_properties   hipGetDeviceProperties
 #define gpu_device_sync             hipDeviceSynchronize
 
-#define gpu_malloc      hipMalloc
-#define gpu_free        hipFree
-#define gpu_memcpy      hipMemcpy
-#define gpu_memset      hipMemset
-#define gpu_set_device  hipSetDevice
+#define gpu_malloc          hipMalloc
+#define gpu_free            hipFree
+#define gpu_memcpy          hipMemcpy
+#define gpu_memset          hipMemset
+#define gpu_set_device      hipSetDevice
+#define gpu_get_last_err    hipPeekAtLastError
 
 #define gpu_memcpy_default          hipMemcpyDefault
 #define gpu_memcpy_device_2_host    hipMemcpyDeviceToHost

@@ -878,3 +878,18 @@ def _dsc_min(
 
 _lib.dsc_min.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, c_int, c_bool]
 _lib.dsc_min.restype = _DscTensor_p
+
+
+# extern dsc_tensor *dsc_scaled_dot_product_attention(dsc_ctx *ctx,
+#                                                     const dsc_tensor *DSC_RESTRICT query,
+#                                                     const dsc_tensor *DSC_RESTRICT key,
+#                                                     const dsc_tensor *DSC_RESTRICT value,
+#                                                     bool enable_gqa);
+def _dsc_scaled_dot_product_attention(
+        ctx: _DscCtx, query: _DscTensor_p, key: _DscTensor_p, value: _DscTensor_p, enable_gqa: bool
+) -> _DscTensor_p:
+    return _lib.dsc_scaled_dot_product_attention(ctx, query, key, value, c_bool(enable_gqa))
+
+
+_lib.dsc_scaled_dot_product_attention.argtypes = [_DscCtx, _DscTensor_p, _DscTensor_p, _DscTensor_p, c_bool]
+_lib.dsc_scaled_dot_product_attention.restype = _DscTensor_p

@@ -6,6 +6,8 @@
 
 
 from ..tensor import Tensor, tanh, power, max, sum, exp
+from .._bindings import _dsc_scaled_dot_product_attention
+from ..context import _get_ctx
 from ..profiler import trace
 import math
 
@@ -25,3 +27,8 @@ def softmax(x: Tensor, axis: int = -1) -> Tensor:
 @trace('silu')
 def silu(x: Tensor) -> Tensor:
     return x * (1 / (1 + exp(-x)))
+
+
+@trace('scaled_dot_product_attention')
+def scaled_dot_product_attention(query: Tensor, key: Tensor, value: Tensor, enable_gqa: bool = False) -> Tensor:
+    return Tensor(_dsc_scaled_dot_product_attention(_get_ctx(), query.c_ptr, key.c_ptr, value.c_ptr, enable_gqa))

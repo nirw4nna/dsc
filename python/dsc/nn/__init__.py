@@ -76,7 +76,7 @@ class Module(ABC):
     def from_state(self, state_dict: Dict[str, Tensor],
                    on_hook: Optional[List[Tuple[List[str], Callable[[Tensor], Tensor]]]] = None,
                    tied: Optional[Dict[str, str]] = None):
-        with tqdm(total=len(state_dict), desc='Loading model parameters') as pbar:
+        with tqdm(total=len(state_dict), desc='Loading model parameters', disable=True) as pbar:
             for name, param in self.named_parameters():
                 real_name = name
                 if tied is not None and name in tied:

@@ -7,7 +7,6 @@
 #pragma once
 
 #include "dsc.h"
-// #include "dsc_device.h"
 
 #if defined(DSC_CUDA) && defined(DSC_HIP)
 #   error "DSC can't be compiled with both CUDA and HIP support"
@@ -69,6 +68,12 @@ static DSC_INLINE usize dsc_gpu_dev_mem(const int dev) {
     gpu_device_props prop{};
     DSC_GPU_CHECK(gpu_get_device_properties(&prop, dev));
     return prop.totalGlobalMem;
+}
+
+static DSC_INLINE usize dsc_gpu_shared_mem(const int dev) {
+    gpu_device_props prop{};
+    DSC_GPU_CHECK(gpu_get_device_properties(&prop, dev));
+    return prop.sharedMemPerBlock;
 }
 
 static DSC_INLINE void dsc_gpu_sync() {
@@ -231,6 +236,16 @@ extern void dsc_gpu_max(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out,
                         int axis_idx);
+
+// ============================================================
+// Custom Operations
+
+extern void dsc_gpu_scaled_dot_product_attention(dsc_device *dev,
+                                                 const dsc_tensor *DSC_RESTRICT query,
+                                                 const dsc_tensor *DSC_RESTRICT key,
+                                                 const dsc_tensor *DSC_RESTRICT value,
+                                                 dsc_tensor *DSC_RESTRICT out,
+                                                 bool enable_gqa);
 
 #else
 

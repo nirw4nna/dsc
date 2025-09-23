@@ -1486,3 +1486,46 @@ dsc_tensor *dsc_min(dsc_ctx *ctx,
 
     return out;
 }
+
+// ============================================================
+// Custom Operations
+
+static bool DSC_INLINE check_same_shape(const dsc_tensor *DSC_RESTRICT xa,
+                                        const dsc_tensor *DSC_RESTRICT xb) {
+    bool same_shape = true;
+    for (int i = 0; i < xa->n_dim && same_shape; ++i) {
+        if (dsc_tensor_get_dim(xa, i) != dsc_tensor_get_dim(xb, i)) same_shape = false;
+    }
+    return same_shape;
+}
+
+dsc_tensor *dsc_scaled_dot_product_attention(dsc_ctx *ctx,
+                                             const dsc_tensor *DSC_RESTRICT query,
+                                             const dsc_tensor *DSC_RESTRICT key,
+                                             const dsc_tensor *DSC_RESTRICT value,
+                                             const bool enable_gqa) {
+    DSC_ASSERT(query->dtype == F32);
+    DSC_ASSERT(key->dtype == F32);
+    DSC_ASSERT(value->dtype == F32);
+    DSC_ASSERT(query->device == GPU);
+    DSC_ASSERT(key->device == GPU);
+    DSC_ASSERT(value->device == GPU);
+    if (enable_gqa) {
+        // n_heads_query % n_heads_kv == 0
+        DSC_ASSERT(dsc_tensor_get_dim(query, -2) % dsc_tensor_get_dim(key, -2) == 0);
+        DSC_ASSERT(check_same_shape(key, value));
+    } else {
+        DSC_ASSERT(check_same_shape(query, key));
+        DSC_ASSERT(check_same_shape(query, value));
+    }
+
+    dsc_tensor *out = dsc_copy_of(ctx, query, GPU);
+    {
+        DSC_DATA(void, out);
+        DSC_GPU_CHECK(gpu_memset(out_data, 0, dsc_tensor_nbytes(out)));
+    }
+
+    dsc_gpu_scaled_dot_product_attention(dsc_get_device(GPU), query, key, value, out, enable_gqa);
+
+    return out;
+}
