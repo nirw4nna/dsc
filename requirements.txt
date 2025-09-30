@@ -2,6 +2,7 @@
 numpy
 psutil
 tqdm
+nanobind
 
 
 # Only used for testing and benchmarking

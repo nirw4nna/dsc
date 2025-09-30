@@ -143,6 +143,11 @@ static_assert(DSC_MAX_DIMS == 4, "DSC_MAX_DIMS != 4 - update the code");
 #define dsc_new_view(CTX, X)          (dsc_new_tensor((CTX), (X)->n_dim, &dsc_tensor_get_dim(X, 0), (X)->dtype, (X)->device, (X)->buf))
 #define dsc_for(idx, X)               for (int idx = 0; idx < (X)->ne; ++idx)
 #define dsc_is_scalar(X)              (X)->ne == 1
+#define dsc_tensor_nbytes(X)          (X)->ne * DSC_DTYPE_SIZE[(X)->dtype]
+
+// If dev_ is DEFAULT use the system default setting otherwise use the specified device
+#define dsc_get_dev_id(dev_) (dev_) == DEFAULT ? (ctx)->default_device : (dev_)
+#define dsc_get_device(dev_) ctx->devices[dsc_get_dev_id(dev_)]
 
 #if defined(__cplusplus)
 extern "C" {

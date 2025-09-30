@@ -124,9 +124,6 @@
         }                                                                                                      \
     } while (0)
 
-// If dev_ is DEFAULT use the system default setting otherwise use the specified device
-#define dsc_get_dev_id(dev_) (dev_) == DEFAULT ? (ctx)->default_device : (dev_)
-#define dsc_get_device(dev_) ctx->devices[dsc_get_dev_id(dev_)]
 
 #if defined(DSC_CUDA) || defined(DSC_HIP)
     #define DSC_DISPATCH(device, func, ...)                                      \

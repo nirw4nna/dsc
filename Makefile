@@ -1,15 +1,16 @@
 CXX			=	g++
 NVCC		=	nvcc
 HIPCC		=	hipcc
+AR			=	ar
 
-HIPCCFLAGS	=	-std=c++20 -I$(ROCM)/include -I./dsc/include/ --offload-arch=native -Wall -Wextra -Wformat \
+HIPCCFLAGS	=	-std=c++20 -I$(ROCM)/include -I./dsc/include/ --offload-arch=native -fPIC -Wall -Wextra -Wformat \
                 -Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
                 -Wno-missing-braces -Wcast-align -fno-exceptions -fno-rtti
 NVCCFLAGS	=	-std=c++20 -I$(CUDA)/include -I./dsc/include/ -ccbin=$(CXX) -arch=native \
-				-forward-unknown-opts -Wall -Wextra -Wformat -Wnoexcept  \
+				-forward-unknown-opts -fPIC -Wall -Wextra -Wformat -Wnoexcept  \
                 -Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
                 -Wlogical-op -Wcast-align -fno-exceptions -fno-rtti
-CXXFLAGS	=	-std=c++20 -I./dsc/include/ -Wall -Wextra -Wformat -Wnoexcept  \
+CXXFLAGS	=	-std=c++20 -I./dsc/include/ -fPIC -Wall -Wextra -Wformat -Wnoexcept  \
  				-Wcast-qual -Wcast-align -Wstrict-aliasing -Wpointer-arith -Wunused -Wdouble-promotion \
  				-Wlogical-op -Wcast-align -fno-exceptions -fno-rtti -pthread
 LDFLAGS		=	-lm
@@ -157,15 +158,26 @@ SRCS		=	$(wildcard dsc/src/*.cpp)
 SRCS		+=	$(wildcard dsc/src/cpu/*.cpp)
 OBJS		+=	$(SRCS:.cpp=.o)
 
-SHARED_LIB	=	python/dsc/libdsc.so
+DSC_LIB	=	python/dsc/libdsc.a
 
-.PHONY: clean shared
+.PHONY: clean python_bindings
+
+all: $(DSC_LIB) python_bindings
 
 clean:
-	rm -rf *.o *.so *.old $(OBJS) $(GPU_OBJS) $(SHARED_LIB)
+	rm -rf *.o *.so *.old $(OBJS) $(GPU_OBJS) $(DSC_LIB) build/
 
-shared: $(OBJS)
-	$(CXX) $(CXXFLAGS) -shared $(OBJS) -o $(SHARED_LIB) $(LDFLAGS)
+python_bindings: $(DSC_LIB)
+	@cmake -S python/src -B build/ \
+		-DCMAKE_BUILD_TYPE=Release -DDSC_LIB=$(PWD)/$(DSC_LIB) -DDSC_INCLUDE_DIR=$(PWD)/dsc/include/
+	@cmake --build build/ --parallel
+
+$(DSC_LIB): $(OBJS)
+	ar rcs $@ $(OBJS)
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+compilation_db:
+	bear -- make clean
+	bear -- make
