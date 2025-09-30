@@ -197,6 +197,19 @@
     args__.diagonal = (diagonal_);                     \
     DSC_INSERT_TYPED_TRACE((DEV), dsc_tril_args, DSC_TRIL_OP, ##__VA_ARGS__)
 
+#define DSC_TRACE_SDPA_OP(DEV, Q, K, V, OUT, ATTN_MASK, enable_gqa_, ...) \
+    dsc_sdpa_args args__{};                                               \
+    DSC_TRACE_SET_TENSOR(Q, q);                                           \
+    DSC_TRACE_SET_TENSOR(K, k);                                           \
+    DSC_TRACE_SET_TENSOR(V, v);                                           \
+    DSC_TRACE_SET_TENSOR(OUT, out);                                       \
+    args__.enable_gqa = (enable_gqa_);                                    \
+    args__.with_mask = (ATTN_MASK != nullptr);                            \
+    if (args__.with_mask) {                                               \
+        DSC_TRACE_SET_TENSOR(ATTN_MASK, attn_mask);                       \
+    }                                                                     \
+    DSC_INSERT_TYPED_TRACE((DEV), dsc_sdpa_args, DSC_SDPA_OP, ##__VA_ARGS__)
+
 #define TYPED_FILL(NAME, ARGS)                       \
     if constexpr (dsc_is_type<T, ARGS>()) {          \
         const ARGS *args_ = (const ARGS *) args;     \
@@ -595,6 +608,27 @@ struct dsc_tril_args {
     }
 };
 
+
+struct dsc_sdpa_args {
+    dsc_tensor_args q, k, v, out, attn_mask;
+    bool with_mask, enable_gqa;
+
+    DSC_INLINE u64 rw_bytes() const { return q.rw_bytes() + k.rw_bytes() + v.rw_bytes() + out.rw_bytes() + (with_mask ? attn_mask.rw_bytes() : 0); }
+    DSC_INLINE void json_dump(FILE * f) const {
+        fprintf(f, R"(,"query":)");
+        q.json_dump(f);
+        fprintf(f, R"(,"key":)");
+        k.json_dump(f);
+        fprintf(f, R"(,"value":)");
+        v.json_dump(f);
+        if (with_mask) {
+            fprintf(f, R"(,"attn_mask":)");
+            attn_mask.json_dump(f);
+        }
+        fprintf(f, R"(,"gqa":"%s")", enable_gqa ? "True" : "False");
+    }
+};
+
 enum dsc_trace_type : u8 {
     DSC_TRACE_EMPY, // Trace without any args
     DSC_TRACE_CUSTOM,
@@ -621,7 +655,8 @@ enum dsc_trace_type : u8 {
     DSC_TO_OP,
     DSC_CONCAT_OP,
     DSC_TRANSPOSE_OP,
-    DSC_TRIL_OP
+    DSC_TRIL_OP,
+    DSC_SDPA_OP,
 };
 
 static constexpr const char *DSC_TRACE_CATEGORY[] = {
@@ -651,6 +686,7 @@ static constexpr const char *DSC_TRACE_CATEGORY[] = {
     "op;concat",
     "op;transpose",
     "op;tril",
+    "op;sdpa",
 };
 
 struct dsc_trace_common {
@@ -685,6 +721,7 @@ struct dsc_trace_common {
         dsc_concat_args concat;
         dsc_transpose_args transpose;
         dsc_tril_args tril;
+        dsc_sdpa_args sdpa;
     };
 };
 
@@ -801,6 +838,7 @@ DSC_INLINE void fill_trace(dsc_trace_common *trace,
     TYPED_FILL(concat, dsc_concat_args)
     TYPED_FILL(transpose, dsc_transpose_args)
     TYPED_FILL(tril, dsc_tril_args)
+    TYPED_FILL(sdpa, dsc_sdpa_args)
 }
 
 DSC_INLINE void dump_trace_base(FILE *f, const dsc_trace_common *trace) {
@@ -829,6 +867,7 @@ DSC_INLINE void dump_trace_base(FILE *f, const dsc_trace_common *trace) {
         TYPED_DUMP(DSC_CONCAT_OP, concat);
         TYPED_DUMP(DSC_TRANSPOSE_OP, transpose);
         TYPED_DUMP(DSC_TRIL_OP, tril);
+        TYPED_DUMP(DSC_SDPA_OP, sdpa);
         default:
             break;
     }
@@ -951,6 +990,7 @@ static DSC_INLINE void dsc_tracing_dump(dsc_ctx *ctx) {
 #define DSC_TRACE_CONCAT_OP(DEV, OUT, tensors_, axis_, ...)                                          (DSC_UNUSED(DEV))
 #define DSC_TRACE_TRANSPOSE_OP(DEV, X, OUT, ...)                                                     (DSC_UNUSED(DEV))
 #define DSC_TRACE_TRIL_OP(DEV, X, OUT, diagonal_, ...)                                               (DSC_UNUSED(DEV))
+#define DSC_TRACE_SDPA_OP(DEV, Q, K, V, OUT, ATTN_MASK, enable_gqa_, ...)                            (DSC_UNUSED(DEV))
 
 static consteval bool dsc_tracing_is_enabled() { return false; }
 static DSC_INLINE void dsc_tracing_dump(dsc_ctx *) {}

@@ -6,7 +6,7 @@
 
 
 from ..tensor import Tensor, tanh, power, max, sum, exp, _c_ptr_or_none
-from .._bindings import _dsc_scaled_dot_product_attention
+from .._bindings import _dsc_sdpa
 from ..context import _get_ctx
 from ..profiler import trace
 import math
@@ -31,4 +31,4 @@ def silu(x: Tensor) -> Tensor:
 
 @trace('scaled_dot_product_attention')
 def scaled_dot_product_attention(query: Tensor, key: Tensor, value: Tensor, attn_mask: Optional[Tensor] = None, enable_gqa: bool = False) -> Tensor:
-    return Tensor(_dsc_scaled_dot_product_attention(_get_ctx(), query.c_ptr, key.c_ptr, value.c_ptr, _c_ptr_or_none(attn_mask), enable_gqa))
+    return Tensor(_dsc_sdpa(_get_ctx(), query.c_ptr, key.c_ptr, value.c_ptr, _c_ptr_or_none(attn_mask), enable_gqa))

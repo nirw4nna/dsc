@@ -1499,12 +1499,12 @@ static bool DSC_INLINE check_same_shape(const dsc_tensor *DSC_RESTRICT xa,
     return same_shape;
 }
 
-dsc_tensor *dsc_scaled_dot_product_attention(dsc_ctx *ctx,
-                                             const dsc_tensor *DSC_RESTRICT query,
-                                             const dsc_tensor *DSC_RESTRICT key,
-                                             const dsc_tensor *DSC_RESTRICT value,
-                                             const dsc_tensor *DSC_RESTRICT attn_mask,
-                                             const bool enable_gqa) {
+dsc_tensor *dsc_sdpa(dsc_ctx *ctx,
+                     const dsc_tensor *DSC_RESTRICT query,
+                     const dsc_tensor *DSC_RESTRICT key,
+                     const dsc_tensor *DSC_RESTRICT value,
+                     const dsc_tensor *DSC_RESTRICT attn_mask,
+                     const bool enable_gqa) {
     DSC_ASSERT(query->dtype == F32);
     DSC_ASSERT(key->dtype == F32);
     DSC_ASSERT(value->dtype == F32);
@@ -1532,7 +1532,7 @@ dsc_tensor *dsc_scaled_dot_product_attention(dsc_ctx *ctx,
         DSC_GPU_CHECK(gpu_memset(out_data, 0, dsc_tensor_nbytes(out)));
     }
 
-    dsc_gpu_scaled_dot_product_attention(dsc_get_device(GPU), query, key, value, out, attn_mask, enable_gqa);
+    dsc_gpu_sdpa(dsc_get_device(GPU), query, key, value, out, attn_mask, enable_gqa);
 
     return out;
 }

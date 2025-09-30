@@ -539,12 +539,12 @@ extern dsc_tensor *dsc_min(dsc_ctx *ctx,
 // DSC library. They would be typically defined by users of the library
 // and should not live in the `dsc.h` file.
 
-extern dsc_tensor *dsc_scaled_dot_product_attention(dsc_ctx *ctx,
-                                                    const dsc_tensor *DSC_RESTRICT query,
-                                                    const dsc_tensor *DSC_RESTRICT key,
-                                                    const dsc_tensor *DSC_RESTRICT value,
-                                                    const dsc_tensor *DSC_RESTRICT attn_mask = nullptr,
-                                                    bool enable_gqa = false);
+extern dsc_tensor *dsc_sdpa(dsc_ctx *ctx,
+                            const dsc_tensor *DSC_RESTRICT query,
+                            const dsc_tensor *DSC_RESTRICT key,
+                            const dsc_tensor *DSC_RESTRICT value,
+                            const dsc_tensor *DSC_RESTRICT attn_mask = nullptr,
+                            bool enable_gqa = false);
 
 
 #if defined(__cplusplus)

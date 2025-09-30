@@ -1569,13 +1569,13 @@ void dsc_gpu_max(dsc_device *dev,
 // ============================================================
 // Custom Operations
 
-void dsc_gpu_scaled_dot_product_attention(dsc_device *,
-                                          const dsc_tensor *DSC_RESTRICT query,
-                                          const dsc_tensor *DSC_RESTRICT key,
-                                          const dsc_tensor *DSC_RESTRICT value,
-                                          dsc_tensor *DSC_RESTRICT out,
-                                          const dsc_tensor *DSC_RESTRICT attn_mask,
-                                          const bool enable_gqa) {
+void dsc_gpu_sdpa(dsc_device *dev,
+                  const dsc_tensor *DSC_RESTRICT query,
+                  const dsc_tensor *DSC_RESTRICT key,
+                  const dsc_tensor *DSC_RESTRICT value,
+                  dsc_tensor *DSC_RESTRICT out,
+                  const dsc_tensor *DSC_RESTRICT attn_mask,
+                  const bool enable_gqa) {
     using namespace internal::gpu::kernels::flash_attn;
 
     // Taken from the original paper
@@ -1588,6 +1588,10 @@ void dsc_gpu_scaled_dot_product_attention(dsc_device *,
 
     const int Tr = DSC_CEIL(Nq, Br_f32);
     const int Tc = DSC_CEIL(Nk, Bc_f32);
+
+    dim3 grid_size(Tr, dsc_tensor_get_dim(query, -3), dsc_tensor_get_dim(query, -4));
+    dim3 block_size(DSC_GPU_DEFAULT_THREADS);
+    DSC_TRACE_SDPA_OP(dev, query, key, value, out, attn_mask, enable_gqa, grid_size, block_size);
 
     // The f32 kernel expects d to be a multiple of 2 to properly use matrix cores
     const int d_eff = (d + 1) & ~1;
@@ -1609,8 +1613,6 @@ void dsc_gpu_scaled_dot_product_attention(dsc_device *,
     // If GQA is enabled K and V must be repeated, this is done by manipulating the offsets within the kernel
     const int n_rep = enable_gqa ? (dsc_tensor_get_dim(query, 1) / dsc_tensor_get_dim(key, 1)) : 1;
 
-    dim3 grid_size(Tr, dsc_tensor_get_dim(query, -3), dsc_tensor_get_dim(query, -4));
-    dim3 block_size(DSC_GPU_DEFAULT_THREADS);
     k_flash_attention_f32<<<grid_size, block_size, shared_mem_kernel>>>(
             query_data, key_data, value_data,
             out_data, attn_mask_data, Nq, Nk, d, Tc, n_rep,
