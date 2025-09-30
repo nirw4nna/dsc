@@ -13,7 +13,6 @@ from time import perf_counter
 import argparse
 from transformers import AutoTokenizer
 from typing import Tuple, Optional, List
-import math
 import numpy as np
 
 
@@ -124,45 +123,35 @@ class Attention(nn.Module):
 
         q = q.reshape(block_size, seq_len, self.num_heads, self.head_size).transpose((0, 2, 1, 3))
         k_cur = k_cur.reshape(block_size, seq_len, self.num_kv_heads, self.head_size).transpose((0, 2, 1, 3))
-        v_cur = v_cur.reshape(block_size, seq_len, self.num_kv_heads, self.head_size).transpose((0, 2, 3, 1))
+        v_cur = v_cur.reshape(block_size, seq_len, self.num_kv_heads, self.head_size).transpose((0, 2, 1, 3))
 
         q, k_cur = _apply_rope(q, k_cur, freq_cos_cache, freq_sin_cache, position_ids)
 
         if past_key_value is not None:
             past_k, past_v = past_key_value
             k = dsc.concat([past_k, k_cur], axis=2)
-            v = dsc.concat([past_v, v_cur], axis=3)
+            v = dsc.concat([past_v, v_cur], axis=2)
         else:
             k = k_cur
             v = v_cur
 
         present_key_value = (k, v)
 
-        k = _repeat_kv(k, self.n_rep)
-        v = _repeat_kv(v, self.n_rep)
-
-        scores = dsc.matmul(q, k, trans_b=True) * (1.0 / math.sqrt(self.head_size))
-
         q_len = q.size(2)
         k_len = k.size(2)
 
         # SWA
-        k_pos_indices = dsc.arange(k_len).reshape(1, -1)
-        q_pos_indices = dsc.arange(start=(k_len - q_len), stop=k_len).reshape(-1, 1)
-        causal_mask = k_pos_indices <= q_pos_indices # shape (q_len, k_len)
-        window_mask = (q_pos_indices - k_pos_indices) < self.sliding_window
+        should_attend = None
+        if q.size(-2) > 1:
+            k_pos_indices = dsc.arange(k_len).reshape(1, -1)
+            q_pos_indices = dsc.arange(start=(k_len - q_len), stop=k_len).reshape(-1, 1)
+            causal_mask = k_pos_indices <= q_pos_indices # shape (q_len, k_len)
+            window_mask = (q_pos_indices - k_pos_indices) < self.sliding_window
+            should_attend = causal_mask * window_mask # shape (q_len, k_len)
 
-        should_attend = causal_mask * window_mask # shape (q_len, k_len)
-
-        additive_mask = dsc.where(
-            should_attend,
-            0.0,
-            float('-inf')
-        ).reshape(1, 1, q_len, k_len).cast(scores.dtype)
-        masked_scores = scores + additive_mask
-
-        attn_weights = F.softmax(masked_scores, axis=-1)
-        out = dsc.matmul(attn_weights, v, trans_b=True).transpose((0, 2, 1, 3)).reshape(block_size, seq_len, -1)
+        out = (F.scaled_dot_product_attention(q, k, v, attn_mask=should_attend, enable_gqa=True)
+               .transpose((0, 2, 1, 3))
+               .reshape(block_size, seq_len, -1))
 
         return self.o_proj(out), present_key_value
 

@@ -20,7 +20,8 @@ static DSC_GPU_KERNEL void k_flash_attention_f32(const f32 *DSC_RESTRICT query,
                                                  const f32 *DSC_RESTRICT key,
                                                  const f32 *DSC_RESTRICT value,
                                                  f32 *DSC_RESTRICT out,
-                                                 const int N, const int d,
+                                                 const bool *DSC_RESTRICT attn_mask,
+                                                 const int Nq, const int Nk, const int d,
                                                  const int Tc, const int n_rep,
                                                  const u64 q_stride_batch, const u64 q_stride_head,
                                                  const u64 k_stride_batch, const u64 k_stride_head,
@@ -39,7 +40,7 @@ static DSC_GPU_KERNEL void k_flash_attention_f32(const f32 *DSC_RESTRICT query,
     f32 *DSC_RESTRICT out_block = out + o_stride_batch * batch_idx + o_stride_head * q_head_idx;
 
     const int start_row = i * Br_f32;
-    const int end_row = DSC_MIN((i + 1) * Br_f32, N);
+    const int end_row = DSC_MIN((i + 1) * Br_f32, Nq);
     const int Br_actual = end_row - start_row;
     const int d_eff = (d + 1) & ~1;
 
@@ -86,7 +87,7 @@ static DSC_GPU_KERNEL void k_flash_attention_f32(const f32 *DSC_RESTRICT query,
     // Loop over column block of K and V
     for (int j = 0; j < Tc; ++j) {
         const int start_col = j * Bc_f32;
-        const int end_col = DSC_MIN((j + 1) * Bc_f32, N);
+        const int end_col = DSC_MIN((j + 1) * Bc_f32, Nk);
         const int Bc_actual = end_col - start_col;
         if (Bc_actual <= 0) continue;
 
@@ -108,6 +109,18 @@ static DSC_GPU_KERNEL void k_flash_attention_f32(const f32 *DSC_RESTRICT query,
         hip::warp_mm_32x64xk_f32_T(Qi, d_eff, Kj, d_eff,
                                    Sij, Bc_f32, Br_actual, Bc_actual,
                                    d_eff, scaling_factor);
+
+        if (attn_mask != nullptr) {
+            for (int idx = tid; idx < Br_actual * Bc_actual; idx += n_threads) {
+                const int row = idx / Bc_actual;
+                const int col = idx % Bc_actual;
+                if (!attn_mask[(row + start_row) * Nk + (col + start_col)]) {
+                    Sij[row * Bc_f32 + col] = dsc_inf<f32, false>();
+                }
+            }
+        }
+
+        __syncthreads();
 
         if (tid < Br_actual) {
             const int row = tid;

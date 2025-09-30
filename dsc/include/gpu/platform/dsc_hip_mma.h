@@ -26,7 +26,7 @@ DSC_GPU_FUNC DSC_INLINE void warp_mm_32x64xk_f32_T(const f32 *DSC_RESTRICT xa,
     const int tid = threadIdx.x;
     const int wave_id = tid / 64;
 
-    if (wave_id > 2) return;
+    if (wave_id >= 2) return;
 
     const int tid_in_wave = tid % 64;
     const int row_in_wave = tid_in_wave % 32;
@@ -90,7 +90,7 @@ DSC_GPU_FUNC DSC_INLINE void warp_mm_32x64xk_f32_beta(const f32 *DSC_RESTRICT xa
     const int tid = threadIdx.x;
     const int wave_id = tid / 64;
 
-    if (wave_id > 2) return;
+    if (wave_id >= 2) return;
 
     const int tid_in_wave = tid % 64;
     const int row_in_wave = tid_in_wave % 32;

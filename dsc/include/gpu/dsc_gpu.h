@@ -245,6 +245,7 @@ extern void dsc_gpu_scaled_dot_product_attention(dsc_device *dev,
                                                  const dsc_tensor *DSC_RESTRICT key,
                                                  const dsc_tensor *DSC_RESTRICT value,
                                                  dsc_tensor *DSC_RESTRICT out,
+                                                 const dsc_tensor *DSC_RESTRICT attn_mask,
                                                  bool enable_gqa);
 
 #else

@@ -5,12 +5,12 @@
 #  (https://opensource.org/license/bsd-3-clause).
 
 
-from ..tensor import Tensor, tanh, power, max, sum, exp
+from ..tensor import Tensor, tanh, power, max, sum, exp, _c_ptr_or_none
 from .._bindings import _dsc_scaled_dot_product_attention
 from ..context import _get_ctx
 from ..profiler import trace
 import math
-
+from typing import Optional
 
 @trace('gelu')
 def gelu(x: Tensor) -> Tensor:
@@ -30,5 +30,5 @@ def silu(x: Tensor) -> Tensor:
 
 
 @trace('scaled_dot_product_attention')
-def scaled_dot_product_attention(query: Tensor, key: Tensor, value: Tensor, enable_gqa: bool = False) -> Tensor:
-    return Tensor(_dsc_scaled_dot_product_attention(_get_ctx(), query.c_ptr, key.c_ptr, value.c_ptr, enable_gqa))
+def scaled_dot_product_attention(query: Tensor, key: Tensor, value: Tensor, attn_mask: Optional[Tensor] = None, enable_gqa: bool = False) -> Tensor:
+    return Tensor(_dsc_scaled_dot_product_attention(_get_ctx(), query.c_ptr, key.c_ptr, value.c_ptr, _c_ptr_or_none(attn_mask), enable_gqa))

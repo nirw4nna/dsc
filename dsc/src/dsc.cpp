@@ -1503,6 +1503,7 @@ dsc_tensor *dsc_scaled_dot_product_attention(dsc_ctx *ctx,
                                              const dsc_tensor *DSC_RESTRICT query,
                                              const dsc_tensor *DSC_RESTRICT key,
                                              const dsc_tensor *DSC_RESTRICT value,
+                                             const dsc_tensor *DSC_RESTRICT attn_mask,
                                              const bool enable_gqa) {
     DSC_ASSERT(query->dtype == F32);
     DSC_ASSERT(key->dtype == F32);
@@ -1510,9 +1511,15 @@ dsc_tensor *dsc_scaled_dot_product_attention(dsc_ctx *ctx,
     DSC_ASSERT(query->device == GPU);
     DSC_ASSERT(key->device == GPU);
     DSC_ASSERT(value->device == GPU);
+
+    if (attn_mask) {
+        DSC_ASSERT(attn_mask->dtype == BOOL);
+        DSC_ASSERT(attn_mask->device == GPU);
+    }
+
     if (enable_gqa) {
         // n_heads_query % n_heads_kv == 0
-        DSC_ASSERT(dsc_tensor_get_dim(query, -2) % dsc_tensor_get_dim(key, -2) == 0);
+        DSC_ASSERT(dsc_tensor_get_dim(query, -3) % dsc_tensor_get_dim(key, -3) == 0);
         DSC_ASSERT(check_same_shape(key, value));
     } else {
         DSC_ASSERT(check_same_shape(query, key));
@@ -1525,7 +1532,7 @@ dsc_tensor *dsc_scaled_dot_product_attention(dsc_ctx *ctx,
         DSC_GPU_CHECK(gpu_memset(out_data, 0, dsc_tensor_nbytes(out)));
     }
 
-    dsc_gpu_scaled_dot_product_attention(dsc_get_device(GPU), query, key, value, out, enable_gqa);
+    dsc_gpu_scaled_dot_product_attention(dsc_get_device(GPU), query, key, value, out, attn_mask, enable_gqa);
 
     return out;
 }
