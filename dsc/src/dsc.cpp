@@ -564,6 +564,7 @@ dsc_tensor *dsc_kth(dsc_ctx *ctx,
                     const dsc_tensor *DSC_RESTRICT x,
                     const int k) {
     // Returns the K-th largest element of x
+    // IMPORTANT: x will be modified!
     DSC_ASSERT(x->n_dim == 1);
     DSC_ASSERT(x->device == CPU);
 
