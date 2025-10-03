@@ -870,6 +870,9 @@ def kth(x: Tensor, k: int) -> Tensor:
         if x.dtype == Dtype.BF16:
             x = x.cast(Dtype.F32)
         x = x.to('cpu')
+    else:
+        # FIXME: create a copy of x on CPU because kth operates inplace! This is a very ugly hack!
+        x = _create_tensor(x.dtype, x.shape, Device.CPU, x.data_ptr(), x.device)
     out = Tensor(_dsc_kth(_get_ctx(), x.c_ptr, k))
     if out.device != original_device:
         out = out.to(original_device)
