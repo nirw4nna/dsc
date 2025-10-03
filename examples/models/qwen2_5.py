@@ -8,6 +8,7 @@
 import dsc
 import dsc.nn as nn
 import dsc.nn.functional as F
+import math
 from dataclasses import dataclass
 from time import perf_counter
 import argparse
@@ -109,13 +110,71 @@ class Attention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_size, dtype=dtype)
         self.o_proj = nn.Linear(self.num_heads * self.head_size, config.hidden_size, bias=False, dtype=dtype)
 
-    @dsc.trace('Attention')
-    def forward(
-        self, x: dsc.Tensor,
-        freq_cos_cache: dsc.Tensor,
-        freq_sin_cache: dsc.Tensor,
-        position_ids: dsc.Tensor,
-        past_key_value: Optional[CacheEntry] = None
+
+    # Compute forward pass using naive attention (CPU)
+    def _fwd_naive(self,
+                   x: dsc.Tensor,
+                   freq_cos_cache: dsc.Tensor,
+                   freq_sin_cache: dsc.Tensor,
+                   position_ids: dsc.Tensor,
+                   past_key_value: Optional[CacheEntry] = None
+    ) -> Tuple[dsc.Tensor, CacheEntry]:
+
+        block_size, seq_len, _ = x.shape
+        q, k_cur, v_cur = self.q_proj(x), self.k_proj(x), self.v_proj(x)
+
+        q = q.reshape(block_size, seq_len, self.num_heads, self.head_size).transpose((0, 2, 1, 3))
+        k_cur = k_cur.reshape(block_size, seq_len, self.num_kv_heads, self.head_size).transpose((0, 2, 1, 3))
+        v_cur = v_cur.reshape(block_size, seq_len, self.num_kv_heads, self.head_size).transpose((0, 2, 3, 1))
+
+        q, k_cur = _apply_rope(q, k_cur, freq_cos_cache, freq_sin_cache, position_ids)
+
+        if past_key_value is not None:
+            past_k, past_v = past_key_value
+            k = dsc.concat([past_k, k_cur], axis=2)
+            v = dsc.concat([past_v, v_cur], axis=3)
+        else:
+            k = k_cur
+            v = v_cur
+
+        present_key_value = (k, v)
+
+        k = _repeat_kv(k, self.n_rep)
+        v = _repeat_kv(v, self.n_rep)
+
+        scores = dsc.matmul(q, k, trans_b=True) * (1.0 / math.sqrt(self.head_size))
+
+        q_len = q.size(2)
+        k_len = k.size(2)
+
+        # SWA
+        k_pos_indices = dsc.arange(k_len).reshape(1, -1)
+        q_pos_indices = dsc.arange(start=(k_len - q_len), stop=k_len).reshape(-1, 1)
+        causal_mask = k_pos_indices <= q_pos_indices # shape (q_len, k_len)
+        window_mask = (q_pos_indices - k_pos_indices) < self.sliding_window
+
+        should_attend = causal_mask * window_mask # shape (q_len, k_len)
+
+        additive_mask = dsc.where(
+            should_attend,
+            0.0,
+            float('-inf')
+        ).reshape(1, 1, q_len, k_len).cast(scores.dtype)
+        masked_scores = scores + additive_mask
+
+        attn_weights = F.softmax(masked_scores, axis=-1)
+        out = dsc.matmul(attn_weights, v, trans_b=True).transpose((0, 2, 1, 3)).reshape(block_size, seq_len, -1)
+
+        return self.o_proj(out), present_key_value
+
+
+    # Compute forward pass using optimized SDPA kernel on GPU
+    def _fwd_sdpa(self,
+                   x: dsc.Tensor,
+                   freq_cos_cache: dsc.Tensor,
+                   freq_sin_cache: dsc.Tensor,
+                   position_ids: dsc.Tensor,
+                   past_key_value: Optional[CacheEntry] = None
     ) -> Tuple[dsc.Tensor, CacheEntry]:
 
         block_size, seq_len, _ = x.shape
@@ -154,6 +213,19 @@ class Attention(nn.Module):
                .reshape(block_size, seq_len, -1))
 
         return self.o_proj(out), present_key_value
+
+
+    @dsc.trace('Attention')
+    def forward(
+        self, x: dsc.Tensor,
+        freq_cos_cache: dsc.Tensor,
+        freq_sin_cache: dsc.Tensor,
+        position_ids: dsc.Tensor,
+        past_key_value: Optional[CacheEntry] = None
+    ) -> Tuple[dsc.Tensor, CacheEntry]:
+        if x.device == dsc.Device.GPU:
+            return self._fwd_sdpa(x, freq_cos_cache, freq_sin_cache, position_ids, past_key_value)
+        return self._fwd_naive(x, freq_cos_cache, freq_sin_cache, position_ids, past_key_value)
 
 
 class DecoderLayer(nn.Module):

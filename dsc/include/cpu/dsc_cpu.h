@@ -105,7 +105,7 @@ extern void dsc_cpu_pow(dsc_device *dev,
                         const dsc_tensor *xb,
                         dsc_tensor *out);
 
-extern void dsc_cpu_matmul(dsc_device *devdev,
+extern void dsc_cpu_matmul(dsc_device *dev,
                            const dsc_tensor *DSC_RESTRICT xa,
                            const dsc_tensor *DSC_RESTRICT xb,
                            bool trans_b,
@@ -144,7 +144,7 @@ extern void dsc_cpu_sin(dsc_device *dev,
                         const dsc_tensor *DSC_RESTRICT x,
                         dsc_tensor *DSC_RESTRICT out);
 
-extern void dsc_cpu_tanh(dsc_device *devdev,
+extern void dsc_cpu_tanh(dsc_device *dev,
                          const dsc_tensor *DSC_RESTRICT x,
                          dsc_tensor *DSC_RESTRICT out);
 

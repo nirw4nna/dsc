@@ -89,6 +89,7 @@ python3 -c "import dsc; x = dsc.arange(10); print(x)"
 |-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | DSC_NUM_THREADS | Use multiple threads (CPU). If you set it to -1 it will use half of your available cores (**default=1**)                                                                                                                                                            |
 | TRACE           | Enable tracing DSC kernels. Values: [0-3] with 0 meaning no tracing, 1 dump only to the console, 2 dump only as Perfetto-compatible json, 3 dump as both console and Perfetto. This option requires DSC to be compiled with tracing support enabled (**default=0**) |
+| TRACE_ALLOC     | Enable tracing memory allocations. (**default=0**)                                                                                                                                                                                                                  |
 
 ### Notes on GPU support
 DSC supports both AMD and NVIDIA GPUs. If compiled with `DSC_GPU=1` it will automatically detect the appropriate backend.
